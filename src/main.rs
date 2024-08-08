@@ -1,207 +1,213 @@
-// mod context;
+mod pkg;
 
-// use context::Context;
-// use ncurses::{
-//   cbreak, curs_set, getmouse, initscr, keypad, mmask_t, mousemask, nodelay, noecho, refresh,
-//   resize_term, waddch, wgetch, wmove, wresize, ALL_MOUSE_EVENTS, CURSOR_VISIBILITY, KEY_BACKSPACE,
-//   KEY_DC, KEY_DOWN, KEY_LEFT, KEY_MOUSE, KEY_RIGHT, KEY_UP, MEVENT, REPORT_MOUSE_POSITION,
-// };
-// use std::sync::{Arc, Mutex};
-// use std::thread::sleep;
-// use std::time::Duration;
-
-// fn main() {
-//   let rows = 30;
-//   let cols = 100;
-//   let grid_row_spacing = 9;
-//   let grid_col_spacing = 9;
-//   let grid: Vec<Vec<char>> = (0..rows)
-//     .map(|_| (0..cols).map(|_| '\0').collect())
-//     .collect();
-//   let context = Context::new(grid, 120, 4);
-
-//   let context_arc = Arc::new(Mutex::new(context));
-
-//   let (mut cursor_row, mut cursor_col): (usize, usize) = (0, 0);
-
-//   let window = initscr();
-//   resize_term(rows, cols);
-//   cbreak();
-//   noecho();
-//   curs_set(CURSOR_VISIBILITY::CURSOR_INVISIBLE);
-//   mousemask(
-//     ALL_MOUSE_EVENTS as mmask_t | REPORT_MOUSE_POSITION as mmask_t,
-//     None,
-//   );
-//   wresize(window, rows, cols);
-//   keypad(window, true);
-//   nodelay(window, true);
-//   refresh();
-
-//   loop {
-//     let grid = {
-//       let _context = context_arc.lock().unwrap();
-//       _context.grid.clone()
-//     };
-//     wmove(window, 0, 0);
-//     for (r, row) in grid.iter().enumerate() {
-//       for (c, &value) in row.iter().enumerate() {
-//         let display_value = if value != '\0' {
-//           value
-//         } else if r % grid_row_spacing == 0 && c % grid_col_spacing == 0 {
-//           '+'
-//         } else {
-//           '.'
-//         };
-//         waddch(window, display_value as u32);
-//       }
-//     }
-//     wmove(window, cursor_row as i32, cursor_col as i32);
-
-//     match wgetch(window) {
-//       KEY_UP => {
-//         cursor_row -= 1;
-//       }
-//       KEY_DOWN => {
-//         cursor_row += 1;
-//       }
-//       KEY_LEFT => {
-//         cursor_col -= 1;
-//       }
-//       KEY_RIGHT => {
-//         cursor_col += 1;
-//       }
-//       KEY_BACKSPACE => {
-//         let mut _context = context_arc.lock().unwrap();
-//         _context.grid[cursor_row][cursor_col] = '\0';
-//       }
-//       KEY_DC => {
-//         let mut _context = context_arc.lock().unwrap();
-//         _context.grid[cursor_row][cursor_col] = '\0';
-//       }
-//       KEY_MOUSE => {
-//         let mut mevent = MEVENT {
-//           id: 0,
-//           x: 0,
-//           y: 0,
-//           z: 0,
-//           bstate: 0,
-//         };
-//         let error = getmouse(&mut mevent);
-//         if error == 0 {
-//           cursor_row = mevent.y as usize;
-//           cursor_col = mevent.x as usize;
-//         }
-//       }
-//       key => {
-//         waddch(window, key.try_into().unwrap());
-//         let mut _context = context_arc.lock().unwrap();
-//         // _context.grid[cursor_row][cursor_col] = key;
-//         println!("unexpected input: {:?}", key);
-//       }
-//     }
-
-//     sleep(Duration::from_millis(10));
-//   }
-// }
-
-mod context;
-
-use crate::context::Context;
-use pancurses::{
-  cbreak, curs_set, getmouse, initscr, mousemask, noecho, resize_term, Input, ALL_MOUSE_EVENTS,
-  REPORT_MOUSE_POSITION,
+use crate::pkg::model::{self};
+use cursive::traits::Nameable;
+use cursive::{
+  views::{Button, Dialog, LinearLayout, Panel, SelectView},
+  Cursive, Vec2,
 };
-use std::sync::{Arc, Mutex};
-use std::thread::sleep;
-use std::time::Duration;
+use pkg::canvas::Canvas;
+use pkg::view::BoardView;
+
+use cursive::style::{BorderStyle, Palette};
+use cursive::{event::Key, menu, traits::*};
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 fn main() {
-  let rows = 30;
-  let cols = 100;
-  let grid_row_spacing = 9;
-  let grid_col_spacing = 9;
-  let grid: Vec<Vec<char>> = (0..rows)
-    .map(|_| (0..cols).map(|_| '\0').collect())
-    .collect();
-  let context = Context::new(grid, 120, 4);
+  let mut siv = cursive::default();
 
-  let context_arc = Arc::new(Mutex::new(context));
+  // Start with a nicer theme than default
+  siv.set_theme(cursive::theme::Theme {
+    shadow: false,
+    borders: BorderStyle::None,
+    palette: Palette::retro().with(|palette| {
+      use cursive::style::BaseColor::*;
 
-  let (mut cursor_row, mut cursor_col): (usize, usize) = (0, 0);
+      {
+        // First, override some colors from the base palette.
+        use cursive::style::Color::TerminalDefault;
+        use cursive::style::PaletteColor::*;
 
-  let mut window = initscr();
-  resize_term(rows, cols);
-  cbreak();
-  noecho();
-  curs_set(2);
-  mousemask(ALL_MOUSE_EVENTS | REPORT_MOUSE_POSITION, None);
-  window.resize(rows, cols);
-  window.keypad(true);
-  window.nodelay(true);
-  window.refresh();
+        palette[Background] = TerminalDefault;
+        palette[View] = TerminalDefault;
+        palette[Primary] = White.dark();
+        palette[TitlePrimary] = Blue.dark();
+        palette[Secondary] = Blue.light();
+        palette[Highlight] = Blue.dark();
+      }
 
-  loop {
-    let grid = {
-      let _context = context_arc.lock().unwrap();
-      _context.grid.clone()
-    };
-    window.mv(0, 0);
-    for (r, row) in grid.iter().enumerate() {
-      for (c, &value) in row.iter().enumerate() {
-        let display_value = if value != '\0' {
-          value
-        } else if r % grid_row_spacing == 0 && c % grid_col_spacing == 0 {
-          '+'
-        } else {
-          '.'
-        };
-        window.addch(display_value);
+      {
+        // Then override some styles.
+        use cursive::style::Effect::*;
+        use cursive::style::PaletteStyle::*;
+        use cursive::style::Style;
+        // palette[Highlight] = Style::from(Green.light()).combine(Bold);
+        // palette[EditableTextCursor] = Style::secondary().combine(Reverse).combine(Underline)
       }
-    }
-    window.mv(cursor_row as i32, cursor_col as i32);
+    }),
+  });
 
-    match window.getch() {
-      Some(Input::KeyUp) => {
-        cursor_row -= 1;
-      }
-      Some(Input::KeyDown) => {
-        cursor_row += 1;
-      }
-      Some(Input::KeyLeft) => {
-        cursor_col -= 1;
-      }
-      Some(Input::KeyRight) => {
-        cursor_col += 1;
-      }
-      Some(Input::KeyBackspace) => {
-        let mut _context = context_arc.lock().unwrap();
-        _context.grid[cursor_row][cursor_col] = '\0';
-      }
-      Some(Input::KeyDC) => {
-        let mut _context = context_arc.lock().unwrap();
-        _context.grid[cursor_row][cursor_col] = '\0';
-      }
-      Some(Input::KeyMouse) => {
-        if let Ok(mouse_event) = getmouse() {
-          cursor_row = mouse_event.y as usize;
-          cursor_col = mouse_event.x as usize;
-        }
-      }
-      Some(Input::Character(mut c)) => {
-        if c == '\x08' {
-          c = '\0';
-        }
-        window.addch(c);
-        let mut _context = context_arc.lock().unwrap();
-        _context.grid[cursor_row][cursor_col] = c;
-      }
-      None => (),
-      other_inputs => {
-        println!("unexpected input: {:?}", other_inputs);
-      }
-    }
+  // We'll use a counter to name new files.
+  let counter = AtomicUsize::new(1);
 
-    sleep(Duration::from_millis(10));
-  }
+  // The menubar is a list of (label, menu tree) pairs.
+  siv
+    .menubar()
+    // We add a new "File" tree
+    .add_subtree(
+      "File",
+      menu::Tree::new()
+        // Trees are made of leaves, with are directly actionable...
+        .leaf("New", move |s| {
+          // Here we use the counter to add an entry
+          // in the list of "Recent" items.
+          let i = counter.fetch_add(1, Ordering::Relaxed);
+          let filename = format!("New {i}");
+          s.menubar()
+            .find_subtree("File")
+            .unwrap()
+            .find_subtree("Recent")
+            .unwrap()
+            .insert_leaf(0, filename, |_| ());
+
+          // s.add_layer(Dialog::info("New file!"));
+        })
+        // ... and of sub-trees, which open up when selected.
+        .subtree(
+          "Recent",
+          // The `.with()` method can help when running loops
+          // within builder patterns.
+          menu::Tree::new().with(|tree| {
+            for i in 1..100 {
+              // We don't actually do anything here,
+              // but you could!
+              tree.add_item(menu::Item::leaf(format!("Item {i}"), |_| ()).with(|s| {
+                if i % 5 == 0 {
+                  s.disable();
+                }
+              }))
+            }
+          }),
+        )
+        // Delimiter are simple lines between items,
+        // and cannot be selected.
+        .delimiter()
+        .with(|tree| {
+          for i in 1..10 {
+            tree.add_leaf(format!("Option {i}"), |_| ());
+          }
+        }),
+    )
+    .add_subtree(
+      "Help",
+      menu::Tree::new()
+        .subtree(
+          "Help",
+          menu::Tree::new()
+            .leaf("General", |s| s.add_layer(Dialog::info("Help message!")))
+            .leaf("Online", |s| {
+              let text = "Google it yourself!\n\
+                                        Kids, these days...";
+              s.add_layer(Dialog::info(text))
+            }),
+        )
+        .leaf("Start", |s| {
+          s.pop_layer();
+          new_game(s);
+        })
+        .leaf("About", |s| s.add_layer(Dialog::info("Cursive v0.0.0"))),
+    )
+    .add_delimiter()
+    .add_leaf("Quit", |s| s.quit());
+
+  // When `autohide` is on (default), the menu only appears when active.
+  // Turning it off will leave the menu always visible.
+  // Try uncommenting this line!
+
+  // siv.set_autohide_menu(false);
+
+  siv.add_global_callback(Key::Esc, |s| s.select_menubar());
+
+  // siv.add_layer(Dialog::text("Hit <Esc> to show the menu!"));
+
+  new_game(&mut siv);
+
+  siv.run();
+}
+
+// fn main() {
+// let mut siv = cursive::default();
+
+// siv.add_layer(
+//   Dialog::new()
+//     .title("Minesweeper")
+//     .padding_lrtb(2, 2, 1, 1)
+//     .content(
+//       LinearLayout::vertical()
+//         .child(Button::new_raw("   New game  ", show_options))
+//         .child(Button::new_raw("   Controls  ", show_controls))
+//         .child(Button::new_raw("    Scores   ", show_scores))
+//         .child(Button::new_raw("     Exit    ", |s| s.quit())),
+//     ),
+// );
+
+// siv.run();
+// }
+
+// fn show_options(siv: &mut Cursive) {
+//   siv.add_layer(
+//     Dialog::new()
+//       .title("Select difficulty")
+//       .content(
+//         SelectView::new()
+//           .item(
+//             "Easy:      8x8,   10 mines",
+//             model::Options {
+//               size: Vec2::new(8, 8),
+//               mines: 10,
+//             },
+//           )
+//           .item(
+//             "Medium:    16x16, 40 mines",
+//             model::Options {
+//               size: Vec2::new(16, 16),
+//               mines: 40,
+//             },
+//           )
+//           .item(
+//             "Difficult: 24x24, 99 mines",
+//             model::Options {
+//               size: Vec2::new(24, 24),
+//               mines: 99,
+//             },
+//           )
+//           .on_submit(|s, option| {
+//             s.pop_layer();
+//             new_game(s, *option);
+//           }),
+//       )
+//       .dismiss_button("Back"),
+//   );
+// }
+
+// fn show_controls(s: &mut Cursive) {
+//   s.add_layer(
+//     Dialog::info(
+//       "Controls:
+// Reveal cell:                  left click
+// Mark as mine:                 right-click
+// Reveal nearby unmarked cells: middle-click",
+//     )
+//     .title("Controls"),
+//   )
+// }
+
+// fn show_scores(s: &mut Cursive) {
+//   s.add_layer(Dialog::info("Not yet!").title("Scores"))
+// }
+
+fn new_game(siv: &mut Cursive) {
+  let dialog = Canvas::new().full_width().full_height();
+
+  siv.add_layer(dialog);
 }
