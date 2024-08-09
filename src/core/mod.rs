@@ -1,4 +1,3 @@
 pub mod canvas;
+pub mod config;
 pub mod grid;
-pub mod model;
-pub mod view;

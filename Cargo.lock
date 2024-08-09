@@ -19,8 +19,8 @@ dependencies = [
 name = "anu-rs"
 version = "0.1.0"
 dependencies = [
- "ahash",
  "cursive",
+ "lazy_static",
  "rand",
 ]
 

@@ -1,7 +1,5 @@
-use crate::pkg::model::CellState::*;
 use cursive::Vec2;
 use std::ops::{Index, IndexMut};
-use std::slice::Iter;
 
 #[derive(Clone, Copy)]
 pub struct Options {
