@@ -7,13 +7,11 @@ use cursive::{views::Dialog, Cursive};
 use cursive::{event::Key, menu, traits::*};
 use std::error::Error;
 use std::ffi::OsString;
-use std::fs::{self, File, ReadDir};
+use std::fs::{self, File};
 use std::io::{self, Read};
 use std::path::{Path, PathBuf};
 
 pub fn setup_app_menu(siv: &mut Cursive) {
-  // let counter = AtomicUsize::new(1);
-
   siv
     .menubar()
     .add_subtree(
