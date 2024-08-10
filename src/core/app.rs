@@ -1,5 +1,5 @@
 use super::canvas::Canvas;
-use super::menu::setup_app_menu;
+use super::menu::init_app_menu;
 use cursive::{Cursive, CursiveExt};
 
 use cursive::style::{BorderStyle, Palette};
@@ -86,16 +86,16 @@ impl Ui {
     });
   }
 
-  pub fn add_canvas(&mut self) {
+  pub fn init_canvas(&mut self) {
     let canvas = Canvas::new().full_width().full_height();
 
     self.cursive.add_layer(canvas);
   }
 
-  pub fn start(&mut self) {
+  pub fn init(&mut self) {
     self.init_app_with_default_style();
-    setup_app_menu(&mut self.cursive);
-    self.add_canvas();
+    init_app_menu(&mut self.cursive);
+    self.init_canvas();
   }
 
   /// Retrieve the next available UiMessage to process.

@@ -18,8 +18,11 @@ impl Controller {
     Ok(Controller { rx, ui })
   }
 
+  pub fn init(&mut self) {
+    self.ui.init()
+  }
+
   pub fn run(&mut self) {
-    self.ui.start();
     while self.ui.run() {
       while let Some(message) = self.next_message() {
         match message {

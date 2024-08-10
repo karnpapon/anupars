@@ -11,7 +11,7 @@ use std::fs::{self, File};
 use std::io::{self, Read};
 use std::path::{Path, PathBuf};
 
-pub fn setup_app_menu(siv: &mut Cursive) {
+pub fn init_app_menu(siv: &mut Cursive) {
   siv
     .menubar()
     .add_subtree(
