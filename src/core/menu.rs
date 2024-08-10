@@ -1,7 +1,7 @@
 use super::config;
 use cursive::align::HAlign;
 use cursive::view::Margins;
-use cursive::views::SelectView;
+use cursive::views::{SelectView, TextView};
 use cursive::{views::Dialog, Cursive};
 
 use cursive::{event::Key, menu, traits::*};
@@ -27,10 +27,6 @@ pub fn setup_app_menu(siv: &mut Cursive) {
             .collect::<Vec<_>>();
 
           show_listed_files(s, paths);
-
-          // if let Ok(contents) = read_file(Path::new("hello.txt")) {
-          //   s.add_layer(TextView::new(contents));
-          // }
         })
         .delimiter()
         .subtree(
@@ -83,7 +79,7 @@ pub fn setup_app_menu(siv: &mut Cursive) {
 }
 
 pub fn read_file(path: &Path) -> Result<String, Box<dyn Error>> {
-  let mut file = match File::open(&path) {
+  let mut file = match File::open(path) {
     Err(why) => panic!("couldn't open: {}", why),
     Ok(file) => file,
   };
@@ -111,6 +107,14 @@ fn get_default_database_path() -> Result<PathBuf, Box<dyn Error>> {
   Ok(path)
 }
 
+fn render_texts(s: &mut Cursive, file: &PathBuf) {
+  if let Ok(contents) = read_file(Path::new(file)) {
+    s.add_layer(TextView::new(contents));
+  }
+
+  s.set_autorefresh(true);
+}
+
 pub fn show_listed_files(s: &mut Cursive, dir: Vec<Result<Result<String, OsString>, io::Error>>) {
   if dir.is_empty() {
     s.add_layer(Dialog::info(config::app_empty_dir()).fixed_size((50, 10)));
@@ -122,8 +126,16 @@ pub fn show_listed_files(s: &mut Cursive, dir: Vec<Result<Result<String, OsStrin
   for list in dir {
     let list_cloned = list.unwrap().clone();
     let title_str = list_cloned.as_ref().unwrap().clone();
-    select.add_item(title_str, list_cloned.unwrap());
+    let select_value = dirs::home_dir()
+      .map(|p| {
+        p.join(config::DEFAULT_APP_DIRECTORY)
+          .join(config::DEFAULT_APP_FILENAME)
+          .join(list_cloned.unwrap())
+      })
+      .unwrap();
+    select.add_item(title_str, select_value);
   }
-  // select.set_on_submit(render_downloading_song);
+
+  select.set_on_submit(render_texts);
   s.add_layer(Dialog::around(select.scrollable().fixed_size((50, 10))).dismiss_button("close"));
 }
