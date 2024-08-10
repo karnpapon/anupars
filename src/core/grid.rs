@@ -34,6 +34,7 @@ impl Cell {
   }
 }
 
+#[derive(Clone)]
 pub struct Field {
   size: Vec2,
   cells: Vec<Cell>,
@@ -68,10 +69,12 @@ impl IndexMut<Vec2> for Field {
   }
 }
 
+#[derive(Clone)]
 pub struct Grid {
   pub field: Field,
   pub grid_row_spacing: usize,
   pub grid_col_spacing: usize,
+  pub size: Vec2,
   pub grid: Vec<Vec<char>>,
 }
 
@@ -81,16 +84,31 @@ impl Grid {
       field: Field::new(Vec2::new(1, 1)),
       grid_row_spacing: 9,
       grid_col_spacing: 9,
+      size: Vec2::new(0, 0),
       grid: (0..rows)
         .map(|_| (0..cols).map(|_| '\0').collect())
         .collect(),
     }
   }
 
-  pub fn resize_grid(&mut self, size: Vec2) {
+  pub fn resize(&mut self, size: Vec2) {
     self.grid = (0..size.x)
       .map(|_| (0..size.y).map(|_| '\0').collect())
-      .collect()
+      .collect();
+    self.size = size
+  }
+
+  pub fn update_grid_src(&mut self, src: &str) {
+    let src_w = (src.len()).div_ceil(self.size.x);
+    let src_h = self.size.x;
+
+    self.grid = (0..src_w)
+      .map(|x| {
+        (0..src_h)
+          .map(|y| src.chars().nth(x + y).unwrap())
+          .collect::<Vec<_>>()
+      })
+      .collect();
   }
 }
 

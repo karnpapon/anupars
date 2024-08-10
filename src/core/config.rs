@@ -43,9 +43,6 @@ pub static APP_NAME: &str = "
 ░░▒▓██████▓▒░░▒▓█▓▒░░▒▓█▓▒░░░░▒▓██▓▒░░░░  
 ";
 
-pub static APP_DESC: &str =
-  "anu, regex step-sequencer / live-coding environment, author 'karnpapon <karnpapon@gmail.com>'";
-
 pub static DEFAULT_APP_DIRECTORY: &str = ".anu_rs";
 pub static DEFAULT_APP_FILENAME: &str = "contents";
 

@@ -2,7 +2,7 @@ use std::{error::Error, sync::mpsc};
 
 use cursive::Cursive;
 
-use super::app::{Message, Ui};
+use super::ui::{Message, Ui};
 
 pub struct Controller {
   rx: mpsc::Receiver<Message>,
