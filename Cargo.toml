@@ -2,7 +2,7 @@
 name = "anu-rs"
 version = "0.1.0"
 edition = "2021"
-description = "anu sequencer"
+description = "anu, a tiny backend-agnostic step-sequencer/live-coding environment that harnesses the power of RegEx."
 authors = ["karnpapon <karnpapon@gmail.com>"]
 license = "MIT"
 repository = "https://github.com/karnpapon/anu-rs"
@@ -13,3 +13,11 @@ repository = "https://github.com/karnpapon/anu-rs"
 cursive = "*"
 rand = "0.8"
 lazy_static = "1.5.0"
+dirs = "5.0.1"
+
+[profile.release]
+panic = "abort"   # Strip expensive panic clean-up logic
+codegen-units = 1 # Compile crates one after another so the compiler can optimize better
+lto = true        # Enables link to optimizations
+opt-level = "z"   # Optimize for binary size
+strip = true      # Remove debug symbols
