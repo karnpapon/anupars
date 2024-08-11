@@ -50,7 +50,7 @@ pub static DEFAULT_APP_FILENAME: &str = "contents";
 pub const EXIT_SUCCESS: i32 = 0;
 pub const EXIT_FAILURE: i32 = 1;
 
-// workaround since `format!` cannot calculate at build-time (eg. for `static` or `const`)
+// workaround since `format!` cannot be calculated at build-time (eg. for `static` or `const`)
 // https://users.rust-lang.org/t/how-to-avoid-recalculating-a-formatted-string-at-runtime/44895
 pub fn app_empty_dir() -> &'static str {
   lazy_static! {

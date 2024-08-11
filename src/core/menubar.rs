@@ -1,123 +1,38 @@
-use super::canvas;
+use std::{
+  error::Error,
+  ffi::OsString,
+  fs::{self, File},
+  io::{self, Read},
+  path::{Path, PathBuf},
+};
+
+use cursive::{
+  align::HAlign,
+  event::{Callback, Event, EventResult, Key},
+  menu,
+  theme::{BaseColor, Color, ColorStyle},
+  view::{Margins, Resizable, Scrollable},
+  views::{Dialog, OnEventView, SelectView},
+  Cursive, Printer, Vec2, View, With,
+};
+
 use super::config;
-use super::grid;
 
-use std::error::Error;
-use std::ffi::OsString;
-use std::fs::{self, File};
-use std::io::{self, Read};
-use std::path::{Path, PathBuf};
-use std::sync::mpsc;
+pub struct Menubar {}
 
-use cursive::align::HAlign;
-use cursive::event::Event;
-use cursive::style::{BorderStyle, Palette};
-use cursive::traits::*;
-use cursive::view::Margins;
-use cursive::views::{Canvas, Dialog};
-use cursive::views::{OnEventView, SelectView};
-use cursive::{event::Key, menu};
-use cursive::{Cursive, CursiveExt};
-
-#[derive(Debug)]
-pub enum UiMessage {
-  UpdateStatus,
-  Refresh,
+impl Default for Menubar {
+  fn default() -> Self {
+    Self::new()
+  }
 }
 
-pub struct Ui {
-  cursive: Cursive,
-  ui_rx: mpsc::Receiver<UiMessage>,
-  ui_tx: mpsc::Sender<UiMessage>,
-  controller_tx: mpsc::Sender<Message>,
-}
-
-#[derive(Debug)]
-pub enum Message {
-  Sync,
-  Quit,
-}
-
-impl Ui {
-  pub fn new(s: Cursive, controller_tx: mpsc::Sender<Message>) -> Ui {
-    let (ui_tx, ui_rx) = mpsc::channel::<UiMessage>();
-    Ui {
-      cursive: s,
-      ui_tx,
-      ui_rx,
-      controller_tx,
-    }
+impl Menubar {
+  pub fn new() -> Self {
+    Self {}
   }
 
-  pub fn init(&mut self) {
-    self.init_keybinding();
-    self.init_with_default_style();
-    self.init_menu();
-    self.init_canvas();
-  }
-
-  pub fn run(&mut self) -> bool {
-    if !self.cursive.is_running() {
-      return false;
-    }
-
-    self.cursive.set_fps(20);
-    self.cursive.set_autorefresh(true);
-    self.cursive.run();
-
-    while let Some(message) = self.next_ui_message() {
-      match message {
-        UiMessage::UpdateStatus => {}
-        UiMessage::Refresh => {}
-      }
-    }
-    true
-  }
-
-  fn init_with_default_style(&mut self) {
-    self.cursive.set_theme(cursive::theme::Theme {
-      shadow: false,
-      borders: BorderStyle::Simple,
-      palette: Palette::retro().with(|palette| {
-        use cursive::style::Color::TerminalDefault;
-        use cursive::style::PaletteColor::{
-          Background, Highlight, HighlightInactive, HighlightText, Primary, Secondary, Shadow,
-          Tertiary, TitlePrimary, TitleSecondary, View,
-        };
-
-        palette[Background] = TerminalDefault;
-        palette[View] = TerminalDefault;
-        palette[Primary] = TerminalDefault;
-        palette[TitlePrimary] = TerminalDefault;
-        palette[Highlight] = TerminalDefault;
-        palette[Secondary] = TerminalDefault;
-        palette[HighlightInactive] = TerminalDefault;
-        palette[HighlightText] = TerminalDefault;
-        palette[Shadow] = TerminalDefault;
-        palette[TitleSecondary] = TerminalDefault;
-        palette[Tertiary] = TerminalDefault;
-      }),
-    });
-  }
-
-  fn init_keybinding(&mut self) {
-    self.cursive.add_global_callback(Event::Char('z'), |s| {});
-  }
-
-  fn init_canvas(&mut self) {
-    let canvas = canvas::CanvasView::new();
-    self.cursive.add_layer(
-      canvas
-        .canvas_view
-        .with_name("canvas_view")
-        .full_width()
-        .full_height(),
-    );
-  }
-
-  fn init_menu(&mut self) {
-    self
-      .cursive
+  pub fn init(&mut self, siv: &mut Cursive) {
+    siv
       .menubar()
       .add_subtree(
         "Anu",
@@ -185,18 +100,44 @@ impl Ui {
       .add_delimiter()
       .add_leaf("Quit", |s| s.quit());
 
-    self
-      .cursive
-      .add_global_callback(Key::Esc, |s| s.select_menubar());
+    siv.add_global_callback(Key::Esc, |s| s.select_menubar());
+  }
+}
+
+impl View for Menubar {
+  fn draw(&self, printer: &Printer) {
+    // for y in 0..printer.size.y {
+    //   for x in 0..printer.size.x {
+    //     printer.with_color(
+    //       ColorStyle::new(Color::Dark(BaseColor::Blue), Color::Dark(BaseColor::Blue)),
+    //       |printer| {
+    //         printer.print((x, y), " ");
+    //       },
+    //     );
+    //   }
+    // }
+    // printer.with_color(
+    //   ColorStyle::new(Color::Dark(BaseColor::White), Color::Dark(BaseColor::Blue)),
+    //   |printer| {
+    //     printer.print((10, 2), "paused, press m to resume");
+    //   },
+    // );
   }
 
-  pub fn next_ui_message(&self) -> Option<UiMessage> {
-    self.ui_rx.try_iter().next()
-  }
+  // fn required_size(&mut self, _constraint: cursive::Vec2) -> cursive::Vec2 {
+  //   Vec2::new(45, 5)
+  // }
 
-  pub fn quit(&mut self) {
-    self.cursive.quit();
-  }
+  // fn on_event(&mut self, event: Event) -> EventResult {
+  //   if event != Event::Char('m') && event != Event::Char('M') {
+  //     EventResult::Ignored
+  //   } else {
+  //     EventResult::Consumed(Some(Callback::from_fn(move |s| {
+  //       s.pop_layer();
+  //       s.call_on_name("tetris", |t: &mut Tetris| t.on_event(Event::Char('m')));
+  //     })))
+  //   }
+  // }
 }
 
 fn show_listed_files(s: &mut Cursive, dir: Vec<Result<Result<String, OsString>, io::Error>>) {
@@ -233,8 +174,8 @@ fn show_listed_files(s: &mut Cursive, dir: Vec<Result<Result<String, OsString>, 
 
 fn render_texts(s: &mut Cursive, file: &PathBuf) {
   if let Ok(contents) = read_file(Path::new(file)) {
-    let g = canvas::run(|siv| grid::Grid::update_grid_src(siv, &contents));
-    g(s);
+    // let g = canvas::run(|siv| grid::Grid::update_grid_src(siv, &contents));
+    // g(s);
   }
 }
 

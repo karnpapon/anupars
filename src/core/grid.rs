@@ -1,93 +1,34 @@
-use cursive::Vec2;
+use cursive::{
+  reexports::time::{Duration, Instant},
+  views::Canvas,
+  Cursive, Vec2,
+};
 use std::ops::{Index, IndexMut};
-
-#[derive(Clone, Copy)]
-pub struct Options {
-  pub size: Vec2,
-  pub mines: usize,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum CellContent {
-  Free(usize),
-}
-
-#[derive(Debug, Copy, Clone, Eq, PartialEq)]
-pub enum CellState {
-  Closed,
-  Opened,
-}
-
-#[derive(Copy, Clone)]
-pub struct Cell {
-  pub state: CellState,
-
-  pub content: CellContent,
-}
-
-impl Cell {
-  pub fn new(content: CellContent) -> Self {
-    Self {
-      state: CellState::Closed,
-      content,
-    }
-  }
-}
-
-#[derive(Clone)]
-pub struct Field {
-  size: Vec2,
-  cells: Vec<Cell>,
-}
-
-impl Field {
-  fn new(size: Vec2) -> Self {
-    Self {
-      size,
-      // init stub for cells, see method `Field::place_bombs()` details
-      cells: vec![Cell::new(CellContent::Free(0)); size.x * size.y],
-    }
-  }
-
-  fn pos_to_cell_idx(&self, pos: Vec2) -> usize {
-    pos.x + pos.y * self.size.x
-  }
-}
-
-impl Index<Vec2> for Field {
-  type Output = Cell;
-
-  fn index(&self, pos: Vec2) -> &Self::Output {
-    &self.cells[self.pos_to_cell_idx(pos)]
-  }
-}
-
-impl IndexMut<Vec2> for Field {
-  fn index_mut(&mut self, pos: Vec2) -> &mut Self::Output {
-    let idx = self.pos_to_cell_idx(pos);
-    &mut self.cells[idx]
-  }
-}
 
 #[derive(Clone)]
 pub struct Grid {
-  pub field: Field,
   pub grid_row_spacing: usize,
   pub grid_col_spacing: usize,
   pub size: Vec2,
   pub grid: Vec<Vec<char>>,
+
+  pub last_started: Instant,
+  pub last_elapsed: Duration,
+  pub running: bool,
 }
 
 impl Grid {
   pub fn new(rows: i32, cols: i32) -> Self {
     Grid {
-      field: Field::new(Vec2::new(1, 1)),
       grid_row_spacing: 9,
       grid_col_spacing: 9,
       size: Vec2::new(0, 0),
       grid: (0..rows)
         .map(|_| (0..cols).map(|_| '\0').collect())
         .collect(),
+      last_started: Instant::now(),
+      last_elapsed: Duration::default(),
+      running: true,
     }
   }
 
@@ -99,23 +40,53 @@ impl Grid {
   }
 
   pub fn update_grid_src(&mut self, src: &str) {
-    let src_w = (src.len()).div_ceil(self.size.x);
-    let src_h = self.size.x;
+    let rows = self.grid.len();
+    let cols = self.grid[0].len();
 
-    self.grid = (0..src_w)
-      .map(|x| {
-        (0..src_h)
-          .map(|y| src.chars().nth(x + y).unwrap())
-          .collect::<Vec<_>>()
-      })
-      .collect();
+    for row in 0..rows {
+      for col in 0..cols {
+        if let Some(char) = src.chars().nth(row + col) {
+          self.grid[row][col] = char;
+        }
+      }
+    }
+  }
+
+  pub fn toggle_play(&mut self) {
+    if self.running {
+      self.pause()
+    } else {
+      self.start()
+    }
+  }
+
+  pub fn start(&mut self) {
+    if self.running {
+      return;
+    }
+    self.running = true;
+    self.last_started = Instant::now();
+  }
+
+  pub fn elapsed(&self) -> Duration {
+    self.last_elapsed
+      + if self.running {
+        Instant::now() - self.last_started
+      } else {
+        Duration::default()
+      }
+  }
+
+  pub fn pause(&mut self) {
+    self.last_elapsed = self.elapsed();
+    self.running = false;
   }
 }
 
-impl Index<Vec2> for Grid {
-  type Output = Cell;
+// impl Index<Vec2> for Grid {
+//   type Output = Cell;
 
-  fn index(&self, pos: Vec2) -> &Self::Output {
-    &self.field[pos]
-  }
-}
+//   fn index(&self, pos: Vec2) -> &Self::Output {
+//     &self.field[pos]
+//   }
+// }
