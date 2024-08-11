@@ -16,7 +16,10 @@ use cursive::{
   Cursive, Printer, Vec2, View, With,
 };
 
-use super::config;
+use super::{
+  canvas::{self, CanvasView},
+  config,
+};
 
 pub struct Menubar {}
 
@@ -105,39 +108,7 @@ impl Menubar {
 }
 
 impl View for Menubar {
-  fn draw(&self, printer: &Printer) {
-    // for y in 0..printer.size.y {
-    //   for x in 0..printer.size.x {
-    //     printer.with_color(
-    //       ColorStyle::new(Color::Dark(BaseColor::Blue), Color::Dark(BaseColor::Blue)),
-    //       |printer| {
-    //         printer.print((x, y), " ");
-    //       },
-    //     );
-    //   }
-    // }
-    // printer.with_color(
-    //   ColorStyle::new(Color::Dark(BaseColor::White), Color::Dark(BaseColor::Blue)),
-    //   |printer| {
-    //     printer.print((10, 2), "paused, press m to resume");
-    //   },
-    // );
-  }
-
-  // fn required_size(&mut self, _constraint: cursive::Vec2) -> cursive::Vec2 {
-  //   Vec2::new(45, 5)
-  // }
-
-  // fn on_event(&mut self, event: Event) -> EventResult {
-  //   if event != Event::Char('m') && event != Event::Char('M') {
-  //     EventResult::Ignored
-  //   } else {
-  //     EventResult::Consumed(Some(Callback::from_fn(move |s| {
-  //       s.pop_layer();
-  //       s.call_on_name("tetris", |t: &mut Tetris| t.on_event(Event::Char('m')));
-  //     })))
-  //   }
-  // }
+  fn draw(&self, printer: &Printer) {}
 }
 
 fn show_listed_files(s: &mut Cursive, dir: Vec<Result<Result<String, OsString>, io::Error>>) {
@@ -174,8 +145,9 @@ fn show_listed_files(s: &mut Cursive, dir: Vec<Result<Result<String, OsString>, 
 
 fn render_texts(s: &mut Cursive, file: &PathBuf) {
   if let Ok(contents) = read_file(Path::new(file)) {
-    // let g = canvas::run(|siv| grid::Grid::update_grid_src(siv, &contents));
-    // g(s);
+    s.call_on_name("canvas_view", |c: &mut CanvasView| {
+      c.update_grid_src(&contents)
+    });
   }
 }
 

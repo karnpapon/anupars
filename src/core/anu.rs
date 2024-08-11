@@ -1,18 +1,21 @@
 use cursive::{
   event::{Callback, Event, EventResult, Key},
   theme::{Color, ColorStyle},
+  view::{Nameable, Resizable},
   views::Dialog,
   Cursive, Printer, Vec2, View,
 };
 
+use super::canvas::CanvasView;
 use super::menubar::Menubar;
 
 pub struct Anu {
   menubar: Menubar,
+  canvas: CanvasView,
   is_paused: bool,
   hit_bottom: bool,
   frame_idx: usize,
-  max_frame_idx: usize,
+  // max_frame_idx: usize,
   gameover: bool,
 }
 
@@ -24,22 +27,23 @@ impl Default for Anu {
 
 impl Anu {
   pub fn new() -> Anu {
-    let mut menubar = Menubar::new();
+    let menubar = Menubar::new();
+    let canvas = CanvasView::new(0, 0);
     Anu {
       menubar,
+      canvas,
       is_paused: false,
       hit_bottom: false,
       frame_idx: 0,
-      max_frame_idx: 10,
+      // max_frame_idx: 10,
       gameover: false,
     }
   }
 
   pub fn init(&mut self, siv: &mut Cursive) -> EventResult {
     self.menubar.init(siv);
-    // self.board.renew();
-    // self.queue.renew();
-    // self.timer.renew();
+    self.canvas.init(siv);
+
     self.is_paused = false;
     self.hit_bottom = false;
     self.frame_idx = 0;
@@ -103,21 +107,22 @@ impl Anu {
   }
 
   fn handle_merge_and_pass(&mut self, event: Event) -> EventResult {
-    if self.gameover && event != Event::Char('n') && event != Event::Char('N') {
-      return EventResult::Consumed(None);
-    }
-    let is_begin = self.hit_bottom;
-    if self.hit_bottom {
-      self.merge_block();
-    }
-    match event {
-      Event::Key(Key::Down) => self.speed_up(),
-      Event::Refresh => self.on_down(false, is_begin),
-      Event::Char(' ') => self.on_down(true, is_begin),
-      Event::Char('n') | Event::Char('N') => self.new_game(),
-      Event::Char('m') | Event::Char('M') => self.stop_and_resume(),
-      _ => EventResult::Ignored,
-    }
+    // if self.gameover && event != Event::Char('n') && event != Event::Char('N') {
+    //   return EventResult::Consumed(None);
+    // }
+    // let is_begin = self.hit_bottom;
+    // if self.hit_bottom {
+    //   self.merge_block();
+    // }
+    // match event {
+    //   Event::Key(Key::Down) => self.speed_up(),
+    //   Event::Refresh => self.on_down(false, is_begin),
+    //   Event::Char(' ') => self.on_down(true, is_begin),
+    //   Event::Char('n') | Event::Char('N') => self.new_game(),
+    //   Event::Char('m') | Event::Char('M') => self.stop_and_resume(),
+    //   _ => EventResult::Ignored,
+    // }
+    EventResult::Ignored
   }
 
   fn merge_block(&mut self) {
@@ -150,72 +155,55 @@ impl Anu {
 
 impl View for Anu {
   fn draw(&self, printer: &Printer) {
-    // let x_padding = 4;
-    // let y_padding = 4;
-    // let score_padding = Vec2::new(x_padding, y_padding);
-    // let timer_padding = Vec2::new(x_padding, y_padding + 1 + self.score_size.y);
-    // let manual_padding = Vec2::new(x_padding, y_padding + self.score_size.y + self.timer_size.y);
     // let first_column_x_padding = std::cmp::max(
     //   std::cmp::max(self.manual_size.x, self.score_size.x),
     //   self.timer_size.x,
     // );
-    // let board_padding = Vec2::new(x_padding + first_column_x_padding + 2, y_padding);
-    // let queue_padding = Vec2::new(
-    //   x_padding + first_column_x_padding + self.board_size.x,
-    //   y_padding,
-    // );
 
-    // let score_printer = printer.offset(score_padding);
-    // let timer_printer = printer.offset(timer_padding);
-    // let manual_printer = printer.offset(manual_padding);
-    // let board_printer = printer.offset(board_padding);
-    // let queue_printer = printer.offset(queue_padding);
+    // let canvas_printer = printer. (self.canvas);
 
-    // self.score.draw(&score_printer);
-    // self.timer.draw(&timer_printer);
-    // self.manual.draw(&manual_printer);
-    // self.board.draw(&board_printer);
-    // self.queue.draw(&queue_printer);
+    self.menubar.draw(printer);
+    self.canvas.draw(printer);
   }
 
-  fn required_size(&mut self, constraints: Vec2) -> Vec2 {
-    // let score_size = self.score.required_size(constraints);
-    // let timer_size = self.timer.required_size(constraints);
-    // let manual_size = self.manual.required_size(constraints);
-    // let board_size = self.board.required_size(constraints);
-    // let queue_size = self.queue.required_size(constraints);
-    // Vec2::new(
-    //   std::cmp::max(std::cmp::max(manual_size.x, score_size.x), timer_size.x)
-    //     + board_size.x
-    //     + queue_size.x
-    //     + 10,
-    //   board_size.y,
-    // )
+  // fn required_size(&mut self, constraints: Vec2) -> Vec2 {
+  //   // let score_size = self.score.required_size(constraints);
+  //   // let timer_size = self.timer.required_size(constraints);
+  //   // let manual_size = self.manual.required_size(constraints);
+  //   // let board_size = self.board.required_size(constraints);
+  //   // let queue_size = self.queue.required_size(constraints);
+  //   // Vec2::new(
+  //   //   std::cmp::max(std::cmp::max(manual_size.x, score_size.x), timer_size.x)
+  //   //     + board_size.x
+  //   //     + queue_size.x
+  //   //     + 10,
+  //   //   board_size.y,
+  //   // )
 
-    Vec2::new(0, 0)
-  }
+  //   Vec2::new(0, 0)
+  // }
 
-  fn on_event(&mut self, event: Event) -> EventResult {
-    // if event == Event::Refresh {
-    //   self.frame_idx += 1;
-    //   if self.frame_idx == self.max_frame_idx {
-    //     self.frame_idx = 0;
-    //   } else {
-    //     return EventResult::Ignored;
-    //   }
-    // }
+  // fn on_event(&mut self, event: Event) -> EventResult {
+  //   // if event == Event::Refresh {
+  //   //   self.frame_idx += 1;
+  //   //   if self.frame_idx == self.max_frame_idx {
+  //   //     self.frame_idx = 0;
+  //   //   } else {
+  //   //     return EventResult::Ignored;
+  //   //   }
+  //   // }
 
-    // match event {
-    //   Event::Refresh
-    //   | Event::Key(Key::Down)
-    //   | Event::Char(' ')
-    //   | Event::Char('n')
-    //   | Event::Char('N')
-    //   | Event::Char('m')
-    //   | Event::Char('M') => self.handle_merge_and_pass(event),
-    //   _ => self.pass_event_to_board(event),
-    // }
+  //   // match event {
+  //   //   Event::Refresh
+  //   //   | Event::Key(Key::Down)
+  //   //   | Event::Char(' ')
+  //   //   | Event::Char('n')
+  //   //   | Event::Char('N')
+  //   //   | Event::Char('m')
+  //   //   | Event::Char('M') => self.handle_merge_and_pass(event),
+  //   //   _ => self.pass_event_to_board(event),
+  //   // }
 
-    return EventResult::Ignored;
-  }
+  //   return EventResult::Ignored;
+  // }
 }

@@ -1,71 +1,108 @@
+use std::borrow::BorrowMut;
+
 use cursive::{
-  event::{Callback, Event, EventResult},
-  views::Canvas,
-  Cursive, Printer, Vec2,
+  event::{Event, EventResult},
+  view::{Nameable, Resizable},
+  views::{Canvas, Panel},
+  Cursive, Printer, Vec2, View,
 };
 
-use super::grid::Grid;
-
 pub struct CanvasView {
-  pub canvas_view: Canvas<Grid>,
+  pub grid_row_spacing: usize,
+  pub grid_col_spacing: usize,
+  pub size: Vec2,
+  pub grid: Vec<Vec<char>>,
 }
 
 impl CanvasView {
-  pub fn new() -> CanvasView {
-    let c = Canvas::new(Grid::new(0, 0))
-      .with_draw(draw)
-      .with_layout(layout)
-      .with_on_event(on_event);
-
-    CanvasView { canvas_view: c }
-  }
-}
-
-fn layout(s: &mut Grid, size: Vec2) {
-  s.resize(size)
-}
-
-fn draw(s: &Grid, printer: &Printer) {
-  for (x, row) in s.grid.iter().enumerate() {
-    for (y, &value) in row.iter().enumerate() {
-      let display_value = if value != '\0' {
-        value
-      } else if x % s.grid_row_spacing == 0 && y % s.grid_col_spacing == 0 {
-        '+'
-      } else {
-        '.'
-      };
-
-      printer.print((x, y), &display_value.to_string())
+  pub fn new(w: usize, h: usize) -> Self {
+    CanvasView {
+      grid_row_spacing: 9,
+      grid_col_spacing: 9,
+      size: Vec2::new(0, 0),
+      grid: (0..w).map(|_| (0..h).map(|_| '\0').collect()).collect(),
     }
   }
-  // printer.print((0, 1), &format!("{:.2?}", s.elapsed()));
+
+  pub fn init(&mut self, siv: &mut Cursive) {
+    let canvas = CanvasView {
+      grid_row_spacing: 9,
+      grid_col_spacing: 9,
+      size: Vec2::new(0, 0),
+      grid: (0..self.size.x)
+        .map(|_| (0..self.size.y).map(|_| '\0').collect())
+        .collect(),
+    };
+
+    siv.add_layer(canvas.with_name("canvas_view").full_width().full_height());
+  }
+
+  pub fn resize(&mut self, size: Vec2) {
+    self.grid = (0..size.x)
+      .map(|_| (0..size.y).map(|_| '\0').collect())
+      .collect();
+    self.size = size
+  }
+
+  fn draw_canvas(&self, printer: &Printer) {
+    for (x, row) in self.grid.iter().enumerate() {
+      for (y, &value) in row.iter().enumerate() {
+        let display_value = if value != '\0' {
+          value
+        } else if x % self.grid_row_spacing == 0 && y % self.grid_col_spacing == 0 {
+          '+'
+        } else {
+          '.'
+        };
+
+        printer.print((x, y), &display_value.to_string())
+      }
+    }
+  }
+
+  pub fn update_grid_src(&mut self, src: &str) {
+    let rows = self.grid.len();
+    let cols = self.grid[0].len();
+
+    for row in 0..rows {
+      for col in 0..cols {
+        if let Some(char) = src.chars().nth(row + col) {
+          self.grid[row][col] = char;
+        }
+      }
+    }
+  }
 }
 
-fn on_event(_: &mut Grid, event: Event) -> EventResult {
-  if event == Event::Refresh {
-    // println!("refresh");
-    // self.frame_idx += 1;
-    // if self.frame_idx == self.max_frame_idx {
-    //   self.frame_idx = 0;
-    // } else {
-    //   return EventResult::Ignored;
+impl View for CanvasView {
+  fn layout(&mut self, size: Vec2) {
+    self.resize(size)
+  }
+
+  fn draw(&self, printer: &Printer) {
+    if self.size > Vec2::new(0, 0) {
+      self.draw_canvas(printer);
+    }
+  }
+
+  fn on_event(&mut self, event: Event) -> EventResult {
+    // if event == Event::Refresh {}
+
+    // match event {
+    //   Event::Char(' ') => EventResult::Consumed(Some(Callback::from_fn(run(Grid::toggle_play)))),
+    //   _ => EventResult::Ignored,
     // }
-  }
-
-  match event {
-    Event::Char(' ') => EventResult::Consumed(Some(Callback::from_fn(run(Grid::toggle_play)))),
-    _ => EventResult::Ignored,
+    EventResult::Ignored
   }
 }
 
-pub fn run<F>(f: F) -> impl Fn(&mut Cursive)
-where
-  F: Fn(&mut Grid),
-{
-  move |s| {
-    s.call_on_name("canvas_view", |c: &mut Canvas<Grid>| {
-      f(c.state_mut());
-    });
-  }
-}
+// pub fn run<F>(f: F) -> impl Fn(&mut Cursive)
+// where
+//   F: Fn(&mut CanvasView),
+// {
+//   move |s| {
+//     s.call_on_name("canvas_view", |c: &mut CanvasView| {
+//       f(c.state_mut());
+//     });
+//   }
+// }

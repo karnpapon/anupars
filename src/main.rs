@@ -1,7 +1,7 @@
 mod core;
 
 use core::anu::Anu;
-use std::sync::Mutex;
+// use std::sync::Mutex;
 
 use cursive::theme::{BorderStyle, Palette};
 use cursive::view::{Nameable, Selector};
@@ -43,8 +43,8 @@ fn main() {
   init_with_default_style(&mut siv);
   siv.add_layer(anu);
   siv.focus(&Selector::Name("anu")).unwrap();
-
+  // siv.set_autorefresh(true);
   // siv.set_fps(20);
-  let siv: Mutex<Cursive> = Mutex::new(siv);
-  siv.lock().unwrap().run();
+  // let siv: Mutex<Cursive> = Mutex::new(siv);
+  siv.run();
 }
