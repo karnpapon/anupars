@@ -1,7 +1,7 @@
 use std::{
   error::Error,
   ffi::OsString,
-  fs::{self, DirEntry, File},
+  fs::{self, File},
   io::{self, Read},
   path::{Path, PathBuf},
 };
@@ -10,11 +10,8 @@ use cursive::{
   align::HAlign,
   event::{Event, Key},
   menu,
-  view::{self, Margins, Nameable, Resizable, Scrollable},
-  views::{
-    self, Dialog, DummyView, LinearLayout, Menubar as CursiveMenubar, OnEventView, SelectView,
-    TextView,
-  },
+  view::{Margins, Nameable, Resizable},
+  views::{Dialog, DummyView, LinearLayout, OnEventView, SelectView, TextView},
   Cursive, Printer, View, With,
 };
 

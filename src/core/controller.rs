@@ -1,13 +1,11 @@
+use cfonts::{render, Fonts, Options};
 use cursive::{
   align::{HAlign, VAlign},
-  builder::Wrapper,
-  event::{Callback, Event, EventResult, Key},
-  theme::{Color, ColorStyle},
-  view::{Nameable, Resizable, Selector, ViewWrapper},
-  views::{
-    Dialog, EditView, LinearLayout, ListView, OnEventView, RadioGroup, SliderView, TextView,
-  },
-  Cursive, CursiveExt, Printer, View, With,
+  event::{Event, EventResult},
+  theme::Color,
+  view::{Nameable, Resizable},
+  views::{Dialog, EditView, LinearLayout, ListView, RadioGroup, TextView},
+  Cursive, Printer, View, With,
 };
 
 use super::{canvas::CanvasView, config, utils};
@@ -19,6 +17,8 @@ pub struct ControllerData {
   pub number: usize,
   pub mode_state: RadioGroup<bool>,
   pub flag_state: RadioGroup<bool>,
+  pub input_regex: String,
+  pub show_regex_display: bool,
 }
 
 pub struct Controller {
@@ -31,6 +31,33 @@ fn input_submit(siv: &mut Cursive, texts: &str) {
   text_view.set_content(texts);
 }
 
+fn input_edit(siv: &mut Cursive, texts: &str, _cursor: usize) {
+  // let mut current_data = siv
+  //   .with_user_data(|controller_data: &mut ControllerData| controller_data.clone())
+  //   .unwrap();
+
+  let output = render(Options {
+    text: String::from(texts),
+    font: Fonts::FontTiny,
+    ..Options::default()
+  });
+
+  // let text_dialog = Dialog::around(
+  //   TextView::new(utils::build_doc_string(&config::APP_WELCOME_MSG))
+  //     .h_align(HAlign::Center)
+  //     .content(output.text)
+  //     .fixed_height(5),
+  // );
+
+  let mut text_view = siv
+    .find_name::<TextView>("interactive_display_view")
+    .unwrap();
+
+  text_view.get_shared_content().set_content(output.text);
+
+  // siv.add_layer(text_dialog)
+}
+
 impl Controller {
   pub fn new() -> Self {
     Controller {}
@@ -39,15 +66,16 @@ impl Controller {
   pub fn init(&mut self, current_data: &mut ControllerData) -> LinearLayout {
     let regex_view = EditView::new()
       .content(current_data.string.clone())
+      .on_edit(input_edit)
       .on_submit(input_submit)
       .with_name("ctr_regex")
       .fixed_width(25)
-      .max_width(25);
-    // .with(|f| {
-    //   f.get_inner_mut()
-    //     .get_mut()
-    //     .set_style(Color::TerminalDefault)
-    // });
+      .with(|f| {
+        f.get_inner_mut()
+          .get_mut()
+          .set_style(Color::TerminalDefault);
+      })
+      .with(|f| current_data.show_regex_display = f.get_inner_mut().get_mut().is_enabled());
 
     let flag_view = LinearLayout::horizontal()
       .child(current_data.flag_state.button(true, "g"))
@@ -115,8 +143,9 @@ impl Controller {
       )
       .child(Dialog::around(
         TextView::new(utils::build_doc_string(&config::APP_WELCOME_MSG))
-          .h_align(HAlign::Center)
-          .v_align(VAlign::Center),
+          .center()
+          .with_name("interactive_display_view")
+          .fixed_height(6),
       ))
       .child(
         CanvasView::new(0, 0)

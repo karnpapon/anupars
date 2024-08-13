@@ -11,9 +11,9 @@ repository = "https://github.com/karnpapon/anu-rs"
 
 [dependencies]
 cursive = "*"
-rand = "0.8"
 lazy_static = "1.5.0"
 dirs = "5.0.1"
+cfonts = "1.2.0"
 
 [profile.release]
 panic = "abort"   # Strip expensive panic clean-up logic

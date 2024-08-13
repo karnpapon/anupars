@@ -85,8 +85,6 @@ impl Anu {
     let ctr_view = self.controller.init(&mut current_data);
 
     ctr_view
-    // siv.add_layer(ctr_view);
-    // siv.run();
   }
 
   // fn on_down(&mut self, is_drop: bool, is_begin: bool) -> EventResult {
