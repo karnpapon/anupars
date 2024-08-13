@@ -5,11 +5,14 @@ use cursive::{
   event::{Callback, Event, EventResult, Key},
   theme::{BorderStyle, Color, ColorStyle, Palette},
   view::{Finder, Nameable, Resizable, Selector},
-  views::{Dialog, EditView, LinearLayout, ListView, SliderView, TextView},
+  views::{Dialog, EditView, LinearLayout, ListView, RadioGroup, SliderView, TextView},
   Cursive, CursiveExt, Printer, Vec2, View, With,
 };
 
-use super::{controller::Controller, menubar::Menubar};
+use super::{
+  controller::{Controller, ControllerData},
+  menubar::Menubar,
+};
 
 pub struct Anu {
   pub menubar: Menubar,
@@ -70,9 +73,20 @@ impl Anu {
     });
   }
 
-  pub fn init(&mut self, siv: &mut Cursive) {
+  pub fn build_menubar(&mut self, siv: &mut Cursive) {
     self.menubar.init(siv);
-    self.controller.init(siv);
+  }
+
+  pub fn build_root_view(&mut self, siv: &mut Cursive) -> LinearLayout {
+    let mut boolean_group: RadioGroup<bool> = RadioGroup::new();
+    let current_data = siv
+      .with_user_data(|controller_data: &mut ControllerData| controller_data.clone())
+      .unwrap();
+
+    let ctr_view = self.controller.init(current_data, &mut boolean_group);
+
+    ctr_view
+    // siv.add_layer(ctr_view);
     // siv.run();
   }
 

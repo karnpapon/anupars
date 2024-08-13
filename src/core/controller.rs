@@ -38,16 +38,15 @@ impl Controller {
     Controller {}
   }
 
-  pub fn init(&mut self, siv: &mut Cursive) {
-    let mut boolean_group: RadioGroup<bool> = RadioGroup::new();
-    let current_data = siv
-      .with_user_data(|controller_data: &mut ControllerData| controller_data.clone())
-      .unwrap();
-
+  pub fn init(
+    &mut self,
+    current_data: ControllerData,
+    boolean_group: &mut RadioGroup<bool>,
+  ) -> LinearLayout {
     let mut regex_view = EditView::new()
       .content(current_data.string.clone())
-      .on_submit(show_popup)
-      .disabled();
+      .on_submit(show_popup);
+    // .disabled();
 
     regex_view.set_style(Color::TerminalDefault);
 
@@ -91,26 +90,24 @@ impl Controller {
       .child("MIDI: ", TextView::new("-").with_name("ctr_midi"))
       .full_width();
 
-    siv.add_layer(
-      LinearLayout::vertical()
-        .child(Dialog::around(
-          LinearLayout::horizontal()
-            .child(input_controller.with_name("input_controller"))
-            .child(status_view.with_name("status_view"))
-            .child(protocol_view.with_name("protocol_view")),
-        ))
-        .child(Dialog::around(
-          TextView::new(utils::build_doc_string(&config::APP_WELCOME_MSG))
-            .h_align(HAlign::Center)
-            .v_align(VAlign::Center),
-        ))
-        .child(
-          CanvasView::new(0, 0)
-            .with_name("canvas_view")
-            .full_width()
-            .full_height(),
-        ),
-    );
+    LinearLayout::vertical()
+      .child(Dialog::around(
+        LinearLayout::horizontal()
+          .child(input_controller.with_name("input_controller"))
+          .child(status_view.with_name("status_view"))
+          .child(protocol_view.with_name("protocol_view")),
+      ))
+      .child(Dialog::around(
+        TextView::new(utils::build_doc_string(&config::APP_WELCOME_MSG))
+          .h_align(HAlign::Center)
+          .v_align(VAlign::Center),
+      ))
+      .child(
+        CanvasView::new(0, 0)
+          .with_name("canvas_view")
+          .full_width()
+          .full_height(),
+      )
   }
 
   pub fn handle_event(&mut self, event: Event) -> bool {

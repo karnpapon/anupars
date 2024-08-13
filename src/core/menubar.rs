@@ -10,12 +10,15 @@ use cursive::{
   align::HAlign,
   event::{Event, Key},
   menu,
-  view::{Margins, Nameable, Resizable, Scrollable},
-  views::{Dialog, DummyView, LinearLayout, OnEventView, SelectView, TextView},
+  view::{self, Margins, Nameable, Resizable, Scrollable},
+  views::{
+    self, Dialog, DummyView, LinearLayout, Menubar as CursiveMenubar, OnEventView, SelectView,
+    TextView,
+  },
   Cursive, Printer, View, With,
 };
 
-use super::{canvas::CanvasView, config, utils};
+use super::{config, utils};
 
 pub struct Menubar {
   show_doc_view: bool,
@@ -48,68 +51,66 @@ impl Menubar {
   }
 
   pub fn init(&mut self, siv: &mut Cursive) {
+    let menu_app = menu::Tree::new()
+      .leaf("Insert File", |s| {
+        let default_path = get_default_database_path();
+        let paths = fs::read_dir(default_path.unwrap())
+          .unwrap()
+          .map(|res| res.map(|e| e.file_name().into_string()))
+          .collect::<Vec<_>>();
+
+        let file_explorer = show_listed_files(paths);
+        let dialog_file_exp = OnEventView::new(
+          Dialog::around(file_explorer)
+            .dismiss_button("close")
+            .max_width(200),
+        )
+        .on_event(Event::Key(Key::Esc), |ss| {
+          ss.pop_layer();
+        });
+
+        s.add_layer(dialog_file_exp)
+      })
+      .delimiter()
+      .subtree(
+        "MIDI",
+        menu::Tree::new().with(|tree| {
+          for (i, (midi, _)) in config::MENU_MIDI.iter().enumerate() {
+            tree.add_item(menu::Item::leaf(format!("{i}: {midi}"), |_| ()))
+          }
+        }),
+      )
+      .subtree(
+        "OSC",
+        menu::Tree::new().with(|tree| {
+          for (osc, port) in config::MENU_OSC.iter() {
+            tree.add_item(menu::Item::leaf(format!("{osc}: {port}"), |_| ()))
+          }
+        }),
+      )
+      .delimiter()
+      .leaf("Reset", move |s| s.reset_default_callbacks())
+      .delimiter()
+      .leaf("About", move |s| {
+        s.add_layer(
+          Dialog::info(format!(
+            "{}\n{}\n\nauthor: {}\nversion: {}",
+            config::APP_NAME,
+            env!("CARGO_PKG_DESCRIPTION"),
+            env!("CARGO_PKG_AUTHORS"),
+            env!("CARGO_PKG_VERSION"),
+          ))
+          .padding(Margins::lrtb(2, 2, 0, 0))
+          .max_width(50),
+        );
+      });
+
+    let menu_help = menu::Tree::new().leaf("Docs", Menubar::add_doc_view);
+
     siv
       .menubar()
-      .add_subtree(
-        "Anu",
-        menu::Tree::new()
-          .leaf("Insert File", |s| {
-            let default_path = get_default_database_path();
-            let paths = fs::read_dir(default_path.unwrap())
-              .unwrap()
-              .map(|res| res.map(|e| e.file_name().into_string()))
-              .collect::<Vec<_>>();
-
-            let file_explorer = show_listed_files(paths);
-            let dialog_file_exp = OnEventView::new(
-              Dialog::around(file_explorer)
-                .dismiss_button("close")
-                .max_width(200),
-            )
-            .on_event(Event::Key(Key::Esc), |ss| {
-              ss.pop_layer();
-            });
-
-            s.add_layer(dialog_file_exp)
-          })
-          .delimiter()
-          .subtree(
-            "MIDI",
-            menu::Tree::new().with(|tree| {
-              for (i, (midi, _)) in config::MENU_MIDI.iter().enumerate() {
-                tree.add_item(menu::Item::leaf(format!("{i}: {midi}"), |_| ()))
-              }
-            }),
-          )
-          .subtree(
-            "OSC",
-            menu::Tree::new().with(|tree| {
-              for (osc, port) in config::MENU_OSC.iter() {
-                tree.add_item(menu::Item::leaf(format!("{osc}: {port}"), |_| ()))
-              }
-            }),
-          )
-          .delimiter()
-          .leaf("Reset", move |s| s.reset_default_callbacks())
-          .delimiter()
-          .leaf("About", move |s| {
-            s.add_layer(
-              Dialog::info(format!(
-                "{}\n{}\n\nauthor: {}\nversion: {}",
-                config::APP_NAME,
-                env!("CARGO_PKG_DESCRIPTION"),
-                env!("CARGO_PKG_AUTHORS"),
-                env!("CARGO_PKG_VERSION"),
-              ))
-              .padding(Margins::lrtb(2, 2, 0, 0))
-              .max_width(50),
-            );
-          }),
-      )
-      .add_subtree(
-        "Help",
-        menu::Tree::new().leaf("Docs", Menubar::add_doc_view),
-      )
+      .add_subtree("Anu", menu_app)
+      .add_subtree("Help", menu_help)
       .add_delimiter()
       .add_leaf("Quit", |s| s.quit());
 
