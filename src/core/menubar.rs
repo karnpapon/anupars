@@ -122,8 +122,8 @@ impl View for Menubar {
   fn draw(&self, printer: &Printer) {}
 }
 
-fn load_contents(app: &mut Cursive, file: &PathBuf) {
-  let mut text_view = app.find_name::<TextView>("file_contents").unwrap();
+fn load_contents(siv: &mut Cursive, file: &PathBuf) {
+  let mut text_view = siv.find_name::<TextView>("file_contents").unwrap();
   if let Ok(contents) = read_file(Path::new(file)) {
     text_view.set_content(contents);
   }

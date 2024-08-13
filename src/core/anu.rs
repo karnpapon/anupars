@@ -78,12 +78,11 @@ impl Anu {
   }
 
   pub fn build_root_view(&mut self, siv: &mut Cursive) -> LinearLayout {
-    let mut boolean_group: RadioGroup<bool> = RadioGroup::new();
-    let current_data = siv
+    let mut current_data = siv
       .with_user_data(|controller_data: &mut ControllerData| controller_data.clone())
       .unwrap();
 
-    let ctr_view = self.controller.init(current_data, &mut boolean_group);
+    let ctr_view = self.controller.init(&mut current_data);
 
     ctr_view
     // siv.add_layer(ctr_view);

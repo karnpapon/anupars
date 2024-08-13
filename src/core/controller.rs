@@ -1,8 +1,9 @@
 use cursive::{
   align::{HAlign, VAlign},
+  builder::Wrapper,
   event::{Callback, Event, EventResult, Key},
   theme::{Color, ColorStyle},
-  view::{Nameable, Resizable, Selector},
+  view::{Nameable, Resizable, Selector, ViewWrapper},
   views::{
     Dialog, EditView, LinearLayout, ListView, OnEventView, RadioGroup, SliderView, TextView,
   },
@@ -11,11 +12,13 @@ use cursive::{
 
 use super::{canvas::CanvasView, config, utils};
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Default)]
 pub struct ControllerData {
   pub boolean: bool,
   pub string: String,
   pub number: usize,
+  pub mode_state: RadioGroup<bool>,
+  pub flag_state: RadioGroup<bool>,
 }
 
 pub struct Controller {
@@ -23,14 +26,9 @@ pub struct Controller {
   // ui: Ui,
 }
 
-fn show_popup(s: &mut Cursive, name: &str) {
-  if name.is_empty() {
-    s.add_layer(Dialog::info("Please enter a name!"));
-  } else {
-    let content = format!("Hello {}!", name);
-    s.pop_layer();
-    s.add_layer(Dialog::around(TextView::new(content)).button("Quit", |s| s.quit()));
-  }
+fn input_submit(siv: &mut Cursive, texts: &str) {
+  let mut text_view = siv.find_name::<TextView>("input_status_view").unwrap();
+  text_view.set_content(texts);
 }
 
 impl Controller {
@@ -38,41 +36,56 @@ impl Controller {
     Controller {}
   }
 
-  pub fn init(
-    &mut self,
-    current_data: ControllerData,
-    boolean_group: &mut RadioGroup<bool>,
-  ) -> LinearLayout {
-    let mut regex_view = EditView::new()
+  pub fn init(&mut self, current_data: &mut ControllerData) -> LinearLayout {
+    let regex_view = EditView::new()
       .content(current_data.string.clone())
-      .on_submit(show_popup);
-    // .disabled();
+      .on_submit(input_submit)
+      .with_name("ctr_regex")
+      .fixed_width(25)
+      .max_width(25);
+    // .with(|f| {
+    //   f.get_inner_mut()
+    //     .get_mut()
+    //     .set_style(Color::TerminalDefault)
+    // });
 
-    regex_view.set_style(Color::TerminalDefault);
+    let flag_view = LinearLayout::horizontal()
+      .child(current_data.flag_state.button(true, "g"))
+      .child(current_data.flag_state.button(false, "i"))
+      .child(current_data.flag_state.button(false, "m"))
+      .child(current_data.flag_state.button(false, "u"))
+      .child(current_data.flag_state.button(false, "s"))
+      .child(current_data.flag_state.button(false, "y"))
+      .with(|layout| {
+        if current_data.boolean {
+          layout.set_focus_index(1).unwrap();
+        }
+      });
+
+    let mode_view =
+      LinearLayout::horizontal()
+        .child(current_data.mode_state.button(false, "Realtime"))
+        .child(current_data.mode_state.button(true, "True").with_if(
+          current_data.boolean,
+          |button| {
+            button.select();
+          },
+        ))
+        .with(|layout| {
+          if current_data.boolean {
+            layout.set_focus_index(1).unwrap();
+          }
+        });
+
+    let input_status_view = TextView::new("-")
+      .with_name("input_status_view")
+      .max_width(25);
 
     let input_controller = ListView::new()
-      .child(
-        "RegExp: ",
-        regex_view.with_name("ctr_regex").fixed_width(25),
-      )
-      .child(
-        "Mode: ",
-        LinearLayout::horizontal()
-          .child(boolean_group.button(false, "Realtime"))
-          .child(
-            boolean_group
-              .button(true, "True")
-              .with_if(current_data.boolean, |button| {
-                button.select();
-              }),
-          )
-          .with(|layout| {
-            if current_data.boolean {
-              layout.set_focus_index(1).unwrap();
-            }
-          }),
-      )
-      .child("flag: ", TextView::new("-").with_name("ctr_flag"))
+      .child("RegExp: ", regex_view)
+      .child("Mode: ", mode_view)
+      .child("flag: ", flag_view)
+      .child("status: ", input_status_view)
       .full_width();
 
     let status_view = ListView::new()
@@ -91,12 +104,15 @@ impl Controller {
       .full_width();
 
     LinearLayout::vertical()
-      .child(Dialog::around(
-        LinearLayout::horizontal()
-          .child(input_controller.with_name("input_controller"))
-          .child(status_view.with_name("status_view"))
-          .child(protocol_view.with_name("protocol_view")),
-      ))
+      .child(
+        Dialog::around(
+          LinearLayout::horizontal()
+            .child(input_controller.with_name("input_controller"))
+            .child(status_view.with_name("status_view"))
+            .child(protocol_view.with_name("protocol_view")),
+        )
+        .with_name("control_section_view"),
+      )
       .child(Dialog::around(
         TextView::new(utils::build_doc_string(&config::APP_WELCOME_MSG))
           .h_align(HAlign::Center)
@@ -104,7 +120,7 @@ impl Controller {
       ))
       .child(
         CanvasView::new(0, 0)
-          .with_name("canvas_view")
+          .with_name("canvas_section_view")
           .full_width()
           .full_height(),
       )
@@ -114,6 +130,7 @@ impl Controller {
     println!("on_event controllerrr");
     match event {
       Event::Char('i') => true,
+      Event::Char('n') => true,
       _ => false,
     }
   }
