@@ -24,18 +24,18 @@ impl CanvasView {
     }
   }
 
-  pub fn init(&mut self, siv: &mut Cursive) {
-    let canvas = CanvasView {
-      grid_row_spacing: 9,
-      grid_col_spacing: 9,
-      size: Vec2::new(0, 0),
-      grid: (0..self.size.x)
-        .map(|_| (0..self.size.y).map(|_| '\0').collect())
-        .collect(),
-    };
+  // pub fn init(&mut self, siv: &mut Cursive) {
+  //   let canvas = CanvasView {
+  //     grid_row_spacing: 9,
+  //     grid_col_spacing: 9,
+  //     size: Vec2::new(0, 0),
+  //     grid: (0..self.size.x)
+  //       .map(|_| (0..self.size.y).map(|_| '\0').collect())
+  //       .collect(),
+  //   };
 
-    siv.add_layer(canvas.with_name("canvas_view").full_width().full_height());
-  }
+  //   siv.add_layer(canvas.with_name("canvas_view").full_width().full_height());
+  // }
 
   pub fn resize(&mut self, size: Vec2) {
     self.grid = (0..size.x)

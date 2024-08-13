@@ -1,27 +1,25 @@
 use std::{
   error::Error,
   ffi::OsString,
-  fs::{self, File},
+  fs::{self, DirEntry, File},
   io::{self, Read},
   path::{Path, PathBuf},
 };
 
 use cursive::{
   align::HAlign,
-  event::{Callback, Event, EventResult, Key},
+  event::{Event, Key},
   menu,
-  theme::{BaseColor, Color, ColorStyle},
-  view::{Margins, Resizable, Scrollable},
-  views::{Dialog, OnEventView, SelectView},
-  Cursive, Printer, Vec2, View, With,
+  view::{Margins, Nameable, Resizable, Scrollable},
+  views::{Dialog, DummyView, LinearLayout, OnEventView, SelectView, TextView},
+  Cursive, Printer, View, With,
 };
 
-use super::{
-  canvas::{self, CanvasView},
-  config,
-};
+use super::{canvas::CanvasView, config, utils};
 
-pub struct Menubar {}
+pub struct Menubar {
+  show_doc_view: bool,
+}
 
 impl Default for Menubar {
   fn default() -> Self {
@@ -31,7 +29,22 @@ impl Default for Menubar {
 
 impl Menubar {
   pub fn new() -> Self {
-    Self {}
+    Self {
+      show_doc_view: false,
+    }
+  }
+
+  pub fn add_doc_view(siv: &mut Cursive) {
+    siv.add_layer(
+      OnEventView::new(Dialog::info(format!(
+        "{}\n\n{}",
+        "DOCUMENTATION",
+        utils::build_doc_string(&config::APP_DOCS)
+      )))
+      .on_event(Event::Key(Key::Esc), |s| {
+        s.pop_layer();
+      }),
+    )
   }
 
   pub fn init(&mut self, siv: &mut Cursive) {
@@ -47,7 +60,17 @@ impl Menubar {
               .map(|res| res.map(|e| e.file_name().into_string()))
               .collect::<Vec<_>>();
 
-            show_listed_files(s, paths);
+            let file_explorer = show_listed_files(paths);
+            let dialog_file_exp = OnEventView::new(
+              Dialog::around(file_explorer)
+                .dismiss_button("close")
+                .max_width(200),
+            )
+            .on_event(Event::Key(Key::Esc), |ss| {
+              ss.pop_layer();
+            });
+
+            s.add_layer(dialog_file_exp)
           })
           .delimiter()
           .subtree(
@@ -85,20 +108,7 @@ impl Menubar {
       )
       .add_subtree(
         "Help",
-        menu::Tree::new().leaf("Docs", |s| {
-          let mut docs = String::new();
-          for (command, desc) in config::APP_DOCS.iter() {
-            docs.push_str(format!("{}: {}\n", command, desc).as_str());
-          }
-          s.add_layer(
-            OnEventView::new(Dialog::info(format!("{}\n\n{}", "DOCUMENTATION", docs))).on_event(
-              Event::Key(Key::Esc),
-              |s| {
-                s.pop_layer();
-              },
-            ),
-          )
-        }),
+        menu::Tree::new().leaf("Docs", Menubar::add_doc_view),
       )
       .add_delimiter()
       .add_leaf("Quit", |s| s.quit());
@@ -111,10 +121,20 @@ impl View for Menubar {
   fn draw(&self, printer: &Printer) {}
 }
 
-fn show_listed_files(s: &mut Cursive, dir: Vec<Result<Result<String, OsString>, io::Error>>) {
+fn load_contents(app: &mut Cursive, file: &PathBuf) {
+  let mut text_view = app.find_name::<TextView>("file_contents").unwrap();
+  if let Ok(contents) = read_file(Path::new(file)) {
+    text_view.set_content(contents);
+  }
+}
+
+fn show_listed_files(dir: Vec<Result<Result<String, OsString>, io::Error>>) -> LinearLayout {
+  let mut panes = LinearLayout::horizontal();
+
   if dir.is_empty() {
-    s.add_layer(Dialog::info(config::app_empty_dir()).fixed_size((50, 10)));
-    return;
+    let empty_dialog = Dialog::info(config::app_empty_dir()).fixed_size((50, 10));
+    panes.add_child(empty_dialog);
+    return panes;
   }
 
   let mut select = SelectView::new().h_align(HAlign::Left);
@@ -131,24 +151,16 @@ fn show_listed_files(s: &mut Cursive, dir: Vec<Result<Result<String, OsString>, 
       .unwrap();
     select.add_item(title_str, select_value);
   }
+  let file_details = TextView::new("")
+    .with_name("file_contents")
+    .fixed_size((50, 15));
 
-  select.set_on_submit(render_texts);
-  s.add_layer(
-    OnEventView::new(
-      Dialog::around(select.scrollable().fixed_size((50, 10))).dismiss_button("close"),
-    )
-    .on_event(Event::Key(Key::Esc), |ss| {
-      ss.pop_layer();
-    }),
-  );
-}
+  let padding = DummyView::new().fixed_width(2);
 
-fn render_texts(s: &mut Cursive, file: &PathBuf) {
-  if let Ok(contents) = read_file(Path::new(file)) {
-    s.call_on_name("canvas_view", |c: &mut CanvasView| {
-      c.update_grid_src(&contents)
-    });
-  }
+  panes.add_child(select.on_select(load_contents));
+  panes.add_child(padding);
+  panes.add_child(file_details);
+  panes
 }
 
 fn read_file(path: &Path) -> Result<String, Box<dyn Error>> {

@@ -1,15 +1,17 @@
 use lazy_static::lazy_static;
-use std::collections::HashMap;
+
+pub type StaticStrInt = Vec<(&'static str, i32)>;
+pub type StaticStrStr = Vec<(&'static str, &'static str)>;
 
 lazy_static! {
-  pub static ref MENU_OSC: HashMap<&'static str, i32> = HashMap::from([
+  pub static ref MENU_OSC: StaticStrInt = Vec::from([
     ("Default", 9000),
     ("SuperCollider", 57120),
     ("TidalCycles", 6010),
     ("SonicPi", 4559),
   ]);
-  pub static ref MENU_MIDI: HashMap<&'static str, i32> = HashMap::from([("Default", 9000),]);
-  pub static ref APP_DOCS: Vec<(&'static str, &'static str)> = Vec::from([
+  pub static ref MENU_MIDI: StaticStrInt = Vec::from([("Default", 9000)]);
+  pub static ref APP_DOCS: StaticStrStr = Vec::from([
     ("n", "add new marker"),
     ("f", "focus only marker(s)"),
     ("r", "[*] reverse step"),
@@ -33,6 +35,12 @@ lazy_static! {
     ("Shift-Arrow", "[*] incr/decr marker range"),
     ("Shift-Arrow-Cmd", "[*] jump incr/decr marker range"),
   ]);
+  pub static ref APP_WELCOME_MSG: StaticStrStr = Vec::from([
+    ("(CmdOrCtrl-i)", "toggle input"),
+    ("(CmdOrCtrl-g)", "toggle Regex input"),
+    ("(Return)", "eval input(target input must = ON)"),
+    ("(h)", "toggle helps window"),
+  ]);
 }
 
 pub static APP_NAME: &str = "
@@ -45,10 +53,6 @@ pub static APP_NAME: &str = "
 
 pub static DEFAULT_APP_DIRECTORY: &str = ".anu_rs";
 pub static DEFAULT_APP_FILENAME: &str = "contents";
-
-// Possible exit codes
-pub const EXIT_SUCCESS: i32 = 0;
-pub const EXIT_FAILURE: i32 = 1;
 
 // workaround since `format!` cannot be calculated at build-time (eg. for `static` or `const`)
 // https://users.rust-lang.org/t/how-to-avoid-recalculating-a-formatted-string-at-runtime/44895
