@@ -8,18 +8,17 @@ use std::{
 
 use cursive::{
   align::HAlign,
-  event::{Event, Key},
+  backends::crossterm::crossterm::style::Print,
+  event::{Callback, Event, EventResult, Key},
   menu,
   view::{Margins, Nameable, Resizable},
-  views::{Dialog, DummyView, LinearLayout, OnEventView, SelectView, TextView},
-  Cursive, Printer, View, With,
+  views::{Canvas, Dialog, DummyView, LinearLayout, OnEventView, SelectView, TextView},
+  Cursive, CursiveExt, Printer, View, With,
 };
 
-use super::{config, controller::ControllerData, utils};
+use super::{canvas::CanvasView, config, controller::ControllerData, utils};
 
-pub struct Menubar {
-  show_doc_view: bool,
-}
+pub struct Menubar {}
 
 impl Default for Menubar {
   fn default() -> Self {
@@ -29,9 +28,7 @@ impl Default for Menubar {
 
 impl Menubar {
   pub fn new() -> Self {
-    Self {
-      show_doc_view: false,
-    }
+    Self {}
   }
 
   pub fn add_doc_view(siv: &mut Cursive) {
@@ -128,6 +125,17 @@ fn load_contents(siv: &mut Cursive, file: &PathBuf) {
   }
 }
 
+fn render_contents(siv: &mut Cursive, file: &PathBuf) {
+  let mut cv = siv
+    .find_name::<Canvas<CanvasView>>("canvas_section_view")
+    .unwrap();
+  if let Ok(contents) = read_file(Path::new(file)) {
+    cv.state_mut().update_grid_src(&contents);
+    cv.set_draw(|c: &CanvasView, p: &Printer| c.draw_canvas(p));
+    cv.on_event(Event::Refresh);
+  }
+}
+
 fn show_listed_files(dir: Vec<Result<Result<String, OsString>, io::Error>>) -> LinearLayout {
   let mut panes = LinearLayout::horizontal();
 
@@ -157,7 +165,7 @@ fn show_listed_files(dir: Vec<Result<Result<String, OsString>, io::Error>>) -> L
 
   let padding = DummyView::new().fixed_width(2);
 
-  panes.add_child(select.on_select(load_contents));
+  panes.add_child(select.on_select(load_contents).on_submit(render_contents));
   panes.add_child(padding);
   panes.add_child(file_details);
   panes
@@ -184,7 +192,6 @@ fn get_default_database_path() -> Result<PathBuf, Box<dyn Error>> {
     Some(d) => d,
     None => return Err("invalid filename".into()),
   };
-  // Create the directory if it doesn't already exist.
   if !path.is_dir() {
     fs::create_dir_all(&path)?;
   }

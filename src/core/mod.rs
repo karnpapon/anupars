@@ -1,6 +1,3 @@
-// pub mod grid;
-// pub mod ui;
-
 pub mod anu;
 pub mod canvas;
 pub mod config;

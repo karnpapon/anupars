@@ -1,12 +1,8 @@
-use std::{cell::RefCell, rc::Rc};
-
 use cursive::{
-  align::{HAlign, VAlign},
   event::{Callback, Event, EventResult, Key},
-  theme::{BorderStyle, Color, ColorStyle, Palette},
-  view::{Finder, Nameable, Resizable, Selector},
-  views::{Dialog, EditView, LinearLayout, ListView, RadioGroup, SliderView, TextView},
-  Cursive, CursiveExt, Printer, Vec2, View, With,
+  theme::{BorderStyle, Palette},
+  views::{LinearLayout, TextView},
+  Cursive, Printer, View, With,
 };
 
 use super::{
@@ -19,12 +15,6 @@ use super::{
 pub struct Anu {
   pub menubar: Menubar,
   pub controller: Controller,
-  is_paused: bool,
-  hit_bottom: bool,
-  frame_idx: usize,
-  // max_frame_idx: usize,
-  gameover: bool,
-  // callback: Option<Box<dyn Fn(&mut Cursive)>>
 }
 
 impl Default for Anu {
@@ -40,12 +30,6 @@ impl Anu {
     Anu {
       menubar,
       controller,
-      is_paused: false,
-      hit_bottom: false,
-      frame_idx: 0,
-      gameover: false,
-      // siv:
-      // max_frame_idx: 10,
     }
   }
 
@@ -94,9 +78,7 @@ impl Anu {
       s.select_menubar()
     });
 
-    let ctr_view = self.controller.init(&mut current_data);
-
-    ctr_view
+    self.controller.init(&mut current_data)
   }
 
   // fn on_down(&mut self, is_drop: bool, is_begin: bool) -> EventResult {
@@ -226,13 +208,3 @@ impl View for Anu {
     }
   }
 }
-
-// fn show_popup(s: &mut Cursive, name: &str) {
-//   if name.is_empty() {
-//     s.add_layer(Dialog::info("Please enter a name!"));
-//   } else {
-//     let content = format!("Hello {}!", name);
-//     s.pop_layer();
-//     s.add_layer(Dialog::around(TextView::new(content)).button("Quit", |s| s.quit()));
-//   }
-// }

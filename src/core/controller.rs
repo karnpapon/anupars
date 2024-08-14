@@ -1,12 +1,8 @@
 use cfonts::{render, Fonts, Options};
 use cursive::{
-  align::{HAlign, VAlign},
   event::{Event, EventResult},
-  theme::Color,
   view::{Nameable, Resizable},
-  views::{
-    Dialog, EditView, FocusTracker, LinearLayout, ListView, RadioGroup, ResizedView, TextView,
-  },
+  views::{Dialog, EditView, FocusTracker, LinearLayout, ListView, RadioGroup, TextView},
   Cursive, Printer, View, With,
 };
 
