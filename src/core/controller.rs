@@ -4,7 +4,9 @@ use cursive::{
   event::{Event, EventResult},
   theme::Color,
   view::{Nameable, Resizable},
-  views::{Dialog, EditView, LinearLayout, ListView, RadioGroup, TextView},
+  views::{
+    Dialog, EditView, FocusTracker, LinearLayout, ListView, RadioGroup, ResizedView, TextView,
+  },
   Cursive, Printer, View, With,
 };
 
@@ -32,30 +34,17 @@ fn input_submit(siv: &mut Cursive, texts: &str) {
 }
 
 fn input_edit(siv: &mut Cursive, texts: &str, _cursor: usize) {
-  // let mut current_data = siv
-  //   .with_user_data(|controller_data: &mut ControllerData| controller_data.clone())
-  //   .unwrap();
-
   let output = render(Options {
     text: String::from(texts),
     font: Fonts::FontTiny,
     ..Options::default()
   });
 
-  // let text_dialog = Dialog::around(
-  //   TextView::new(utils::build_doc_string(&config::APP_WELCOME_MSG))
-  //     .h_align(HAlign::Center)
-  //     .content(output.text)
-  //     .fixed_height(5),
-  // );
-
   let mut text_view = siv
     .find_name::<TextView>("interactive_display_view")
     .unwrap();
 
   text_view.get_shared_content().set_content(output.text);
-
-  // siv.add_layer(text_dialog)
 }
 
 impl Controller {
@@ -69,13 +58,7 @@ impl Controller {
       .on_edit(input_edit)
       .on_submit(input_submit)
       .with_name("ctr_regex")
-      .fixed_width(25)
-      .with(|f| {
-        f.get_inner_mut()
-          .get_mut()
-          .set_style(Color::TerminalDefault);
-      })
-      .with(|f| current_data.show_regex_display = f.get_inner_mut().get_mut().is_enabled());
+      .fixed_width(25);
 
     let flag_view = LinearLayout::horizontal()
       .child(current_data.flag_state.button(true, "g"))
@@ -133,13 +116,25 @@ impl Controller {
 
     LinearLayout::vertical()
       .child(
-        Dialog::around(
-          LinearLayout::horizontal()
-            .child(input_controller.with_name("input_controller"))
-            .child(status_view.with_name("status_view"))
-            .child(protocol_view.with_name("protocol_view")),
+        FocusTracker::new(
+          Dialog::around(
+            LinearLayout::horizontal()
+              .child(input_controller.with_name("input_controller"))
+              .child(status_view.with_name("status_view"))
+              .child(protocol_view.with_name("protocol_view")),
+          )
+          .with_name("control_section_view"),
         )
-        .with_name("control_section_view"),
+        .on_focus(|_| {
+          EventResult::with_cb(|s| {
+            s.user_data::<ControllerData>().unwrap().show_regex_display = true;
+          })
+        })
+        .on_focus_lost(|_| {
+          EventResult::with_cb(|s| {
+            s.user_data::<ControllerData>().unwrap().show_regex_display = false;
+          })
+        }),
       )
       .child(Dialog::around(
         TextView::new(utils::build_doc_string(&config::APP_WELCOME_MSG))
@@ -147,29 +142,29 @@ impl Controller {
           .with_name("interactive_display_view")
           .fixed_height(6),
       ))
-      .child(
+      .child(FocusTracker::new(
         CanvasView::new(0, 0)
           .with_name("canvas_section_view")
           .full_width()
           .full_height(),
-      )
+      ))
   }
 
-  pub fn handle_event(&mut self, event: Event) -> bool {
-    println!("on_event controllerrr");
-    match event {
-      Event::Char('i') => true,
-      Event::Char('n') => true,
-      _ => false,
-    }
-  }
+  // pub fn handle_event(&mut self, event: Event) -> bool {
+  //   println!("on_event controllerrr");
+  //   match event {
+  //     Event::Char('i') => true,
+  //     Event::Char('n') => true,
+  //     _ => false,
+  //   }
+  // }
 }
 
 impl View for Controller {
   fn draw(&self, printer: &Printer) {}
 
   fn on_event(&mut self, event: Event) -> EventResult {
-    self.handle_event(event);
+    // self.handle_event(event);
     EventResult::Consumed(None)
   }
 }

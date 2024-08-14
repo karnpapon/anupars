@@ -15,7 +15,7 @@ use cursive::{
   Cursive, Printer, View, With,
 };
 
-use super::{config, utils};
+use super::{config, controller::ControllerData, utils};
 
 pub struct Menubar {
   show_doc_view: bool,
@@ -48,6 +48,10 @@ impl Menubar {
   }
 
   pub fn init(&mut self, siv: &mut Cursive) {
+    let mut current_data = siv
+      .with_user_data(|controller_data: &mut ControllerData| controller_data.clone())
+      .unwrap();
+
     let menu_app = menu::Tree::new()
       .leaf("Insert File", |s| {
         let default_path = get_default_database_path();
@@ -110,8 +114,6 @@ impl Menubar {
       .add_subtree("Help", menu_help)
       .add_delimiter()
       .add_leaf("Quit", |s| s.quit());
-
-    siv.add_global_callback(Key::Esc, |s| s.select_menubar());
   }
 }
 

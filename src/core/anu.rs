@@ -10,8 +10,10 @@ use cursive::{
 };
 
 use super::{
+  config,
   controller::{Controller, ControllerData},
   menubar::Menubar,
+  utils,
 };
 
 pub struct Anu {
@@ -81,6 +83,16 @@ impl Anu {
     let mut current_data = siv
       .with_user_data(|controller_data: &mut ControllerData| controller_data.clone())
       .unwrap();
+
+    siv.add_global_callback(Key::Esc, move |s| {
+      if !current_data.show_regex_display {
+        let mut text_view = s.find_name::<TextView>("interactive_display_view").unwrap();
+        text_view
+          .get_shared_content()
+          .set_content(utils::build_doc_string(&config::APP_WELCOME_MSG));
+      }
+      s.select_menubar()
+    });
 
     let ctr_view = self.controller.init(&mut current_data);
 
