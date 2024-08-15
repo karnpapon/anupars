@@ -1,9 +1,11 @@
+use std::mem;
+
 use cursive::{
   direction::Direction,
   event::{Event, EventResult, MouseEvent},
   view::CannotFocus,
   views::Canvas,
-  Printer, Vec2, View,
+  Printer, Vec2,
 };
 
 #[derive(Clone, Default)]
@@ -51,17 +53,22 @@ impl CanvasView {
     }
   }
 
-  pub fn update_grid_src(&mut self, src: &str) {
-    let rows = self.grid.len();
-    let cols = self.grid[0].len();
+  pub fn update_grid_src(&self, src: &str) -> Vec<Vec<char>> {
+    let rows: usize = self.grid.len();
+    let cols: usize = self.grid[0].len();
+    let mut new_grid: Vec<Vec<char>> = Vec::new();
 
-    for row in 0..rows {
-      for col in 0..cols {
+    for col in 0..cols {
+      for row in 0..rows {
         if let Some(char) = src.chars().nth(row + col) {
-          self.grid[row][col] = char;
+          // let _ = mem::replace(&mut self.grid[row][col], char);
+          // new_grid[col][row] = char;
+          println!("new_grid={:?}", char);
         }
       }
     }
+
+    new_grid
   }
 }
 
@@ -75,54 +82,25 @@ fn draw(canvas: &CanvasView, printer: &Printer) {
   }
 }
 
-fn take_focus(canvas: &mut CanvasView, _: Direction) -> Result<EventResult, CannotFocus> {
+fn take_focus(_: &mut CanvasView, _: Direction) -> Result<EventResult, CannotFocus> {
   Ok(EventResult::Consumed(None))
 }
 
-fn on_event(canvas: &mut CanvasView, event: Event) -> EventResult {
+fn on_event(_: &mut CanvasView, event: Event) -> EventResult {
   match event {
-    Event::Refresh => {
-      println!("refresh!!!");
-      // canvas.
-    }
-    Event::Mouse {
-      offset,
-      position,
-      event: MouseEvent::Press(_btn),
-    } => {
-      // println!("nouse_pressed pos = {:?}", position)
-      // Get cell for position
-      // if let Some(pos) = self.get_cell(position, offset) {
-      //   self.focused = Some(pos);
-      //   return EventResult::Consumed(None);
-      // }
-    }
-    Event::Mouse {
-      offset,
-      position,
-      event: MouseEvent::Release(btn),
-    } => {
-      // println!("nouse_released pos = {:?}", position)
-      // Get cell for position
-      // if let Some(pos) = self.get_cell(position, offset) {
-      //   if self.focused == Some(pos) {
-      //     // We got a click here!
-      //     match btn {
-      //       MouseButton::Left => return self.reveal(pos),
-      //       MouseButton::Right => {
-      //         self.flag(pos);
-      //         return EventResult::Consumed(None);
-      //       }
-      //       MouseButton::Middle => return self.auto_reveal(pos),
-      //       _ => (),
-      //     }
-      //   }
-
-      //   self.focused = None;
-      // }
-    }
-    _ => (),
-  }
+    Event::Refresh => EventResult::Ignored,
+    // Event::Mouse {
+    //   offset,
+    //   position,
+    //   event: MouseEvent::Press(_btn),
+    // } => EventResult::consumed(),
+    // Event::Mouse {
+    //   offset,
+    //   position,
+    //   event: MouseEvent::Release(_),
+    // } => EventResult::consumed(),
+    _ => EventResult::Ignored,
+  };
 
   EventResult::Ignored
 }

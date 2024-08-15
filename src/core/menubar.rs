@@ -1,4 +1,6 @@
 use std::{
+  borrow::BorrowMut,
+  cmp,
   error::Error,
   ffi::OsString,
   fs::{self, File},
@@ -8,15 +10,14 @@ use std::{
 
 use cursive::{
   align::HAlign,
-  backends::crossterm::crossterm::style::Print,
-  event::{Callback, Event, EventResult, Key},
+  event::{Event, Key},
   menu,
   view::{Margins, Nameable, Resizable},
   views::{Canvas, Dialog, DummyView, LinearLayout, OnEventView, SelectView, TextView},
-  Cursive, CursiveExt, Printer, View, With,
+  Cursive, Printer, View, With,
 };
 
-use super::{canvas::CanvasView, config, controller::ControllerData, utils};
+use super::{canvas::CanvasView, config, utils};
 
 pub struct Menubar {}
 
@@ -45,10 +46,6 @@ impl Menubar {
   }
 
   pub fn init(&mut self, siv: &mut Cursive) {
-    let mut current_data = siv
-      .with_user_data(|controller_data: &mut ControllerData| controller_data.clone())
-      .unwrap();
-
     let menu_app = menu::Tree::new()
       .leaf("Insert File", |s| {
         let default_path = get_default_database_path();
@@ -115,24 +112,59 @@ impl Menubar {
 }
 
 impl View for Menubar {
-  fn draw(&self, printer: &Printer) {}
+  fn draw(&self, _: &Printer) {}
 }
 
-fn load_contents(siv: &mut Cursive, file: &PathBuf) {
+fn preview_contents(siv: &mut Cursive, file: &PathBuf) {
   let mut text_view = siv.find_name::<TextView>("file_contents").unwrap();
   if let Ok(contents) = read_file(Path::new(file)) {
     text_view.set_content(contents);
   }
 }
 
+// (03)
 fn render_contents(siv: &mut Cursive, file: &PathBuf) {
-  let mut cv = siv
-    .find_name::<Canvas<CanvasView>>("canvas_section_view")
-    .unwrap();
+  // let mut cv = siv
+  //   .find_name::<Canvas<CanvasView>>("canvas_section_view")
+  //   .unwrap();
   if let Ok(contents) = read_file(Path::new(file)) {
-    cv.state_mut().update_grid_src(&contents);
-    cv.set_draw(|c: &CanvasView, p: &Printer| c.draw_canvas(p));
-    cv.on_event(Event::Refresh);
+    //   cv.state_mut().update_grid_src(&contents);
+    //   cv.set_draw(move |c: &CanvasView, p: &Printer| {
+    //     c.draw_canvas(p);
+    //   });
+    //   cv.on_event(Event::Refresh);
+    siv.call_on_name("canvas_section_view", |view: &mut Canvas<CanvasView>| {
+      // view.state_mut().update_grid_src(&contents);
+      let new_grid = view.state_mut().update_grid_src(&contents);
+
+      // view.set_draw(move |c, printer| {
+      //   let rows: usize = cmp::min(contents.len(), c.grid.len());
+      //   let cols: usize = (contents.len()).div_ceil(c.grid[0].len());
+      //   for row in 0..rows {
+      //     for col in 0..cols {
+      //       if let Some(char) = contents.chars().nth((row + col)) {
+      //         printer.print((row, col), &char.to_string())
+      //       }
+      //     }
+      //   }
+      // println!("{:?}", new_grid[0]);
+      // for (x, row) in c.grid.iter().enumerate() {
+      //   for (y, &value) in row.iter().enumerate() {
+      //     let display_value = if new_grid[x][y] != '\0' {
+      //       new_grid[x][y]
+      //     } else if x % c.grid_row_spacing == 0 && y % c.grid_col_spacing == 0 {
+      //       '+'
+      //     } else {
+      //       '.'
+      //     };
+
+      //     // println!("{:?}", new_grid);
+
+      //     // printer.print((x, y), &display_value.to_string())
+      //   }
+      // }
+      // })
+    });
   }
 }
 
@@ -165,7 +197,11 @@ fn show_listed_files(dir: Vec<Result<Result<String, OsString>, io::Error>>) -> L
 
   let padding = DummyView::new().fixed_width(2);
 
-  panes.add_child(select.on_select(load_contents).on_submit(render_contents));
+  panes.add_child(
+    select
+      .on_select(preview_contents)
+      .on_submit(render_contents),
+  );
   panes.add_child(padding);
   panes.add_child(file_details);
   panes

@@ -145,21 +145,12 @@ impl Controller {
           .full_height(),
       ))
   }
-
-  // pub fn handle_event(&mut self, event: Event) -> bool {
-  //   println!("on_event controllerrr");
-  //   match event {
-  //     Event::Char('i') => true,
-  //     Event::Char('n') => true,
-  //     _ => false,
-  //   }
-  // }
 }
 
 impl View for Controller {
-  fn draw(&self, printer: &Printer) {}
+  fn draw(&self, _: &Printer) {}
 
-  fn on_event(&mut self, event: Event) -> EventResult {
+  fn on_event(&mut self, _: Event) -> EventResult {
     // self.handle_event(event);
     EventResult::Consumed(None)
   }
