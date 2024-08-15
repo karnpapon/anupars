@@ -1,0 +1,2 @@
+- fix initailize `.anu_rs` path (do we need `contents` folder?)
+- handle render select file preview text without on select change

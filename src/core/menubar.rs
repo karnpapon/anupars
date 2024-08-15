@@ -178,9 +178,10 @@ fn show_listed_files(dir: Vec<Result<Result<String, OsString>, io::Error>>) -> L
   }
 
   let mut select = SelectView::new().h_align(HAlign::Left);
+  let mut first_file_path = PathBuf::new();
 
-  for list in dir {
-    let list_cloned = list.unwrap().clone();
+  for (i, list) in dir.iter().enumerate() {
+    let list_cloned = list.as_ref().unwrap().clone();
     let title_str = list_cloned.as_ref().unwrap().clone();
     let select_value = dirs::home_dir()
       .map(|p| {
@@ -189,9 +190,16 @@ fn show_listed_files(dir: Vec<Result<Result<String, OsString>, io::Error>>) -> L
           .join(list_cloned.unwrap())
       })
       .unwrap();
+    if i == 0 {
+      first_file_path = select_value.clone();
+    }
     select.add_item(title_str, select_value);
   }
-  let file_details = TextView::new("")
+
+  let init_file_details =
+    read_file(first_file_path.as_path()).unwrap_or("empty content".to_string());
+
+  let file_details = TextView::new(init_file_details)
     .with_name("file_contents")
     .fixed_size((50, 15));
 
