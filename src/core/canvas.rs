@@ -56,18 +56,18 @@ impl CanvasView {
   pub fn update_grid_src(&self, src: &str) -> Vec<Vec<char>> {
     let rows: usize = self.grid.len();
     let cols: usize = self.grid[0].len();
-    let mut new_grid: Vec<Vec<char>> = Vec::new();
+    let mut new_grid = vec![vec!['\0'; rows]; cols];
 
     for col in 0..cols {
       for row in 0..rows {
-        if let Some(char) = src.chars().nth(row + col) {
+        if let Some(char) = src.chars().nth(row + (col * cols)) {
+          // if new_grid[col][row] != '\0' {
           // let _ = mem::replace(&mut self.grid[row][col], char);
-          // new_grid[col][row] = char;
-          println!("new_grid={:?}", char);
+          new_grid[col][row] = char
+          // }
         }
       }
     }
-
     new_grid
   }
 }

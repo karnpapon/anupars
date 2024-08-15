@@ -137,33 +137,21 @@ fn render_contents(siv: &mut Cursive, file: &PathBuf) {
       // view.state_mut().update_grid_src(&contents);
       let new_grid = view.state_mut().update_grid_src(&contents);
 
-      // view.set_draw(move |c, printer| {
-      //   let rows: usize = cmp::min(contents.len(), c.grid.len());
-      //   let cols: usize = (contents.len()).div_ceil(c.grid[0].len());
-      //   for row in 0..rows {
-      //     for col in 0..cols {
-      //       if let Some(char) = contents.chars().nth((row + col)) {
-      //         printer.print((row, col), &char.to_string())
-      //       }
-      //     }
-      //   }
-      // println!("{:?}", new_grid[0]);
-      // for (x, row) in c.grid.iter().enumerate() {
-      //   for (y, &value) in row.iter().enumerate() {
-      //     let display_value = if new_grid[x][y] != '\0' {
-      //       new_grid[x][y]
-      //     } else if x % c.grid_row_spacing == 0 && y % c.grid_col_spacing == 0 {
-      //       '+'
-      //     } else {
-      //       '.'
-      //     };
+      view.set_draw(move |c, printer| {
+        for y in 0..c.grid[0].len() {
+          for x in 0..c.grid.len() {
+            let display_value = if new_grid[y][x] != '\0' {
+              new_grid[y][x]
+            } else if x % c.grid_row_spacing == 0 && y % c.grid_col_spacing == 0 {
+              '+'
+            } else {
+              '.'
+            };
 
-      //     // println!("{:?}", new_grid);
-
-      //     // printer.print((x, y), &display_value.to_string())
-      //   }
-      // }
-      // })
+            printer.print((x, y), &display_value.to_string())
+          }
+        }
+      })
     });
   }
 }
