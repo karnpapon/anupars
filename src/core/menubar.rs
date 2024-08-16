@@ -5,6 +5,7 @@ use std::{
   ffi::OsString,
   fs::{self, File},
   io::{self, Read},
+  ops::{Deref, DerefMut},
   path::{Path, PathBuf},
 };
 
@@ -17,7 +18,10 @@ use cursive::{
   Cursive, Printer, View, With,
 };
 
-use super::{canvas::CanvasView, config, utils};
+use super::{
+  canvas::{self, CanvasView},
+  config, utils,
+};
 
 pub struct Menubar {}
 
@@ -122,36 +126,27 @@ fn preview_contents(siv: &mut Cursive, file: &PathBuf) {
   }
 }
 
-// (03)
 fn render_contents(siv: &mut Cursive, file: &PathBuf) {
-  // let mut cv = siv
-  //   .find_name::<Canvas<CanvasView>>("canvas_section_view")
-  //   .unwrap();
   if let Ok(contents) = read_file(Path::new(file)) {
-    //   cv.state_mut().update_grid_src(&contents);
-    //   cv.set_draw(move |c: &CanvasView, p: &Printer| {
-    //     c.draw_canvas(p);
-    //   });
-    //   cv.on_event(Event::Refresh);
     siv.call_on_name("canvas_section_view", |view: &mut Canvas<CanvasView>| {
-      // view.state_mut().update_grid_src(&contents);
-      let new_grid = view.state_mut().update_grid_src(&contents);
-
-      view.set_draw(move |c, printer| {
-        for y in 0..c.grid[0].len() {
-          for x in 0..c.grid.len() {
-            let display_value = if new_grid[y][x] != '\0' {
-              new_grid[y][x]
-            } else if x % c.grid_row_spacing == 0 && y % c.grid_col_spacing == 0 {
+      let new_g = view.state_mut().update_grid_src(&contents);
+      // view.set_draw(canvas::draw);
+      view.set_draw(move |s, printer| {
+        for (x, row) in new_g.iter().enumerate() {
+          for (y, &value) in row.iter().enumerate() {
+            let display_value = if value != '\0' {
+              value
+            } else if x % s.grid_row_spacing == 0 && y % s.grid_col_spacing == 0 {
               '+'
             } else {
               '.'
             };
 
-            printer.print((x, y), &display_value.to_string())
+            printer.print((y, x), &display_value.to_string())
           }
         }
-      })
+      });
+      view.on_event(Event::Refresh);
     });
   }
 }
