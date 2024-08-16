@@ -60,7 +60,7 @@ impl CanvasView {
 
     for col in 0..cols {
       for row in 0..rows {
-        if let Some(char) = src.chars().nth(row + (col * cols)) {
+        if let Some(char) = src.chars().nth(row + (col * rows)) {
           // if new_grid[col][row] != '\0' {
           // let _ = mem::replace(&mut self.grid[row][col], char);
           new_grid[col][row] = char
@@ -68,6 +68,7 @@ impl CanvasView {
         }
       }
     }
+    // println!("new_grid={:?}", new_grid[1]); // rows=172,cols=21
     new_grid
   }
 }
