@@ -139,7 +139,7 @@ impl Controller {
           .fixed_height(6),
       ))
       .child(FocusTracker::new(
-        CanvasView::new(0, 0)
+        CanvasView::new()
           .with_name("canvas_section_view")
           .full_width()
           .full_height(),

@@ -2,7 +2,7 @@ use std::mem;
 
 use cursive::{
   direction::Direction,
-  event::{Event, EventResult},
+  event::{Event, EventResult, MouseEvent},
   view::CannotFocus,
   views::Canvas,
   Printer, Vec2,
@@ -17,12 +17,12 @@ pub struct CanvasView {
 }
 
 impl CanvasView {
-  pub fn new(w: usize, h: usize) -> Canvas<CanvasView> {
+  pub fn new() -> Canvas<CanvasView> {
     Canvas::new(CanvasView {
       grid_row_spacing: 9,
       grid_col_spacing: 9,
       size: Vec2::new(0, 0),
-      grid: (0..w).map(|_| (0..h).map(|_| '\0').collect()).collect(),
+      grid: vec![],
     })
     .with_draw(draw)
     .with_layout(layout)
@@ -31,27 +31,8 @@ impl CanvasView {
   }
 
   pub fn resize(&mut self, size: Vec2) {
-    self.grid = (0..size.y)
-      .map(|_| (0..size.x).map(|_| '\0').collect())
-      .collect();
+    self.grid = vec![vec!['\0'; size.x]; size.y];
     self.size = size;
-  }
-
-  pub fn draw_canvas(&self, printer: &Printer) {
-    // println!("draw_canvas = {:?}", self.grid[0][0]);
-    for (x, row) in self.grid.iter().enumerate() {
-      for (y, &value) in row.iter().enumerate() {
-        let display_value = if value != '\0' {
-          value
-        } else if x % self.grid_row_spacing == 0 && y % self.grid_col_spacing == 0 {
-          '+'
-        } else {
-          '.'
-        };
-
-        printer.print((y, x), &display_value.to_string())
-      }
-    }
   }
 
   pub fn update_grid_src(&mut self, src: &str) -> Vec<Vec<char>> {
@@ -62,12 +43,10 @@ impl CanvasView {
     for row in 0..rows {
       for col in 0..cols {
         if let Some(char) = src.chars().nth(col + (row * cols)) {
-          // let _ = mem::replace(&mut self.grid[row][col], char);
           new_grid[row][col] = char
         }
       }
     }
-    // println!("update_grid_src"); // rows=172,cols=21
     new_grid
   }
 }
@@ -78,7 +57,22 @@ fn layout(canvas: &mut CanvasView, size: Vec2) {
 
 pub fn draw(canvas: &CanvasView, printer: &Printer) {
   if canvas.size > Vec2::new(0, 0) {
-    canvas.draw_canvas(printer);
+    for (x, row) in canvas.grid.iter().enumerate() {
+      for (y, &value) in row.iter().enumerate() {
+        let display_value = match value {
+          '\0' => {
+            if x % canvas.grid_row_spacing == 0 && y % canvas.grid_col_spacing == 0 {
+              '+'
+            } else {
+              '.'
+            }
+          }
+          _ => value,
+        };
+
+        printer.print((y, x), &display_value.to_string())
+      }
+    }
   }
 }
 
@@ -89,16 +83,16 @@ fn take_focus(_: &mut CanvasView, _: Direction) -> Result<EventResult, CannotFoc
 fn on_event(_: &mut CanvasView, event: Event) -> EventResult {
   match event {
     Event::Refresh => EventResult::consumed(),
-    // Event::Mouse {
-    //   offset,
-    //   position,
-    //   event: MouseEvent::Press(_btn),
-    // } => EventResult::consumed(),
-    // Event::Mouse {
-    //   offset,
-    //   position,
-    //   event: MouseEvent::Release(_),
-    // } => EventResult::consumed(),
+    Event::Mouse {
+      offset,
+      position,
+      event: MouseEvent::Press(_btn),
+    } => EventResult::consumed(),
+    Event::Mouse {
+      offset,
+      position,
+      event: MouseEvent::Release(_),
+    } => EventResult::consumed(),
     _ => EventResult::Ignored,
   };
 
