@@ -19,28 +19,20 @@ pub struct ControllerData {
   pub show_regex_display: bool,
 }
 
-pub struct Controller {
-  // rx: mpsc::Receiver<Message>,
-  // ui: Ui,
+pub struct Controller {}
+
+impl Default for Controller {
+  fn default() -> Self {
+    Self::new()
+  }
 }
 
-fn input_submit(siv: &mut Cursive, texts: &str) {
-  let mut text_view = siv.find_name::<TextView>("input_status_view").unwrap();
-  text_view.set_content(texts);
-}
+impl View for Controller {
+  fn draw(&self, _: &Printer) {}
 
-fn input_edit(siv: &mut Cursive, texts: &str, _cursor: usize) {
-  let output = render(Options {
-    text: String::from(texts),
-    font: Fonts::FontTiny,
-    ..Options::default()
-  });
-
-  let mut text_view = siv
-    .find_name::<TextView>("interactive_display_view")
-    .unwrap();
-
-  text_view.get_shared_content().set_content(output.text);
+  fn on_event(&mut self, _: Event) -> EventResult {
+    EventResult::Consumed(None)
+  }
 }
 
 impl Controller {
@@ -48,7 +40,7 @@ impl Controller {
     Controller {}
   }
 
-  pub fn init(&mut self, current_data: &mut ControllerData) -> LinearLayout {
+  pub fn build(&mut self, current_data: &mut ControllerData) -> LinearLayout {
     let regex_view = EditView::new()
       .content(current_data.string.clone())
       .on_edit(input_edit)
@@ -147,11 +139,21 @@ impl Controller {
   }
 }
 
-impl View for Controller {
-  fn draw(&self, _: &Printer) {}
+fn input_submit(siv: &mut Cursive, texts: &str) {
+  let mut text_view = siv.find_name::<TextView>("input_status_view").unwrap();
+  text_view.set_content(texts);
+}
 
-  fn on_event(&mut self, _: Event) -> EventResult {
-    // self.handle_event(event);
-    EventResult::Consumed(None)
-  }
+fn input_edit(siv: &mut Cursive, texts: &str, _cursor: usize) {
+  let output = render(Options {
+    text: String::from(texts),
+    font: Fonts::FontTiny,
+    ..Options::default()
+  });
+
+  let mut text_view = siv
+    .find_name::<TextView>("interactive_display_view")
+    .unwrap();
+
+  text_view.get_shared_content().set_content(output.text);
 }

@@ -1,23 +1,105 @@
 mod core;
 
-use core::anu::Anu;
-use core::controller::ControllerData;
+// use core::anu::Anu;
+use core::controller::{Controller, ControllerData};
+use core::menubar::{self, Menubar};
+use core::{config, utils};
 
-use cursive::view::Nameable;
-use cursive::{Cursive, CursiveExt};
+use cursive::direction::Direction;
+use cursive::event::{Event, Key};
+use cursive::theme::{BorderStyle, Palette};
+use cursive::views::TextView;
+use cursive::{Cursive, CursiveExt, With};
+
+pub fn init_default_style(siv: &mut Cursive) {
+  siv.set_theme(cursive::theme::Theme {
+    shadow: false,
+    borders: BorderStyle::Simple,
+    palette: Palette::retro().with(|palette| {
+      use cursive::style::Color::TerminalDefault;
+      use cursive::style::PaletteColor::{
+        Background, Highlight, HighlightInactive, HighlightText, Primary, Secondary, Shadow,
+        Tertiary, TitlePrimary, TitleSecondary, View,
+      };
+
+      palette[Background] = TerminalDefault;
+      palette[View] = TerminalDefault;
+      palette[Primary] = TerminalDefault;
+      palette[TitlePrimary] = TerminalDefault;
+      palette[Highlight] = TerminalDefault;
+      palette[Secondary] = TerminalDefault;
+      palette[HighlightInactive] = TerminalDefault;
+      palette[HighlightText] = TerminalDefault;
+      palette[Shadow] = TerminalDefault;
+      palette[TitleSecondary] = TerminalDefault;
+      palette[Tertiary] = TerminalDefault;
+    }),
+  });
+}
 
 fn main() {
-  let mut anu = Anu::new().with_name("anu");
+  // let mut anu = Anu::new().with_name("anu");
   let mut siv: Cursive = Cursive::new();
+  // let menubar = Menubar::new();
+  let menu_app = Menubar::build_menu_app();
+  let menu_help = Menubar::build_menu_help(&mut siv);
+  let mut doc_view = Menubar::build_doc_view();
+  let mut file_explorer_view_view = Menubar::build_file_explorer_view_view();
+  let mut controller = Controller::new();
+
+  doc_view.get_mut().hide();
+  // file_explorer_view_view.get_mut().hide();
+
+  // siv.set_autohide_menu(false);
   siv.set_autorefresh(true);
+  siv.set_user_data(Menubar::default());
   siv.set_user_data(ControllerData::default());
+  let mut current_data = siv
+    .with_user_data(|controller_data: &mut ControllerData| controller_data.clone())
+    .unwrap();
 
-  anu.get_mut().init_default_style(&mut siv);
-  anu.get_mut().build_menubar(&mut siv);
+  init_default_style(&mut siv);
 
-  let main_views = anu.get_mut().build_root_view(&mut siv);
+  let main_views = controller.build(&mut current_data);
+
+  siv
+    .menubar()
+    .add_subtree("Anu", menu_app)
+    .add_subtree("Help", menu_help)
+    .add_delimiter()
+    .add_leaf("Quit", |s| s.quit());
 
   siv.add_layer(main_views);
+  siv.add_layer(doc_view);
+  siv.add_layer(file_explorer_view_view);
+
+  siv.add_global_callback(Event::Char('h'), move |s| {
+    menubar::Menubar::show_doc_view(s, true)
+  });
+  siv.add_global_callback(Event::CtrlChar('o'), move |s| {
+    menubar::Menubar::show_file_explorer_view(s, true)
+  });
+  siv.add_global_callback(Key::Esc, move |s| {
+    s.select_menubar();
+
+    if !current_data.show_regex_display {
+      let mut text_view = s.find_name::<TextView>("interactive_display_view").unwrap();
+      text_view
+        .get_shared_content()
+        .set_content(utils::build_doc_string(&config::APP_WELCOME_MSG));
+    }
+
+    // TODO: handle s.pop_layer() eg. when dismiss btn is clicked.
+    menubar::Menubar::show_doc_view(s, false);
+    menubar::Menubar::show_file_explorer_view(s, false);
+
+    // if !s.menubar().visible() {
+    // println!("inininininininininininin {:?}", s.menubar().visible());
+    // } else {
+    //   // let mut input_controller = s.find_name::<LinearLayout>("input_controller").unwrap();
+    //   // _ = input_controller.take_focus(Direction::none());
+    // }
+  });
 
   siv.run();
 }

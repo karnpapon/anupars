@@ -1,5 +1,6 @@
 use cursive::{
   event::{Callback, Event, EventResult, Key},
+  menu::Tree,
   theme::{BorderStyle, Palette},
   views::{LinearLayout, TextView},
   Cursive, Printer, View, With,
@@ -12,10 +13,7 @@ use super::{
   utils,
 };
 
-pub struct Anu {
-  pub menubar: Menubar,
-  pub controller: Controller,
-}
+pub struct Anu {}
 
 impl Default for Anu {
   fn default() -> Self {
@@ -25,60 +23,7 @@ impl Default for Anu {
 
 impl Anu {
   pub fn new() -> Anu {
-    let menubar = Menubar::new();
-    let controller = Controller::new();
-    Anu {
-      menubar,
-      controller,
-    }
-  }
-
-  pub fn init_default_style(&mut self, siv: &mut Cursive) {
-    siv.set_theme(cursive::theme::Theme {
-      shadow: false,
-      borders: BorderStyle::Simple,
-      palette: Palette::retro().with(|palette| {
-        use cursive::style::Color::TerminalDefault;
-        use cursive::style::PaletteColor::{
-          Background, Highlight, HighlightInactive, HighlightText, Primary, Secondary, Shadow,
-          Tertiary, TitlePrimary, TitleSecondary, View,
-        };
-
-        palette[Background] = TerminalDefault;
-        palette[View] = TerminalDefault;
-        palette[Primary] = TerminalDefault;
-        palette[TitlePrimary] = TerminalDefault;
-        palette[Highlight] = TerminalDefault;
-        palette[Secondary] = TerminalDefault;
-        palette[HighlightInactive] = TerminalDefault;
-        palette[HighlightText] = TerminalDefault;
-        palette[Shadow] = TerminalDefault;
-        palette[TitleSecondary] = TerminalDefault;
-        palette[Tertiary] = TerminalDefault;
-      }),
-    });
-  }
-
-  pub fn build_menubar(&mut self, siv: &mut Cursive) {
-    self.menubar.init(siv);
-  }
-
-  pub fn build_root_view(&mut self, siv: &mut Cursive) -> LinearLayout {
-    let mut current_data = siv
-      .with_user_data(|controller_data: &mut ControllerData| controller_data.clone())
-      .unwrap();
-
-    siv.add_global_callback(Key::Esc, move |s| {
-      if !current_data.show_regex_display {
-        let mut text_view = s.find_name::<TextView>("interactive_display_view").unwrap();
-        text_view
-          .get_shared_content()
-          .set_content(utils::build_doc_string(&config::APP_WELCOME_MSG));
-      }
-      s.select_menubar()
-    });
-
-    self.controller.init(&mut current_data)
+    Anu {}
   }
 
   // fn on_down(&mut self, is_drop: bool, is_begin: bool) -> EventResult {
@@ -177,34 +122,5 @@ impl Anu {
 }
 
 impl View for Anu {
-  fn draw(&self, printer: &Printer) {
-    self.menubar.draw(printer);
-    self.controller.draw(printer);
-  }
-
-  // fn required_size(&mut self, constraints: Vec2) -> Vec2 {
-  //   // let score_size = self.score.required_size(constraints);
-  //   // let timer_size = self.timer.required_size(constraints);
-  //   // let manual_size = self.manual.required_size(constraints);
-  //   // let board_size = self.board.required_size(constraints);
-  //   // let queue_size = self.queue.required_size(constraints);
-  //   // Vec2::new(
-  //   //   std::cmp::max(std::cmp::max(manual_size.x, score_size.x), timer_size.x)
-  //   //     + board_size.x
-  //   //     + queue_size.x
-  //   //     + 10,
-  //   //   board_size.y,
-  //   // )
-  //   Vec2::new(0, 0)
-  // }
-
-  fn on_event(&mut self, event: Event) -> EventResult {
-    match event {
-      Event::Char('h') => {
-        let cb = Callback::from_fn(Menubar::add_doc_view);
-        EventResult::Consumed(Some(cb))
-      }
-      _ => self.pass_event_to_board(event),
-    }
-  }
+  fn draw(&self, printer: &Printer) {}
 }

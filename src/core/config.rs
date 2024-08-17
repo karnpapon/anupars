@@ -39,7 +39,7 @@ lazy_static! {
     ("(CmdOrCtrl-i)", "toggle input"),
     ("(CmdOrCtrl-g)", "toggle Regex input"),
     ("(Return)", "eval input(target input must = ON)"),
-    ("(h)", "toggle helps window"),
+    ("(h)", "show helps window"),
   ]);
 }
 
