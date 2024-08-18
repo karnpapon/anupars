@@ -9,9 +9,3 @@ pub fn build_doc_string(src: &config::StaticStrStr) -> String {
 
   doc_str
 }
-
-// pub fn pop_layer_when(){
-//   Event::Key(Key::Esc), |s| {
-//     s.pop_layer();
-//   }
-// }

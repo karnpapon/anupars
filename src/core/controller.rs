@@ -1,8 +1,15 @@
+use std::{borrow::BorrowMut, ops::DerefMut, sync::Arc};
+
 use cfonts::{render, Fonts, Options};
 use cursive::{
   event::{Event, EventResult},
-  view::{Nameable, Resizable},
-  views::{Dialog, EditView, FocusTracker, LinearLayout, ListView, RadioGroup, TextView},
+  theme::Style,
+  utils::span::SpannedString,
+  view::{Nameable, Resizable, ViewWrapper},
+  views::{
+    Dialog, DialogFocus, EditView, FocusTracker, LinearLayout, ListView, NamedView, RadioGroup,
+    TextView,
+  },
   Cursive, Printer, View, With,
 };
 
@@ -40,7 +47,7 @@ impl Controller {
     Controller {}
   }
 
-  pub fn build(&mut self, current_data: &mut ControllerData) -> LinearLayout {
+  pub fn build(&mut self, current_data: &mut ControllerData) -> NamedView<LinearLayout> {
     let regex_view = EditView::new()
       .content(current_data.string.clone())
       .on_edit(input_edit)
@@ -111,31 +118,55 @@ impl Controller {
               .child(status_view.with_name("status_view"))
               .child(protocol_view.with_name("protocol_view")),
           )
+          .title_position(cursive::align::HAlign::Right)
           .with_name("control_section_view"),
         )
-        .on_focus(|_| {
-          EventResult::with_cb(|s| {
-            s.user_data::<ControllerData>().unwrap().show_regex_display = true;
-          })
+        .on_focus(|this| {
+          this.get_mut().set_title(SpannedString::styled(
+            " control_section_view ",
+            Style::highlight(),
+          ));
+          EventResult::consumed()
         })
-        .on_focus_lost(|_| {
-          EventResult::with_cb(|s| {
-            s.user_data::<ControllerData>().unwrap().show_regex_display = false;
-          })
+        .on_focus_lost(|this| {
+          this.get_mut().set_title("");
+          EventResult::consumed()
         }),
       )
-      .child(Dialog::around(
-        TextView::new(utils::build_doc_string(&config::APP_WELCOME_MSG))
-          .center()
-          .with_name("interactive_display_view")
-          .fixed_height(6),
-      ))
-      .child(FocusTracker::new(
-        CanvasView::new()
-          .with_name("canvas_section_view")
-          .full_width()
-          .full_height(),
-      ))
+      .child(
+        FocusTracker::new(
+          Dialog::around(
+            TextView::new(utils::build_doc_string(&config::APP_WELCOME_MSG))
+              .center()
+              .with_name("regex_display_view")
+              .fixed_height(6),
+          )
+          .title_position(cursive::align::HAlign::Right)
+          .with_name("interactive_display_view"),
+        )
+        .on_focus(|this| {
+          this.get_mut().set_title(SpannedString::styled(
+            " interactive_display_view ",
+            Style::highlight(),
+          ));
+          EventResult::consumed()
+        })
+        .on_focus_lost(|this| {
+          this.get_mut().set_title("");
+          EventResult::consumed()
+        }),
+      )
+      .child(
+        FocusTracker::new(
+          CanvasView::new()
+            .with_name("canvas_section_view")
+            .full_width()
+            .full_height(),
+        )
+        .on_focus(|_| EventResult::with_cb(|s| {}))
+        .on_focus_lost(|_| EventResult::with_cb(|s| {})),
+      )
+      .with_name("main_view")
   }
 }
 
@@ -151,9 +182,7 @@ fn input_edit(siv: &mut Cursive, texts: &str, _cursor: usize) {
     ..Options::default()
   });
 
-  let mut text_view = siv
-    .find_name::<TextView>("interactive_display_view")
-    .unwrap();
+  let mut text_view = siv.find_name::<TextView>("regex_display_view").unwrap();
 
-  text_view.get_shared_content().set_content(output.text);
+  text_view.set_content(output.text);
 }

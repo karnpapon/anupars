@@ -20,7 +20,7 @@ use cursive::{
 
 use super::{canvas::CanvasView, config, utils};
 
-#[derive(Clone)]
+#[derive(Clone, Copy)]
 pub struct Menubar {
   pub show_file_explorer: bool,
   pub show_doc: bool,
@@ -44,6 +44,21 @@ impl Menubar {
     }
   }
 
+  pub fn toggle_show_doc(&mut self) -> bool {
+    self.show_doc = !self.show_doc;
+    self.show_doc
+  }
+
+  pub fn toggle_show_file_explorer(&mut self) -> bool {
+    self.show_file_explorer = !self.show_file_explorer;
+    self.show_file_explorer
+  }
+
+  pub fn reset_toggle(&mut self) {
+    self.show_file_explorer = false;
+    self.show_doc = false;
+  }
+
   pub fn build_doc_view() -> NamedView<HideableView<OnEventView<Dialog>>> {
     HideableView::new(
       OnEventView::new(Dialog::text(format!(
@@ -51,14 +66,34 @@ impl Menubar {
         "DOCUMENTATION",
         utils::build_doc_string(&config::APP_DOCS)
       )))
-      .on_event(Event::Key(Key::Esc), |s| Self::show_doc_view(s, false)),
+      .on_event(Event::Key(Key::Esc), |s| {
+        // Menubar::show_doc_view(s, false);
+        s.pop_layer();
+      }),
     )
     .with_name("doc_view")
   }
 
-  pub fn build_file_explorer_view_view() -> NamedView<HideableView<OnEventView<ResizedView<Dialog>>>>
-  {
-    HideableView::new(dialog_file_exp2()).with_name("file_explorer_view")
+  pub fn build_file_explorer_view() -> NamedView<HideableView<OnEventView<ResizedView<Dialog>>>> {
+    HideableView::new(Self::dialog_file_explorer()).with_name("file_explorer_view")
+  }
+
+  fn dialog_file_explorer() -> OnEventView<ResizedView<Dialog>> {
+    let default_path = get_default_database_path();
+    let paths = fs::read_dir(default_path.unwrap())
+      .unwrap()
+      .map(|res| res.map(|e| e.file_name().into_string()))
+      .collect::<Vec<_>>();
+
+    let listed_files = show_listed_files(paths);
+
+    OnEventView::new(Dialog::around(listed_files).max_width(200)).on_event(
+      Event::Key(Key::Esc),
+      |s| {
+        // Menubar::show_file_explorer_view(s, false)
+        s.pop_layer();
+      },
+    )
   }
 
   pub fn show_doc_view(siv: &mut Cursive, show: bool) {
@@ -75,19 +110,11 @@ impl Menubar {
       .set_visible(show);
   }
 
-  // pub fn toggle_show_file_explorer(&mut self) -> bool {
-  //   self.show_file_explorer = !self.show_file_explorer;
-  //   self.show_file_explorer
-  // }
-
-  // pub fn toggle_show_doc(&mut self) -> bool {
-  //   self.show_doc = !self.show_doc;
-  //   self.show_doc
-  // }
-
   pub fn build_menu_app() -> Tree {
     menu::Tree::new()
-      .leaf("Insert File", dialog_file_exp)
+      .leaf("Insert File [Ctr+o]", |s| {
+        s.add_layer(Self::build_file_explorer_view())
+      })
       .delimiter()
       .subtree(
         "MIDI",
@@ -123,50 +150,10 @@ impl Menubar {
       })
   }
 
-  pub fn build_menu_help(siv: &mut Cursive) -> Tree {
-    menu::Tree::new().leaf("Docs [h]", move |s| Self::show_doc_view(s, true))
+  pub fn build_menu_help() -> Tree {
+    // menu::Tree::new().leaf("Docs [h]", |s| Self::show_doc_view(s, true))
+    menu::Tree::new().leaf("Docs [h]", |s| s.add_layer(Self::build_doc_view()))
   }
-}
-
-fn dialog_file_exp2() -> OnEventView<ResizedView<Dialog>> {
-  let default_path = get_default_database_path();
-  let paths = fs::read_dir(default_path.unwrap())
-    .unwrap()
-    .map(|res| res.map(|e| e.file_name().into_string()))
-    .collect::<Vec<_>>();
-
-  let listed_files = show_listed_files(paths);
-
-  OnEventView::new(
-    Dialog::around(listed_files)
-      .dismiss_button("close")
-      .max_width(200),
-  )
-  .on_event(Event::Key(Key::Esc), |s| {
-    Menubar::show_file_explorer_view(s, false)
-  })
-}
-
-fn dialog_file_exp(siv: &mut Cursive) {
-  let default_path = get_default_database_path();
-  let paths = fs::read_dir(default_path.unwrap())
-    .unwrap()
-    .map(|res| res.map(|e| e.file_name().into_string()))
-    .collect::<Vec<_>>();
-
-  let listed_files = show_listed_files(paths);
-  let dialog_file_exp = OnEventView::new(
-    Dialog::around(listed_files)
-      .dismiss_button("close")
-      .max_width(200),
-  )
-  .on_event(Event::Key(Key::Esc), |s| {
-    s.pop_layer();
-    // let mut text_view = s.find_name::<Menubar>("interactive_display_view").unwrap();
-    // text_view.borrow_mut().show_file_explorer = false;
-  });
-
-  siv.add_layer(dialog_file_exp)
 }
 
 pub fn preview_contents(siv: &mut Cursive, file: &PathBuf) {

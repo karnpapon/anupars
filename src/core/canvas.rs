@@ -1,8 +1,6 @@
-use std::mem;
-
 use cursive::{
   direction::Direction,
-  event::{Event, EventResult, MouseEvent},
+  event::{Event, EventResult, Key, MouseEvent},
   view::CannotFocus,
   views::Canvas,
   Printer, Vec2,
@@ -13,7 +11,13 @@ pub struct CanvasView {
   pub grid_row_spacing: usize,
   pub grid_col_spacing: usize,
   pub size: Vec2,
+  pub selector: Selector,
   pub grid: Vec<Vec<char>>,
+}
+
+#[derive(Clone, Default)]
+pub struct Selector {
+  pos: Vec2,
 }
 
 impl CanvasView {
@@ -22,6 +26,9 @@ impl CanvasView {
       grid_row_spacing: 9,
       grid_col_spacing: 9,
       size: Vec2::new(0, 0),
+      selector: Selector {
+        pos: Vec2::new(0, 0),
+      },
       grid: vec![],
     })
     .with_draw(draw)
@@ -80,19 +87,29 @@ fn take_focus(_: &mut CanvasView, _: Direction) -> Result<EventResult, CannotFoc
   Ok(EventResult::Consumed(None))
 }
 
-fn on_event(_: &mut CanvasView, event: Event) -> EventResult {
+fn on_event(canvas: &mut CanvasView, event: Event) -> EventResult {
   match event {
+    Event::Key(Key::Right) => {
+      canvas.selector.pos.x += 1;
+      EventResult::consumed()
+    }
     Event::Refresh => EventResult::consumed(),
     Event::Mouse {
       offset,
       position,
       event: MouseEvent::Press(_btn),
-    } => EventResult::consumed(),
+    } => {
+      canvas.selector.pos = position;
+      EventResult::consumed()
+    }
     Event::Mouse {
       offset,
       position,
       event: MouseEvent::Release(_),
-    } => EventResult::consumed(),
+    } => {
+      // println!("mouse released");
+      EventResult::consumed()
+    }
     _ => EventResult::Ignored,
   };
 
