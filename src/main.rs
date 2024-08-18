@@ -8,10 +8,10 @@ use core::{config, utils};
 
 use cursive::direction::{Absolute, Direction, Relative};
 use cursive::event::{Event, Key};
-use cursive::theme::{BorderStyle, Palette};
+use cursive::theme::{BorderStyle, ColorType, Palette};
 use cursive::view::{Finder, Selector};
 use cursive::views::{Canvas, Dialog, DialogFocus, EditView, LinearLayout, TextView};
-use cursive::{Cursive, CursiveExt, View, With};
+use cursive::{Cursive, CursiveExt, Printer, View, With};
 
 pub fn init_default_style(siv: &mut Cursive) {
   siv.set_theme(cursive::theme::Theme {

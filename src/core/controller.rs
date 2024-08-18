@@ -1,14 +1,12 @@
-use std::{borrow::BorrowMut, ops::DerefMut, sync::Arc};
-
 use cfonts::{render, Fonts, Options};
 use cursive::{
   event::{Event, EventResult},
   theme::Style,
   utils::span::SpannedString,
-  view::{Nameable, Resizable, ViewWrapper},
+  view::{Nameable, Resizable},
   views::{
-    Dialog, DialogFocus, DummyView, EditView, FocusTracker, LinearLayout, ListView, NamedView,
-    RadioGroup, TextView,
+    Dialog, DummyView, EditView, FocusTracker, LinearLayout, ListView, NamedView, RadioGroup,
+    TextView,
   },
   Cursive, Printer, View, With,
 };
@@ -170,8 +168,14 @@ impl Controller {
             .full_width()
             .full_height(),
         )
-        .on_focus(|_| EventResult::with_cb(|s| {}))
-        .on_focus_lost(|_| EventResult::with_cb(|s| {})),
+        .on_focus(|this| {
+          // this.
+          EventResult::consumed()
+        })
+        .on_focus_lost(|this| {
+          //
+          EventResult::consumed()
+        }),
       )
       .with_name("main_view")
   }

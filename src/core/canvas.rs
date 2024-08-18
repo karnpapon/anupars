@@ -1,6 +1,8 @@
 use cursive::{
   direction::Direction,
   event::{Event, EventResult, Key, MouseEvent},
+  theme::{ColorStyle, ColorType, Style},
+  utils::span::SpannedString,
   view::CannotFocus,
   views::Canvas,
   Printer, Vec2,
@@ -76,8 +78,13 @@ pub fn draw(canvas: &CanvasView, printer: &Printer) {
           }
           _ => value,
         };
-
-        printer.print((y, x), &display_value.to_string())
+        printer.print_styled(
+          (y, x),
+          &SpannedString::styled(
+            &display_value.to_string(),
+            Style::from_color_style(ColorStyle::front(ColorType::rgb(100, 100, 100))),
+          ),
+        );
       }
     }
   }
