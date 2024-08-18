@@ -81,12 +81,15 @@ fn main() {
   // siv.add_global_callback(Event::CtrlChar('o'), move |s| {
   //   menubar::Menubar::show_file_explorer_view(s, menubar.toggle_show_file_explorer())
   // });
-  siv.add_global_callback(Key::F2, move |s| {
-    if let Some(mut res) = s.find_name::<Dialog>("interactive_display_view") {
-      _ = res.take_focus(Direction::Abs(Absolute::Down));
-      // res.process(s);
-    };
-  });
+  // siv.add_global_callback(Key::F2, move |s| {
+  //   if let Some(mut res) = s.find_name::<LinearLayout>("main_view") {
+  //     match res.set_focus_index(2) {
+  //       Ok(res) => println!("ok"),
+  //       Err(e) => println!("error {:?}", e),
+  //     }
+  //     // res.process(s);
+  //   };
+  // });
   siv.add_global_callback(Key::Esc, move |s| {
     if !current_data.show_regex_display {
       let mut text_view = s.find_name::<TextView>("regex_display_view").unwrap();

@@ -36,6 +36,7 @@ lazy_static! {
     ("Shift-Arrow-Cmd", "[*] jump incr/decr marker range"),
   ]);
   pub static ref APP_WELCOME_MSG: StaticStrStr = Vec::from([
+    ("", ""),
     ("(CmdOrCtrl-i)", "toggle input"),
     ("(CmdOrCtrl-g)", "toggle Regex input"),
     ("(Return)", "eval input(target input must = ON)"),

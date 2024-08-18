@@ -7,8 +7,8 @@ use cursive::{
   utils::span::SpannedString,
   view::{Nameable, Resizable, ViewWrapper},
   views::{
-    Dialog, DialogFocus, EditView, FocusTracker, LinearLayout, ListView, NamedView, RadioGroup,
-    TextView,
+    Dialog, DialogFocus, DummyView, EditView, FocusTracker, LinearLayout, ListView, NamedView,
+    RadioGroup, TextView,
   },
   Cursive, Printer, View, With,
 };
@@ -50,6 +50,7 @@ impl Controller {
   pub fn build(&mut self, current_data: &mut ControllerData) -> NamedView<LinearLayout> {
     let regex_view = EditView::new()
       .content(current_data.string.clone())
+      .style(Style::highlight_inactive())
       .on_edit(input_edit)
       .on_submit(input_submit)
       .with_name("ctr_regex")
@@ -136,11 +137,16 @@ impl Controller {
       .child(
         FocusTracker::new(
           Dialog::around(
-            TextView::new(utils::build_doc_string(&config::APP_WELCOME_MSG))
-              .center()
-              .with_name("regex_display_view")
-              .fixed_height(6),
+            LinearLayout::vertical()
+              .child(DummyView::new().fixed_width(1))
+              .child(
+                TextView::new(utils::build_doc_string(&config::APP_WELCOME_MSG))
+                  .center()
+                  .with_name("regex_display_view")
+                  .fixed_height(5),
+              ),
           )
+          .button("", |s| {})
           .title_position(cursive::align::HAlign::Right)
           .with_name("interactive_display_view"),
         )
@@ -156,6 +162,7 @@ impl Controller {
           EventResult::consumed()
         }),
       )
+      .child(DummyView::new().fixed_width(1))
       .child(
         FocusTracker::new(
           CanvasView::new()
