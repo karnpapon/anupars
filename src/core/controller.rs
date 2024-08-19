@@ -1,12 +1,12 @@
 use cfonts::{render, Fonts, Options};
 use cursive::{
-  event::{Event, EventResult},
-  theme::Style,
+  event::{Callback, Event, EventResult},
+  theme::{ColorStyle, ColorType, Style},
   utils::span::SpannedString,
-  view::{Nameable, Resizable},
+  view::{AnyView, Nameable, Resizable},
   views::{
-    Dialog, DummyView, EditView, FocusTracker, LinearLayout, ListView, NamedView, RadioGroup,
-    TextView,
+    Canvas, Dialog, DummyView, EditView, FocusTracker, LinearLayout, ListView, NamedView,
+    RadioGroup, TextView,
   },
   Cursive, Printer, View, With,
 };
@@ -162,20 +162,57 @@ impl Controller {
       )
       .child(DummyView::new().fixed_width(1))
       .child(
-        FocusTracker::new(
-          CanvasView::new()
-            .with_name("canvas_section_view")
-            .full_width()
-            .full_height(),
-        )
-        .on_focus(|this| {
-          // this.
-          EventResult::consumed()
-        })
-        .on_focus_lost(|this| {
-          //
-          EventResult::consumed()
-        }),
+        FocusTracker::new(CanvasView::new().with_name("canvas_section_view"))
+          .on_focus(|view| {
+            view.get_mut().set_draw(move |s, printer| {
+              for (x, row) in s.grid.iter().enumerate() {
+                for (y, &value) in row.iter().enumerate() {
+                  let display_value = match value {
+                    '\0' => {
+                      if x % s.grid_row_spacing == 0 && y % s.grid_col_spacing == 0 {
+                        '+'
+                      } else {
+                        '.'
+                      }
+                    }
+                    _ => value,
+                  };
+
+                  printer.print((y, x), &display_value.to_string())
+                }
+              }
+            });
+            EventResult::consumed()
+          })
+          .on_focus_lost(|view| {
+            view.get_mut().set_draw(move |s, printer| {
+              for (x, row) in s.grid.iter().enumerate() {
+                for (y, &value) in row.iter().enumerate() {
+                  let display_value = match value {
+                    '\0' => {
+                      if x % s.grid_row_spacing == 0 && y % s.grid_col_spacing == 0 {
+                        '+'
+                      } else {
+                        '.'
+                      }
+                    }
+                    _ => value,
+                  };
+
+                  printer.print_styled(
+                    (y, x),
+                    &SpannedString::styled(
+                      &display_value.to_string(),
+                      Style::from_color_style(ColorStyle::front(ColorType::rgb(100, 100, 100))),
+                    ),
+                  );
+                }
+              }
+            });
+            EventResult::consumed()
+          })
+          .full_width()
+          .full_height(),
       )
       .with_name("main_view")
   }

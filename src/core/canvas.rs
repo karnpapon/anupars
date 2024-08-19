@@ -1,20 +1,26 @@
+use std::{
+  mem::replace,
+  sync::{atomic::AtomicUsize, Arc},
+};
+
 use cursive::{
   direction::Direction,
   event::{Event, EventResult, Key, MouseEvent},
   theme::{ColorStyle, ColorType, Style},
-  utils::span::SpannedString,
+  utils::{self, span::SpannedString},
   view::CannotFocus,
   views::Canvas,
   Printer, Vec2,
 };
 
-#[derive(Clone, Default)]
+#[derive(Clone)]
 pub struct CanvasView {
   pub grid_row_spacing: usize,
   pub grid_col_spacing: usize,
   pub size: Vec2,
   pub selector: Selector,
   pub grid: Vec<Vec<char>>,
+  pub counter: cursive::utils::Counter,
 }
 
 #[derive(Clone, Default)]
@@ -32,6 +38,7 @@ impl CanvasView {
         pos: Vec2::new(0, 0),
       },
       grid: vec![],
+      counter: cursive::utils::Counter::new(0),
     })
     .with_draw(draw)
     .with_layout(layout)
@@ -97,7 +104,7 @@ fn take_focus(_: &mut CanvasView, _: Direction) -> Result<EventResult, CannotFoc
 fn on_event(canvas: &mut CanvasView, event: Event) -> EventResult {
   match event {
     Event::Key(Key::Right) => {
-      canvas.selector.pos.x += 1;
+      // canvas.selector.pos.x += 1;
       EventResult::consumed()
     }
     Event::Refresh => EventResult::consumed(),

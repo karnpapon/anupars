@@ -1,4 +1,5 @@
 use std::{
+  borrow::BorrowMut,
   error::Error,
   ffi::OsString,
   fs::{self, File},
@@ -18,7 +19,10 @@ use cursive::{
   Cursive, Printer, View, With,
 };
 
-use super::{canvas::CanvasView, config, utils};
+use super::{
+  canvas::{self, CanvasView},
+  config, utils,
+};
 
 #[derive(Clone, Copy)]
 pub struct Menubar {
