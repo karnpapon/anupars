@@ -1,13 +1,10 @@
-use std::{
-  mem::replace,
-  sync::{atomic::AtomicUsize, Arc},
-};
+use std::borrow::Borrow;
 
 use cursive::{
   direction::Direction,
-  event::{Event, EventResult, Key, MouseEvent},
+  event::{Callback, Event, EventResult, Key, MouseEvent},
   theme::{ColorStyle, ColorType, Style},
-  utils::{self, span::SpannedString},
+  utils::span::SpannedString,
   view::CannotFocus,
   views::Canvas,
   Printer, Vec2,
@@ -101,7 +98,7 @@ fn take_focus(_: &mut CanvasView, _: Direction) -> Result<EventResult, CannotFoc
   Ok(EventResult::Consumed(None))
 }
 
-fn on_event(canvas: &mut CanvasView, event: Event) -> EventResult {
+fn on_event(_canvas: &mut CanvasView, event: Event) -> EventResult {
   match event {
     Event::Key(Key::Right) => {
       // canvas.selector.pos.x += 1;
@@ -109,23 +106,35 @@ fn on_event(canvas: &mut CanvasView, event: Event) -> EventResult {
     }
     Event::Refresh => EventResult::consumed(),
     Event::Mouse {
-      offset,
+      offset: _,
       position,
       event: MouseEvent::Press(_btn),
     } => {
-      canvas.selector.pos = position;
-      EventResult::consumed()
+      // canvas.selector.pos = position;
+      let pos_x = position.x;
+      let pos_y = position.y;
+      EventResult::Consumed(Some(Callback::from_fn(move |siv| {
+        siv.call_on_name(
+          "canvas_section_view",
+          move |view: &mut Canvas<CanvasView>| {
+            view.set_draw(move |_, printer| {
+              printer.print_styled(
+                (pos_x, pos_y),
+                &SpannedString::styled(".".to_string(), Style::highlight()),
+              );
+            });
+          },
+        );
+      })))
     }
     Event::Mouse {
-      offset,
+      offset: _,
       position,
       event: MouseEvent::Release(_),
     } => {
-      // println!("mouse released");
+      // println!("ReleaseReleaseRelease............................................");
       EventResult::consumed()
     }
     _ => EventResult::Ignored,
-  };
-
-  EventResult::Ignored
+  }
 }
