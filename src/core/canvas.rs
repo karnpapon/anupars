@@ -1,4 +1,4 @@
-use std::borrow::Borrow;
+use std::usize;
 
 use cursive::{
   direction::Direction,
@@ -7,7 +7,7 @@ use cursive::{
   utils::span::SpannedString,
   view::CannotFocus,
   views::Canvas,
-  Printer, Vec2,
+  Printer, Vec2, XY,
 };
 
 #[derive(Clone)]
@@ -15,14 +15,45 @@ pub struct CanvasView {
   pub grid_row_spacing: usize,
   pub grid_col_spacing: usize,
   pub size: Vec2,
-  pub selector: Selector,
+  pub marker: Marker,
   pub grid: Vec<Vec<char>>,
-  pub counter: cursive::utils::Counter,
 }
 
 #[derive(Clone, Default)]
-pub struct Selector {
+pub struct Marker {
+  is_playing: bool,
+  grid_h: usize,
   pos: Vec2,
+  grid_w: usize,
+  drag_start_x: usize,
+  drag_start_y: usize,
+}
+
+impl Marker {
+  pub fn set_current_pos(&mut self, pos: XY<usize>, offset: XY<usize>) {
+    let pos_x = pos.x.abs_diff(1);
+    let pos_y = pos.y.abs_diff(offset.y);
+    self.pos = (pos_x, pos_y).into();
+  }
+
+  pub fn set_grid_area(&mut self, current_pos: XY<usize>) {
+    let new_w = current_pos.x.abs_diff(self.pos.x).clamp(1, usize::MAX);
+    let new_h = current_pos.y.abs_diff(self.pos.y).clamp(1, usize::MAX);
+    let new_x = match current_pos.x.saturating_sub(self.pos.x) == 0 {
+      true => current_pos.x,
+      false => self.pos.x,
+    };
+
+    let new_y = match current_pos.y.saturating_sub(self.pos.y) == 0 {
+      true => current_pos.y,
+      false => self.pos.y,
+    };
+
+    self.grid_w = new_w;
+    self.grid_h = new_h;
+    self.drag_start_x = new_x;
+    self.drag_start_y = new_y;
+  }
 }
 
 impl CanvasView {
@@ -31,11 +62,15 @@ impl CanvasView {
       grid_row_spacing: 9,
       grid_col_spacing: 9,
       size: Vec2::new(0, 0),
-      selector: Selector {
+      marker: Marker {
         pos: Vec2::new(0, 0),
+        is_playing: false,
+        grid_h: 1,
+        grid_w: 1,
+        drag_start_y: 0,
+        drag_start_x: 0,
       },
       grid: vec![],
-      counter: cursive::utils::Counter::new(0),
     })
     .with_draw(draw)
     .with_layout(layout)
@@ -101,7 +136,7 @@ fn take_focus(_: &mut CanvasView, _: Direction) -> Result<EventResult, CannotFoc
 fn on_event(canvas: &mut CanvasView, event: Event) -> EventResult {
   match event {
     Event::Key(Key::Right) => {
-      // canvas.selector.pos.x += 1;
+      // canvas.marker.pos.x += 1;
       EventResult::consumed()
     }
     Event::Refresh => EventResult::consumed(),
@@ -110,16 +145,17 @@ fn on_event(canvas: &mut CanvasView, event: Event) -> EventResult {
       position,
       event: MouseEvent::Press(_btn),
     } => {
-      let pos_x = position.x.abs_diff(1);
-      let pos_y = position.y.abs_diff(offset.y);
-      canvas.selector.pos = (pos_x, pos_y).into();
+      canvas.marker.set_current_pos(position, offset);
+
+      let current_pos = canvas.marker.pos;
+
       EventResult::Consumed(Some(Callback::from_fn(move |siv| {
         siv.call_on_name(
           "canvas_section_view",
           move |view: &mut Canvas<CanvasView>| {
             view.set_draw(move |_, printer| {
               printer.print_styled(
-                (pos_x, pos_y),
+                current_pos,
                 &SpannedString::styled(".".to_string(), Style::highlight()),
               );
             });
@@ -135,17 +171,12 @@ fn on_event(canvas: &mut CanvasView, event: Event) -> EventResult {
       let pos_x = position.x.abs_diff(1);
       let pos_y = position.y.abs_diff(offset.y);
 
-      let new_w = pos_x.abs_diff(canvas.selector.pos.x);
-      let new_h = pos_y.abs_diff(canvas.selector.pos.y);
-      let new_x = match pos_x.saturating_sub(canvas.selector.pos.x) == 0 {
-        true => pos_x,
-        false => canvas.selector.pos.x,
-      };
+      canvas.marker.set_grid_area((pos_x, pos_y).into());
 
-      let new_y = match pos_y.saturating_sub(canvas.selector.pos.y) == 0 {
-        true => pos_y,
-        false => canvas.selector.pos.y,
-      };
+      let new_x = canvas.marker.drag_start_x;
+      let new_y = canvas.marker.drag_start_y;
+      let new_w = canvas.marker.grid_w;
+      let new_h = canvas.marker.grid_h;
 
       EventResult::Consumed(Some(Callback::from_fn(move |siv| {
         siv.call_on_name(
@@ -164,21 +195,6 @@ fn on_event(canvas: &mut CanvasView, event: Event) -> EventResult {
           },
         );
       })))
-
-      // let tcy = pos_y;
-      // let tcx = pos_x;
-
-      // Usz tcy = a->drag_start_y;
-      // Usz tcx = a->drag_start_x;
-      // Usz loy = y < tcy ? y : tcy;
-      // Usz lox = x < tcx ? x : tcx;
-      // Usz hiy = y > tcy ? y : tcy;
-      // Usz hix = x > tcx ? x : tcx;
-      // a->ged_cursor.y = loy;
-      // a->ged_cursor.x = lox;
-      // a->ged_cursor.h = hiy - loy + 1;
-      // a->ged_cursor.w = hix - lox + 1;
-      // a->is_draw_dirty = true;
     }
     _ => EventResult::Ignored,
   }
