@@ -1,4 +1,8 @@
-use std::usize;
+use std::{
+  borrow::{Borrow, BorrowMut},
+  mem::{self, replace},
+  usize,
+};
 
 use cursive::{
   direction::Direction,
@@ -78,9 +82,38 @@ impl CanvasView {
     .with_take_focus(take_focus)
   }
 
+  pub fn char_at(&self, x: usize, y: usize) -> char {
+    self.grid[y][x]
+  }
+
+  pub fn set_char_at(&mut self, x: usize, y: usize, glyph: char) {
+    self.grid[x][y] = glyph;
+  }
+
   pub fn resize(&mut self, size: Vec2) {
     self.grid = vec![vec!['\0'; size.x]; size.y];
     self.size = size;
+    self.set_empty_char();
+  }
+
+  pub fn set_empty_char(&mut self) {
+    let temp_grid = self.grid.clone();
+    for (x, row) in temp_grid.iter().enumerate() {
+      for (y, &value) in row.iter().enumerate() {
+        let display_value = match value {
+          '\0' => {
+            if x % self.grid_row_spacing == 0 && y % self.grid_col_spacing == 0 {
+              '+'
+            } else {
+              '.'
+            }
+          }
+          _ => value,
+        };
+
+        self.set_char_at(x, y, display_value);
+      }
+    }
   }
 
   pub fn update_grid_src(&mut self, src: &str) -> Vec<Vec<char>> {
@@ -107,20 +140,10 @@ pub fn draw(canvas: &CanvasView, printer: &Printer) {
   if canvas.size > Vec2::new(0, 0) {
     for (x, row) in canvas.grid.iter().enumerate() {
       for (y, &value) in row.iter().enumerate() {
-        let display_value = match value {
-          '\0' => {
-            if x % canvas.grid_row_spacing == 0 && y % canvas.grid_col_spacing == 0 {
-              '+'
-            } else {
-              '.'
-            }
-          }
-          _ => value,
-        };
         printer.print_styled(
           (y, x),
           &SpannedString::styled(
-            &display_value.to_string(),
+            &value.to_string(),
             Style::from_color_style(ColorStyle::front(ColorType::rgb(100, 100, 100))),
           ),
         );
@@ -182,12 +205,15 @@ fn on_event(canvas: &mut CanvasView, event: Event) -> EventResult {
         siv.call_on_name(
           "canvas_section_view",
           move |view: &mut Canvas<CanvasView>| {
-            view.set_draw(move |_, printer| {
+            view.set_draw(move |v, printer| {
               for w in 0..new_w {
                 for h in 0..new_h {
                   printer.print_styled(
                     (new_x + w, new_y + h),
-                    &SpannedString::styled(".".to_string(), Style::highlight()),
+                    &SpannedString::styled(
+                      v.char_at(new_x + w, new_y + h).to_string(),
+                      Style::highlight(),
+                    ),
                   );
                 }
               }
@@ -199,20 +225,3 @@ fn on_event(canvas: &mut CanvasView, event: Event) -> EventResult {
     _ => EventResult::Ignored,
   }
 }
-
-// fn view_to_scrolled_grid(field_len: i32, visual_coord: i32, scroll_offset: i32) -> i32 {
-// if field_len == 0 { return 0; }
-// if scroll_offset < 0 {
-// if (-scroll_offset) <= visual_coord {
-// visual_coord -= (-scroll_offset);
-// } else {
-// visual_coord = 0;
-// }
-// } else {
-// visual_coord += scroll_offset;
-// }
-// if visual_coord >= field_len {
-//   visual_coord = field_len - 1;
-// }
-// return visual_coord;
-// }
