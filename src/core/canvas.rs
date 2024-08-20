@@ -117,18 +117,18 @@ impl CanvasView {
   }
 
   pub fn update_grid_src(&mut self, src: &str) -> Vec<Vec<char>> {
+    // pub fn update_grid_src(&mut self, src: &str) {
     let rows: usize = self.grid.len();
     let cols: usize = self.grid[0].len();
-    let mut new_grid = vec![vec!['\0'; cols]; rows];
 
     for row in 0..rows {
       for col in 0..cols {
         if let Some(char) = src.chars().nth(col + (row * cols)) {
-          new_grid[row][col] = char
+          self.set_char_at(row, col, char);
         }
       }
     }
-    new_grid
+    self.grid.clone()
   }
 }
 
@@ -176,10 +176,13 @@ fn on_event(canvas: &mut CanvasView, event: Event) -> EventResult {
         siv.call_on_name(
           "canvas_section_view",
           move |view: &mut Canvas<CanvasView>| {
-            view.set_draw(move |_, printer| {
+            view.set_draw(move |v, printer| {
               printer.print_styled(
                 current_pos,
-                &SpannedString::styled(".".to_string(), Style::highlight()),
+                &SpannedString::styled(
+                  v.char_at(current_pos.x, current_pos.y).to_string(),
+                  Style::highlight(),
+                ),
               );
             });
           },
@@ -196,10 +199,18 @@ fn on_event(canvas: &mut CanvasView, event: Event) -> EventResult {
 
       canvas.marker.set_grid_area((pos_x, pos_y).into());
 
-      let new_x = canvas.marker.drag_start_x;
-      let new_y = canvas.marker.drag_start_y;
-      let new_w = canvas.marker.grid_w;
-      let new_h = canvas.marker.grid_h;
+      let Marker {
+        drag_start_x,
+        drag_start_y,
+        grid_w,
+        grid_h,
+        ..
+      } = canvas.marker;
+
+      let new_x = drag_start_x;
+      let new_y = drag_start_y;
+      let new_w = grid_w;
+      let new_h = grid_h;
 
       EventResult::Consumed(Some(Callback::from_fn(move |siv| {
         siv.call_on_name(
