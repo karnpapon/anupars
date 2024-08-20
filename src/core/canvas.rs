@@ -98,7 +98,7 @@ fn take_focus(_: &mut CanvasView, _: Direction) -> Result<EventResult, CannotFoc
   Ok(EventResult::Consumed(None))
 }
 
-fn on_event(_canvas: &mut CanvasView, event: Event) -> EventResult {
+fn on_event(canvas: &mut CanvasView, event: Event) -> EventResult {
   match event {
     Event::Key(Key::Right) => {
       // canvas.selector.pos.x += 1;
@@ -106,13 +106,13 @@ fn on_event(_canvas: &mut CanvasView, event: Event) -> EventResult {
     }
     Event::Refresh => EventResult::consumed(),
     Event::Mouse {
-      offset: _,
+      offset,
       position,
       event: MouseEvent::Press(_btn),
     } => {
-      // canvas.selector.pos = position;
-      let pos_x = position.x;
-      let pos_y = position.y;
+      let pos_x = position.x.abs_diff(1);
+      let pos_y = position.y.abs_diff(offset.y);
+      canvas.selector.pos = (pos_x, pos_y).into();
       EventResult::Consumed(Some(Callback::from_fn(move |siv| {
         siv.call_on_name(
           "canvas_section_view",
@@ -128,13 +128,75 @@ fn on_event(_canvas: &mut CanvasView, event: Event) -> EventResult {
       })))
     }
     Event::Mouse {
-      offset: _,
+      offset,
       position,
-      event: MouseEvent::Release(_),
+      event: MouseEvent::Hold(_),
     } => {
-      // println!("ReleaseReleaseRelease............................................");
-      EventResult::consumed()
+      let pos_x = position.x.abs_diff(1);
+      let pos_y = position.y.abs_diff(offset.y);
+
+      let new_w = pos_x.abs_diff(canvas.selector.pos.x);
+      let new_h = pos_y.abs_diff(canvas.selector.pos.y);
+      let new_x = match pos_x.saturating_sub(canvas.selector.pos.x) == 0 {
+        true => pos_x,
+        false => canvas.selector.pos.x,
+      };
+
+      let new_y = match pos_y.saturating_sub(canvas.selector.pos.y) == 0 {
+        true => pos_y,
+        false => canvas.selector.pos.y,
+      };
+
+      EventResult::Consumed(Some(Callback::from_fn(move |siv| {
+        siv.call_on_name(
+          "canvas_section_view",
+          move |view: &mut Canvas<CanvasView>| {
+            view.set_draw(move |_, printer| {
+              for w in 0..new_w {
+                for h in 0..new_h {
+                  printer.print_styled(
+                    (new_x + w, new_y + h),
+                    &SpannedString::styled(".".to_string(), Style::highlight()),
+                  );
+                }
+              }
+            });
+          },
+        );
+      })))
+
+      // let tcy = pos_y;
+      // let tcx = pos_x;
+
+      // Usz tcy = a->drag_start_y;
+      // Usz tcx = a->drag_start_x;
+      // Usz loy = y < tcy ? y : tcy;
+      // Usz lox = x < tcx ? x : tcx;
+      // Usz hiy = y > tcy ? y : tcy;
+      // Usz hix = x > tcx ? x : tcx;
+      // a->ged_cursor.y = loy;
+      // a->ged_cursor.x = lox;
+      // a->ged_cursor.h = hiy - loy + 1;
+      // a->ged_cursor.w = hix - lox + 1;
+      // a->is_draw_dirty = true;
     }
     _ => EventResult::Ignored,
   }
 }
+
+// fn view_to_scrolled_grid(field_len: i32, visual_coord: i32, scroll_offset: i32) -> i32 {
+// if field_len == 0 { return 0; }
+// if scroll_offset < 0 {
+// if (-scroll_offset) <= visual_coord {
+// visual_coord -= (-scroll_offset);
+// } else {
+// visual_coord = 0;
+// }
+// } else {
+// visual_coord += scroll_offset;
+// }
+// if visual_coord >= field_len {
+//   visual_coord = field_len - 1;
+// }
+// return visual_coord;
+// }
