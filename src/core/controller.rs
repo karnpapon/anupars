@@ -164,45 +164,25 @@ impl Controller {
       .child(
         FocusTracker::new(CanvasView::new().with_name("canvas_section_view"))
           .on_focus(|view| {
+            view.get_mut().state_mut().set_empty_char();
             view.get_mut().set_draw(move |s, printer| {
               for (x, row) in s.grid.iter().enumerate() {
                 for (y, &value) in row.iter().enumerate() {
-                  let display_value = match value {
-                    '\0' => {
-                      if x % s.grid_row_spacing == 0 && y % s.grid_col_spacing == 0 {
-                        '+'
-                      } else {
-                        '.'
-                      }
-                    }
-                    _ => value,
-                  };
-
-                  printer.print((y, x), &display_value.to_string())
+                  printer.print((y, x), &value.to_string())
                 }
               }
             });
             EventResult::consumed()
           })
           .on_focus_lost(|view| {
+            view.get_mut().state_mut().set_empty_char();
             view.get_mut().set_draw(move |s, printer| {
               for (x, row) in s.grid.iter().enumerate() {
                 for (y, &value) in row.iter().enumerate() {
-                  let display_value = match value {
-                    '\0' => {
-                      if x % s.grid_row_spacing == 0 && y % s.grid_col_spacing == 0 {
-                        '+'
-                      } else {
-                        '.'
-                      }
-                    }
-                    _ => value,
-                  };
-
                   printer.print_styled(
                     (y, x),
                     &SpannedString::styled(
-                      &display_value.to_string(),
+                      &value.to_string(),
                       Style::from_color_style(ColorStyle::front(ColorType::rgb(100, 100, 100))),
                     ),
                   );

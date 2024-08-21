@@ -116,8 +116,8 @@ impl CanvasView {
     }
   }
 
-  pub fn update_grid_src(&mut self, src: &str) -> Vec<Vec<char>> {
-    // pub fn update_grid_src(&mut self, src: &str) {
+  // pub fn update_grid_src(&mut self, src: &str) -> Vec<Vec<char>> {
+  pub fn update_grid_src(&mut self, src: &str) {
     let rows: usize = self.grid.len();
     let cols: usize = self.grid[0].len();
 
@@ -128,7 +128,7 @@ impl CanvasView {
         }
       }
     }
-    self.grid.clone()
+    // self.grid.clone()
   }
 }
 
@@ -177,13 +177,27 @@ fn on_event(canvas: &mut CanvasView, event: Event) -> EventResult {
           "canvas_section_view",
           move |view: &mut Canvas<CanvasView>| {
             view.set_draw(move |v, printer| {
-              printer.print_styled(
-                current_pos,
-                &SpannedString::styled(
-                  v.char_at(current_pos.x, current_pos.y).to_string(),
-                  Style::highlight(),
-                ),
-              );
+              for (x, row) in v.grid.iter().enumerate() {
+                for (y, &value) in row.iter().enumerate() {
+                  if current_pos.eq(&(y, x)) {
+                    printer.print_styled(
+                      current_pos,
+                      &SpannedString::styled(
+                        v.char_at(current_pos.x, current_pos.y).to_string(),
+                        Style::highlight(),
+                      ),
+                    )
+                  } else {
+                    printer.print_styled(
+                      (y, x),
+                      &SpannedString::styled(
+                        value,
+                        Style::from_color_style(ColorStyle::front(ColorType::rgb(100, 100, 100))),
+                      ),
+                    )
+                  }
+                }
+              }
             });
           },
         );
@@ -229,6 +243,33 @@ fn on_event(canvas: &mut CanvasView, event: Event) -> EventResult {
                 }
               }
             });
+            // view.set_draw(move |v, printer| {
+            //   for row in 0..v.grid.len() {
+            //     for col in 0..v.grid[0].len() {
+            //       if row == (new_x) || col == (new_y) {
+            //         for w in 0..new_w {
+            //           for h in 0..new_h {
+            //             printer.print_styled(
+            //               (new_x + w, new_y + h),
+            //               &SpannedString::styled(
+            //                 v.char_at(new_x + w, new_y + h).to_string(),
+            //                 Style::highlight(),
+            //               ),
+            //             );
+            //           }
+            //         }
+            //       } else {
+            //         printer.print_styled(
+            //           (col, row),
+            //           &SpannedString::styled(
+            //             ".",
+            //             Style::from_color_style(ColorStyle::front(ColorType::rgb(100, 100, 100))),
+            //           ),
+            //         );
+            //       }
+            //     }
+            //   }
+            // });
           },
         );
       })))

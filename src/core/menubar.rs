@@ -4,6 +4,7 @@ use std::{
   ffi::OsString,
   fs::{self, File},
   io::{self, Read},
+  ops::{Deref, DerefMut},
   path::{Path, PathBuf},
 };
 
@@ -11,10 +12,10 @@ use cursive::{
   align::HAlign,
   event::{Event, Key},
   menu::{self, Tree},
-  view::{Margins, Nameable, Resizable},
+  view::{Margins, Nameable, Resizable, Selector},
   views::{
     Canvas, Dialog, DummyView, HideableView, LinearLayout, NamedView, OnEventView, ResizedView,
-    SelectView, TextView,
+    SelectView, TextView, ViewRef,
   },
   Cursive, Printer, View, With,
 };
@@ -169,28 +170,10 @@ pub fn preview_contents(siv: &mut Cursive, file: &PathBuf) {
 
 fn render_contents(siv: &mut Cursive, file: &PathBuf) {
   if let Ok(contents) = read_file(Path::new(file)) {
-    siv.call_on_name("canvas_section_view", |view: &mut Canvas<CanvasView>| {
-      let new_view = view.state_mut().update_grid_src(&contents);
-      view.set_draw(move |s, printer| {
-        for (x, row) in new_view.iter().enumerate() {
-          for (y, &value) in row.iter().enumerate() {
-            let display_value = match value {
-              '\0' => {
-                if x % s.grid_row_spacing == 0 && y % s.grid_col_spacing == 0 {
-                  '+'
-                } else {
-                  '.'
-                }
-              }
-              _ => value,
-            };
-
-            printer.print((y, x), &display_value.to_string())
-          }
-        }
-      });
-      view.on_event(Event::Refresh);
-    });
+    if let Some(mut view) = siv.find_name::<Canvas<CanvasView>>("canvas_section_view") {
+      view.state_mut().update_grid_src(&contents);
+      view.set_draw(canvas::draw);
+    }
   }
 }
 
