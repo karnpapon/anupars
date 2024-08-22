@@ -1,3 +1,5 @@
+use std::ops::DerefMut;
+
 use cfonts::{render, Fonts, Options};
 use cursive::{
   event::{Callback, Event, EventResult},
@@ -5,13 +7,13 @@ use cursive::{
   utils::span::SpannedString,
   view::{AnyView, Nameable, Resizable},
   views::{
-    Canvas, Dialog, DummyView, EditView, FocusTracker, LinearLayout, ListView, NamedView,
-    RadioGroup, TextView,
+    stack_view::Transparent, Canvas, Dialog, DummyView, EditView, FocusTracker, LayerPosition,
+    LinearLayout, ListView, NamedView, RadioGroup, ResizedView, StackView, TextView,
   },
   Cursive, Printer, View, With,
 };
 
-use super::{canvas::CanvasView, config, utils};
+use super::{canvas::CanvasView, canvas_base::CanvasBase, config, utils};
 
 #[derive(Clone, Default)]
 pub struct ControllerData {
@@ -162,21 +164,50 @@ impl Controller {
       )
       .child(DummyView::new().fixed_width(1))
       .child(
-        FocusTracker::new(CanvasView::new().with_name("canvas_section_view"))
-          .on_focus(|view| {
-            view.get_mut().state_mut().set_empty_char();
-            view.get_mut().set_draw(move |s, printer| {
+        FocusTracker::new(
+          StackView::new()
+            .layer(Transparent(
+              CanvasBase::new()
+                .with_name("canvas_base_section")
+                .full_height()
+                .full_width(),
+            ))
+            .layer(Transparent(
+              CanvasView::new()
+                .with_name("canvas_section_view")
+                .full_height()
+                .full_width(),
+            )),
+        )
+        .on_focus(|view| {
+          view
+            .get_mut(LayerPosition::FromBack(0))
+            .unwrap()
+            .downcast_mut::<ResizedView<ResizedView<NamedView<Canvas<CanvasBase>>>>>()
+            .expect("error downcast base canvas")
+            .get_inner_mut()
+            .get_inner_mut()
+            .get_mut()
+            .set_draw(move |s, printer| {
               for (x, row) in s.grid.iter().enumerate() {
                 for (y, &value) in row.iter().enumerate() {
                   printer.print((y, x), &value.to_string())
                 }
               }
             });
-            EventResult::consumed()
-          })
-          .on_focus_lost(|view| {
-            view.get_mut().state_mut().set_empty_char();
-            view.get_mut().set_draw(move |s, printer| {
+          EventResult::consumed()
+        })
+        .on_focus_lost(|view| {
+          view
+            // .get_mut()
+            .get_mut(LayerPosition::FromBack(0))
+            .unwrap()
+            .downcast_mut::<ResizedView<ResizedView<NamedView<Canvas<CanvasBase>>>>>()
+            .expect("error downcast base canvas")
+            .get_inner_mut()
+            .get_inner_mut()
+            .get_mut()
+            .set_draw(move |s, printer| {
               for (x, row) in s.grid.iter().enumerate() {
                 for (y, &value) in row.iter().enumerate() {
                   printer.print_styled(
@@ -189,10 +220,10 @@ impl Controller {
                 }
               }
             });
-            EventResult::consumed()
-          })
-          .full_width()
-          .full_height(),
+          EventResult::consumed()
+        })
+        .full_width()
+        .full_height(),
       )
       .with_name("main_view")
   }

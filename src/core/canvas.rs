@@ -1,8 +1,4 @@
-use std::{
-  borrow::{Borrow, BorrowMut},
-  mem::{self, replace},
-  usize,
-};
+use std::usize;
 
 use cursive::{
   direction::Direction,
@@ -137,19 +133,19 @@ fn layout(canvas: &mut CanvasView, size: Vec2) {
 }
 
 pub fn draw(canvas: &CanvasView, printer: &Printer) {
-  if canvas.size > Vec2::new(0, 0) {
-    for (x, row) in canvas.grid.iter().enumerate() {
-      for (y, &value) in row.iter().enumerate() {
-        printer.print_styled(
-          (y, x),
-          &SpannedString::styled(
-            &value.to_string(),
-            Style::from_color_style(ColorStyle::front(ColorType::rgb(100, 100, 100))),
-          ),
-        );
-      }
-    }
-  }
+  // if canvas.size > Vec2::new(0, 0) {
+  //   for (x, row) in canvas.grid.iter().enumerate() {
+  //     for (y, &value) in row.iter().enumerate() {
+  //       printer.print_styled(
+  //         (y, x),
+  //         &SpannedString::styled(
+  //           &value.to_string(),
+  //           Style::from_color_style(ColorStyle::front(ColorType::rgb(100, 100, 100))),
+  //         ),
+  //       );
+  //     }
+  //   }
+  // }
 }
 
 fn take_focus(_: &mut CanvasView, _: Direction) -> Result<EventResult, CannotFocus> {
@@ -177,27 +173,13 @@ fn on_event(canvas: &mut CanvasView, event: Event) -> EventResult {
           "canvas_section_view",
           move |view: &mut Canvas<CanvasView>| {
             view.set_draw(move |v, printer| {
-              for (x, row) in v.grid.iter().enumerate() {
-                for (y, &value) in row.iter().enumerate() {
-                  if current_pos.eq(&(y, x)) {
-                    printer.print_styled(
-                      current_pos,
-                      &SpannedString::styled(
-                        v.char_at(current_pos.x, current_pos.y).to_string(),
-                        Style::highlight(),
-                      ),
-                    )
-                  } else {
-                    printer.print_styled(
-                      (y, x),
-                      &SpannedString::styled(
-                        value,
-                        Style::from_color_style(ColorStyle::front(ColorType::rgb(100, 100, 100))),
-                      ),
-                    )
-                  }
-                }
-              }
+              printer.print_styled(
+                current_pos,
+                &SpannedString::styled(
+                  v.char_at(current_pos.x, current_pos.y).to_string(),
+                  Style::highlight(),
+                ),
+              )
             });
           },
         );

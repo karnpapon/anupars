@@ -1,5 +1,6 @@
 pub mod anu;
 pub mod canvas;
+pub mod canvas_base;
 pub mod config;
 pub mod controller;
 pub mod list_view;
