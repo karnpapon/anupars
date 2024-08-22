@@ -13,7 +13,7 @@ use cursive::{
   Cursive, Printer, View, With,
 };
 
-use super::{canvas::CanvasView, canvas_base::CanvasBase, config, utils};
+use super::{canvas_base::CanvasBase, canvas_editor::CanvasEditor, config, utils};
 
 #[derive(Clone, Default)]
 pub struct ControllerData {
@@ -173,7 +173,7 @@ impl Controller {
                 .full_width(),
             ))
             .layer(Transparent(
-              CanvasView::new()
+              CanvasEditor::new()
                 .with_name("canvas_section_view")
                 .full_height()
                 .full_width(),

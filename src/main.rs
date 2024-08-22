@@ -1,6 +1,6 @@
 mod core;
 
-use core::canvas::CanvasView;
+use core::canvas_editor::CanvasEditor;
 // use core::anu::Anu;
 use core::controller::{Controller, ControllerData};
 use core::menubar::{self, Menubar};

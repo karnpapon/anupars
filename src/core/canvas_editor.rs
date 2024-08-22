@@ -11,7 +11,7 @@ use cursive::{
 };
 
 #[derive(Clone)]
-pub struct CanvasView {
+pub struct CanvasEditor {
   pub grid_row_spacing: usize,
   pub grid_col_spacing: usize,
   pub size: Vec2,
@@ -56,9 +56,9 @@ impl Marker {
   }
 }
 
-impl CanvasView {
-  pub fn new() -> Canvas<CanvasView> {
-    Canvas::new(CanvasView {
+impl CanvasEditor {
+  pub fn new() -> Canvas<CanvasEditor> {
+    Canvas::new(CanvasEditor {
       grid_row_spacing: 9,
       grid_col_spacing: 9,
       size: Vec2::new(0, 0),
@@ -128,11 +128,11 @@ impl CanvasView {
   }
 }
 
-fn layout(canvas: &mut CanvasView, size: Vec2) {
+fn layout(canvas: &mut CanvasEditor, size: Vec2) {
   canvas.resize(size)
 }
 
-pub fn draw(canvas: &CanvasView, printer: &Printer) {
+pub fn draw(canvas: &CanvasEditor, printer: &Printer) {
   // if canvas.size > Vec2::new(0, 0) {
   //   for (x, row) in canvas.grid.iter().enumerate() {
   //     for (y, &value) in row.iter().enumerate() {
@@ -148,11 +148,11 @@ pub fn draw(canvas: &CanvasView, printer: &Printer) {
   // }
 }
 
-fn take_focus(_: &mut CanvasView, _: Direction) -> Result<EventResult, CannotFocus> {
+fn take_focus(_: &mut CanvasEditor, _: Direction) -> Result<EventResult, CannotFocus> {
   Ok(EventResult::Consumed(None))
 }
 
-fn on_event(canvas: &mut CanvasView, event: Event) -> EventResult {
+fn on_event(canvas: &mut CanvasEditor, event: Event) -> EventResult {
   match event {
     Event::Key(Key::Right) => {
       // canvas.marker.pos.x += 1;
@@ -171,7 +171,7 @@ fn on_event(canvas: &mut CanvasView, event: Event) -> EventResult {
       EventResult::Consumed(Some(Callback::from_fn(move |siv| {
         siv.call_on_name(
           "canvas_section_view",
-          move |view: &mut Canvas<CanvasView>| {
+          move |view: &mut Canvas<CanvasEditor>| {
             view.set_draw(move |v, printer| {
               printer.print_styled(
                 current_pos,
@@ -211,7 +211,7 @@ fn on_event(canvas: &mut CanvasView, event: Event) -> EventResult {
       EventResult::Consumed(Some(Callback::from_fn(move |siv| {
         siv.call_on_name(
           "canvas_section_view",
-          move |view: &mut Canvas<CanvasView>| {
+          move |view: &mut Canvas<CanvasEditor>| {
             view.set_draw(move |v, printer| {
               for w in 0..new_w {
                 for h in 0..new_h {

@@ -21,7 +21,7 @@ use cursive::{
 };
 
 use super::{
-  canvas::{self, CanvasView},
+  canvas_editor::{self, CanvasEditor},
   config, utils,
 };
 
@@ -170,9 +170,9 @@ pub fn preview_contents(siv: &mut Cursive, file: &PathBuf) {
 
 fn render_contents(siv: &mut Cursive, file: &PathBuf) {
   if let Ok(contents) = read_file(Path::new(file)) {
-    if let Some(mut view) = siv.find_name::<Canvas<CanvasView>>("canvas_section_view") {
+    if let Some(mut view) = siv.find_name::<Canvas<CanvasEditor>>("canvas_section_view") {
       view.state_mut().update_grid_src(&contents);
-      view.set_draw(canvas::draw);
+      view.set_draw(canvas_editor::draw);
     }
   }
 }
