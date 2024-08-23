@@ -2,7 +2,7 @@ use std::usize;
 
 use cursive::{
   direction::Direction,
-  event::EventResult,
+  event::{Event, EventResult, Key},
   theme::{ColorStyle, ColorType, Style},
   utils::span::SpannedString,
   view::CannotFocus,
@@ -28,7 +28,6 @@ impl CanvasBase {
     })
     .with_draw(draw)
     .with_layout(layout)
-    // .with_on_event(on_event)
     .with_take_focus(take_focus)
   }
 
@@ -61,9 +60,24 @@ impl CanvasBase {
       }
     }
   }
+
+  // pub fn update_grid_src(&mut self, src: &str) -> Vec<Vec<char>> {
+  pub fn update_grid_src(&mut self, src: &str) {
+    let rows: usize = self.grid.len();
+    let cols: usize = self.grid[0].len();
+
+    for row in 0..rows {
+      for col in 0..cols {
+        if let Some(char) = src.chars().nth(col + (row * cols)) {
+          self.set_char_at(row, col, char);
+        }
+      }
+    }
+    // self.grid.clone()
+  }
 }
 
-fn layout(canvas: &mut CanvasBase, size: Vec2) {
+pub fn layout(canvas: &mut CanvasBase, size: Vec2) {
   canvas.resize(size)
 }
 

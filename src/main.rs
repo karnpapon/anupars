@@ -3,15 +3,12 @@ mod view;
 
 use core::anu::{Anu, AnuData};
 use core::{config, utils};
-use view::canvas_editor::CanvasEditor;
-use view::menubar::{self, Menubar};
+use view::menubar::Menubar;
 
-use cursive::direction::{Absolute, Direction, Relative};
-use cursive::event::{Event, Key};
-use cursive::theme::{BorderStyle, ColorType, Palette};
-use cursive::view::{Finder, Selector};
-use cursive::views::{Canvas, Dialog, DialogFocus, EditView, LinearLayout, TextView};
-use cursive::{Cursive, CursiveExt, Printer, View, With};
+use cursive::event::Key;
+use cursive::theme::{BorderStyle, Palette};
+use cursive::views::TextView;
+use cursive::{Cursive, CursiveExt, With};
 
 pub fn init_default_style(siv: &mut Cursive) {
   siv.set_theme(cursive::theme::Theme {
@@ -41,12 +38,12 @@ pub fn init_default_style(siv: &mut Cursive) {
 
 fn main() {
   let mut siv: Cursive = Cursive::new();
-  let mut menubar = Menubar::new();
   let menu_app = Menubar::build_menu_app();
   let menu_help = Menubar::build_menu_help();
+  let mut anu: Anu = Anu::new();
+  // let mut menubar = Menubar::new();
   // let mut doc_view = Menubar::build_doc_view();
   // let mut file_explorer_view = Menubar::build_file_explorer_view();
-  let mut controller: Anu = Anu::new();
 
   // doc_view.get_mut().hide();
   // file_explorer_view.get_mut().hide();
@@ -61,7 +58,7 @@ fn main() {
 
   init_default_style(&mut siv);
 
-  let main_views = controller.build(&mut current_data);
+  let main_views = anu.build(&mut current_data);
 
   siv
     .menubar()

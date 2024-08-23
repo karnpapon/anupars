@@ -1,8 +1,10 @@
 use std::{
+  borrow::{Borrow, BorrowMut},
   error::Error,
   ffi::OsString,
   fs::{self, File},
   io::{self, Read},
+  ops::DerefMut,
   path::{Path, PathBuf},
 };
 
@@ -15,10 +17,13 @@ use cursive::{
     Canvas, Dialog, DummyView, HideableView, LinearLayout, NamedView, OnEventView, ResizedView,
     SelectView, TextView,
   },
-  Cursive, Printer, View, With,
+  Cursive, CursiveExt, Printer, View, With,
 };
 
-use super::canvas_editor::{self, CanvasEditor};
+use super::{
+  canvas_base::{self, CanvasBase},
+  canvas_editor::{self, CanvasEditor},
+};
 use crate::core::{config, utils};
 
 #[derive(Clone, Copy)]
@@ -155,6 +160,8 @@ impl Menubar {
   }
 }
 
+// ----------------------------------------------------------------
+
 pub fn set_preview_contents(siv: &mut Cursive, file: &PathBuf) {
   let mut text_view = siv
     .find_name::<TextView>(config::file_contents_unit_view)
@@ -166,14 +173,14 @@ pub fn set_preview_contents(siv: &mut Cursive, file: &PathBuf) {
 
 fn set_selected_contents(siv: &mut Cursive, file: &PathBuf) {
   if let Ok(contents) = read_file(Path::new(file)) {
-    if let Some(mut view) =
-      siv.find_name::<Canvas<CanvasEditor>>(config::canvas_editor_section_view)
-    {
+    if let Some(mut view) = siv.find_name::<Canvas<CanvasBase>>(config::canvas_base_section_view) {
       view.state_mut().update_grid_src(&contents);
-      view.set_draw(canvas_editor::draw);
+      view.set_draw(canvas_base::draw);
     }
   }
 }
+
+// ----------------------------------------------------------------
 
 pub fn listed_files_view(dir: Vec<Result<Result<String, OsString>, io::Error>>) -> LinearLayout {
   let mut panes = LinearLayout::horizontal();

@@ -3,7 +3,7 @@ use std::usize;
 use cursive::{
   direction::Direction,
   event::{Callback, Event, EventResult, Key, MouseEvent},
-  theme::{ColorStyle, ColorType, Style},
+  theme::Style,
   utils::span::SpannedString,
   view::CannotFocus,
   views::Canvas,
@@ -227,33 +227,6 @@ fn on_event(canvas: &mut CanvasEditor, event: Event) -> EventResult {
                 }
               }
             });
-            // view.set_draw(move |v, printer| {
-            //   for row in 0..v.grid.len() {
-            //     for col in 0..v.grid[0].len() {
-            //       if row == (new_x) || col == (new_y) {
-            //         for w in 0..new_w {
-            //           for h in 0..new_h {
-            //             printer.print_styled(
-            //               (new_x + w, new_y + h),
-            //               &SpannedString::styled(
-            //                 v.char_at(new_x + w, new_y + h).to_string(),
-            //                 Style::highlight(),
-            //               ),
-            //             );
-            //           }
-            //         }
-            //       } else {
-            //         printer.print_styled(
-            //           (col, row),
-            //           &SpannedString::styled(
-            //             ".",
-            //             Style::from_color_style(ColorStyle::front(ColorType::rgb(100, 100, 100))),
-            //           ),
-            //         );
-            //       }
-            //     }
-            //   }
-            // });
           },
         );
       })))
