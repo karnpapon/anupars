@@ -1,7 +1,7 @@
 mod core;
 mod view;
 
-use core::anu::{Controller, ControllerData};
+use core::anu::{Anu, AnuData};
 use core::{config, utils};
 use view::canvas_editor::CanvasEditor;
 use view::menubar::{self, Menubar};
@@ -46,7 +46,7 @@ fn main() {
   let menu_help = Menubar::build_menu_help();
   // let mut doc_view = Menubar::build_doc_view();
   // let mut file_explorer_view = Menubar::build_file_explorer_view();
-  let mut controller: Controller = Controller::new();
+  let mut controller: Anu = Anu::new();
 
   // doc_view.get_mut().hide();
   // file_explorer_view.get_mut().hide();
@@ -54,9 +54,9 @@ fn main() {
   siv.set_autohide_menu(false);
   siv.set_autorefresh(true);
   siv.set_user_data(Menubar::default());
-  siv.set_user_data(ControllerData::default());
+  siv.set_user_data(AnuData::default());
   let mut current_data = siv
-    .with_user_data(|controller_data: &mut ControllerData| controller_data.clone())
+    .with_user_data(|controller_data: &mut AnuData| controller_data.clone())
     .unwrap();
 
   init_default_style(&mut siv);

@@ -15,7 +15,7 @@ use super::{config, utils};
 use crate::view::{canvas_base::CanvasBase, canvas_editor::CanvasEditor};
 
 #[derive(Clone, Default)]
-pub struct ControllerData {
+pub struct AnuData {
   pub boolean: bool,
   pub string: String,
   pub number: usize,
@@ -25,15 +25,15 @@ pub struct ControllerData {
   pub show_regex_display: bool,
 }
 
-pub struct Controller {}
+pub struct Anu {}
 
-impl Default for Controller {
+impl Default for Anu {
   fn default() -> Self {
     Self::new()
   }
 }
 
-impl View for Controller {
+impl View for Anu {
   fn draw(&self, _: &Printer) {}
 
   fn on_event(&mut self, _: Event) -> EventResult {
@@ -41,12 +41,12 @@ impl View for Controller {
   }
 }
 
-impl Controller {
+impl Anu {
   pub fn new() -> Self {
-    Controller {}
+    Anu {}
   }
 
-  pub fn build(&mut self, current_data: &mut ControllerData) -> NamedView<LinearLayout> {
+  pub fn build(&mut self, current_data: &mut AnuData) -> NamedView<LinearLayout> {
     let regex_input_unit_view = EditView::new()
       .content(current_data.string.clone())
       .style(Style::highlight_inactive())
