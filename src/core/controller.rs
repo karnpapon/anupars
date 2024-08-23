@@ -48,12 +48,12 @@ impl Controller {
   }
 
   pub fn build(&mut self, current_data: &mut ControllerData) -> NamedView<LinearLayout> {
-    let regex_view = EditView::new()
+    let regex_input_unit_view = EditView::new()
       .content(current_data.string.clone())
       .style(Style::highlight_inactive())
       .on_edit(input_edit)
       .on_submit(input_submit)
-      .with_name("ctr_regex")
+      .with_name(config::regex_input_unit_view)
       .fixed_width(25);
 
     let flag_view = LinearLayout::horizontal()
@@ -84,30 +84,47 @@ impl Controller {
           }
         });
 
-    let input_status_view = TextView::new("-")
-      .with_name("input_status_view")
+    let input_status_unit_view = TextView::new("-")
+      .with_name(config::input_status_unit_view)
       .max_width(25);
 
-    let input_controller = ListView::new()
-      .child("RegExp: ", regex_view)
+    let input_controller_section_view = ListView::new()
+      .child("RegExp: ", regex_input_unit_view)
       .child("Mode: ", mode_view)
       .child("flag: ", flag_view)
-      .child("status: ", input_status_view)
+      .child("status: ", input_status_unit_view)
       .full_width();
 
-    let status_view = ListView::new()
-      .child("BPM: ", TextView::new("-").with_name("ctr_bpm"))
-      .child("RTO: ", TextView::new("-").with_name("ctr_ratio"))
-      .child("LEN: ", TextView::new("-").with_name("ctr_len"))
-      .child("POS: ", TextView::new("-").with_name("ctr_pos"))
+    let status_controller_section_view = ListView::new()
+      .child(
+        "BPM: ",
+        TextView::new("-").with_name(config::bpm_status_unit_view),
+      )
+      .child(
+        "RTO: ",
+        TextView::new("-").with_name(config::ratio_status_unit_view),
+      )
+      .child(
+        "LEN: ",
+        TextView::new("-").with_name(config::len_status_unit_view),
+      )
+      .child(
+        "POS: ",
+        TextView::new("-").with_name(config::pos_status_unit_view),
+      )
       .full_width();
 
-    let protocol_view = ListView::new()
+    let protocol_controller_section_view = ListView::new()
       .child(
         "OSC: ",
-        TextView::new("-").with_name("ctr_osc").fixed_width(8),
+        TextView::new("-")
+          .with_name(config::osc_status_unit_view)
+          .fixed_width(8),
       )
-      .child("MIDI: ", TextView::new("-").with_name("ctr_midi"))
+      .child(
+        "MIDI: ",
+        TextView::new("-").with_name(config::midi_status_unit_view),
+      )
       .full_width();
 
     LinearLayout::vertical()
@@ -115,16 +132,21 @@ impl Controller {
         FocusTracker::new(
           Dialog::around(
             LinearLayout::horizontal()
-              .child(input_controller.with_name("input_controller"))
-              .child(status_view.with_name("status_view"))
-              .child(protocol_view.with_name("protocol_view")),
+              .child(input_controller_section_view.with_name(config::input_controller_section_view))
+              .child(
+                status_controller_section_view.with_name(config::status_controller_section_view),
+              )
+              .child(
+                protocol_controller_section_view
+                  .with_name(config::protocol_controller_section_view),
+              ),
           )
           .title_position(cursive::align::HAlign::Right)
-          .with_name("control_section_view"),
+          .with_name(config::control_section_view),
         )
         .on_focus(|this| {
           this.get_mut().set_title(SpannedString::styled(
-            " control_section_view ",
+            format!(" {} ", config::control_section_view),
             Style::highlight(),
           ));
           EventResult::consumed()
@@ -142,17 +164,17 @@ impl Controller {
               .child(
                 TextView::new(utils::build_doc_string(&config::APP_WELCOME_MSG))
                   .center()
-                  .with_name("regex_display_view")
+                  .with_name(config::regex_display_unit_view)
                   .fixed_height(5),
               ),
           )
           .button("", |s| {})
           .title_position(cursive::align::HAlign::Right)
-          .with_name("interactive_display_view"),
+          .with_name(config::interactive_display_section_view),
         )
         .on_focus(|this| {
           this.get_mut().set_title(SpannedString::styled(
-            " interactive_display_view ",
+            format!(" {} ", config::interactive_display_section_view),
             Style::highlight(),
           ));
           EventResult::consumed()
@@ -168,13 +190,13 @@ impl Controller {
           StackView::new()
             .layer(Transparent(
               CanvasBase::new()
-                .with_name("canvas_base_section")
+                .with_name(config::canvas_base_section_view)
                 .full_height()
                 .full_width(),
             ))
             .layer(Transparent(
               CanvasEditor::new()
-                .with_name("canvas_section_view")
+                .with_name(config::canvas_editor_section_view)
                 .full_height()
                 .full_width(),
             )),
@@ -225,13 +247,15 @@ impl Controller {
         .full_width()
         .full_height(),
       )
-      .with_name("main_view")
+      .with_name(config::main_section_view)
   }
 }
 
 fn input_submit(siv: &mut Cursive, texts: &str) {
-  let mut text_view = siv.find_name::<TextView>("input_status_view").unwrap();
-  text_view.set_content(texts);
+  let mut input_status_unit_view = siv
+    .find_name::<TextView>(config::input_status_unit_view)
+    .unwrap();
+  input_status_unit_view.set_content(texts);
 }
 
 fn input_edit(siv: &mut Cursive, texts: &str, _cursor: usize) {
@@ -241,7 +265,9 @@ fn input_edit(siv: &mut Cursive, texts: &str, _cursor: usize) {
     ..Options::default()
   });
 
-  let mut text_view = siv.find_name::<TextView>("regex_display_view").unwrap();
+  let mut regex_display_unit_view = siv
+    .find_name::<TextView>(config::regex_display_unit_view)
+    .unwrap();
 
-  text_view.set_content(output.text);
+  regex_display_unit_view.set_content(output.text);
 }

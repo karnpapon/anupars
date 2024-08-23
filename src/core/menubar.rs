@@ -1,10 +1,8 @@
 use std::{
-  borrow::BorrowMut,
   error::Error,
   ffi::OsString,
   fs::{self, File},
   io::{self, Read},
-  ops::{Deref, DerefMut},
   path::{Path, PathBuf},
 };
 
@@ -12,10 +10,10 @@ use cursive::{
   align::HAlign,
   event::{Event, Key},
   menu::{self, Tree},
-  view::{Margins, Nameable, Resizable, Selector},
+  view::{Margins, Nameable, Resizable},
   views::{
     Canvas, Dialog, DummyView, HideableView, LinearLayout, NamedView, OnEventView, ResizedView,
-    SelectView, TextView, ViewRef,
+    SelectView, TextView,
   },
   Cursive, Printer, View, With,
 };
@@ -49,20 +47,20 @@ impl Menubar {
     }
   }
 
-  pub fn toggle_show_doc(&mut self) -> bool {
-    self.show_doc = !self.show_doc;
-    self.show_doc
-  }
+  // pub fn toggle_show_doc(&mut self) -> bool {
+  //   self.show_doc = !self.show_doc;
+  //   self.show_doc
+  // }
 
-  pub fn toggle_show_file_explorer(&mut self) -> bool {
-    self.show_file_explorer = !self.show_file_explorer;
-    self.show_file_explorer
-  }
+  // pub fn toggle_show_file_explorer(&mut self) -> bool {
+  //   self.show_file_explorer = !self.show_file_explorer;
+  //   self.show_file_explorer
+  // }
 
-  pub fn reset_toggle(&mut self) {
-    self.show_file_explorer = false;
-    self.show_doc = false;
-  }
+  // pub fn reset_toggle(&mut self) {
+  //   self.show_file_explorer = false;
+  //   self.show_doc = false;
+  // }
 
   pub fn build_doc_view() -> NamedView<HideableView<OnEventView<Dialog>>> {
     HideableView::new(
@@ -76,11 +74,11 @@ impl Menubar {
         s.pop_layer();
       }),
     )
-    .with_name("doc_view")
+    .with_name(config::doc_unit_view)
   }
 
   pub fn build_file_explorer_view() -> NamedView<HideableView<OnEventView<ResizedView<Dialog>>>> {
-    HideableView::new(Self::dialog_file_explorer()).with_name("file_explorer_view")
+    HideableView::new(Self::dialog_file_explorer()).with_name(config::file_explorer_unit_view)
   }
 
   fn dialog_file_explorer() -> OnEventView<ResizedView<Dialog>> {
@@ -90,9 +88,7 @@ impl Menubar {
       .map(|res| res.map(|e| e.file_name().into_string()))
       .collect::<Vec<_>>();
 
-    let listed_files = show_listed_files(paths);
-
-    OnEventView::new(Dialog::around(listed_files).max_width(200)).on_event(
+    OnEventView::new(Dialog::around(listed_files_view(paths)).max_width(200)).on_event(
       Event::Key(Key::Esc),
       |s| {
         // Menubar::show_file_explorer_view(s, false)
@@ -101,19 +97,19 @@ impl Menubar {
     )
   }
 
-  pub fn show_doc_view(siv: &mut Cursive, show: bool) {
-    siv
-      .find_name::<HideableView<OnEventView<Dialog>>>("doc_view")
-      .unwrap()
-      .set_visible(show);
-  }
+  // pub fn show_doc_view(siv: &mut Cursive, show: bool) {
+  //   siv
+  //     .find_name::<HideableView<OnEventView<Dialog>>>("doc_view")
+  //     .unwrap()
+  //     .set_visible(show);
+  // }
 
-  pub fn show_file_explorer_view(siv: &mut Cursive, show: bool) {
-    siv
-      .find_name::<HideableView<OnEventView<ResizedView<Dialog>>>>("file_explorer_view")
-      .unwrap()
-      .set_visible(show);
-  }
+  // pub fn show_file_explorer_view(siv: &mut Cursive, show: bool) {
+  //   siv
+  //     .find_name::<HideableView<OnEventView<ResizedView<Dialog>>>>("file_explorer_view")
+  //     .unwrap()
+  //     .set_visible(show);
+  // }
 
   pub fn build_menu_app() -> Tree {
     menu::Tree::new()
@@ -161,23 +157,27 @@ impl Menubar {
   }
 }
 
-pub fn preview_contents(siv: &mut Cursive, file: &PathBuf) {
-  let mut text_view = siv.find_name::<TextView>("file_contents").unwrap();
+pub fn set_preview_contents(siv: &mut Cursive, file: &PathBuf) {
+  let mut text_view = siv
+    .find_name::<TextView>(config::file_contents_unit_view)
+    .unwrap();
   if let Ok(contents) = read_file(Path::new(file)) {
     text_view.set_content(contents);
   }
 }
 
-fn render_contents(siv: &mut Cursive, file: &PathBuf) {
+fn set_selected_contents(siv: &mut Cursive, file: &PathBuf) {
   if let Ok(contents) = read_file(Path::new(file)) {
-    if let Some(mut view) = siv.find_name::<Canvas<CanvasEditor>>("canvas_section_view") {
+    if let Some(mut view) =
+      siv.find_name::<Canvas<CanvasEditor>>(config::canvas_editor_section_view)
+    {
       view.state_mut().update_grid_src(&contents);
       view.set_draw(canvas_editor::draw);
     }
   }
 }
 
-pub fn show_listed_files(dir: Vec<Result<Result<String, OsString>, io::Error>>) -> LinearLayout {
+pub fn listed_files_view(dir: Vec<Result<Result<String, OsString>, io::Error>>) -> LinearLayout {
   let mut panes = LinearLayout::horizontal();
 
   if dir.is_empty() {
@@ -208,19 +208,19 @@ pub fn show_listed_files(dir: Vec<Result<Result<String, OsString>, io::Error>>) 
   let init_file_details =
     read_file(first_file_path.as_path()).unwrap_or("empty content".to_string());
 
-  let file_details = TextView::new(init_file_details)
-    .with_name("file_contents")
+  let file_contents_unit_view = TextView::new(init_file_details)
+    .with_name(config::file_contents_unit_view)
     .fixed_size((50, 15));
 
-  let padding = DummyView::new().fixed_width(2);
+  let padding_view = DummyView::new().fixed_width(2);
 
   panes.add_child(
     select
-      .on_select(preview_contents)
-      .on_submit(render_contents),
+      .on_select(set_preview_contents)
+      .on_submit(set_selected_contents),
   );
-  panes.add_child(padding);
-  panes.add_child(file_details);
+  panes.add_child(padding_view);
+  panes.add_child(file_contents_unit_view);
   panes
 }
 

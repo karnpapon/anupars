@@ -10,6 +10,8 @@ use cursive::{
   Printer, Vec2, XY,
 };
 
+use super::config;
+
 #[derive(Clone)]
 pub struct CanvasEditor {
   pub grid_row_spacing: usize,
@@ -170,7 +172,7 @@ fn on_event(canvas: &mut CanvasEditor, event: Event) -> EventResult {
 
       EventResult::Consumed(Some(Callback::from_fn(move |siv| {
         siv.call_on_name(
-          "canvas_section_view",
+          config::canvas_editor_section_view,
           move |view: &mut Canvas<CanvasEditor>| {
             view.set_draw(move |v, printer| {
               printer.print_styled(
@@ -210,7 +212,7 @@ fn on_event(canvas: &mut CanvasEditor, event: Event) -> EventResult {
 
       EventResult::Consumed(Some(Callback::from_fn(move |siv| {
         siv.call_on_name(
-          "canvas_section_view",
+          config::canvas_editor_section_view,
           move |view: &mut Canvas<CanvasEditor>| {
             view.set_draw(move |v, printer| {
               for w in 0..new_w {

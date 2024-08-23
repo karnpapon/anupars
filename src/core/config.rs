@@ -1,3 +1,5 @@
+#![allow(non_upper_case_globals)]
+
 use lazy_static::lazy_static;
 
 pub type StaticStrInt = Vec<(&'static str, i32)>;
@@ -68,3 +70,35 @@ pub fn app_empty_dir() -> &'static str {
   }
   &value
 }
+
+// *** ID NAMING SPECIFICATIONS ***
+// IT SHOULD BE COMPRISED WITH THESE FOLLOWING 3 PARTS
+// format: <IDENTIFIER>_<CATEGORY>_view
+// where:
+//      CATEGORY = "unit" | "section"
+//      IDENTIFIER = short and concise meaningful words
+pub static regex_input_unit_view: &str = "regex_input_unit_view";
+pub static input_status_unit_view: &str = "input_status_unit_view";
+pub static bpm_status_unit_view: &str = "bpm_status_unit_view";
+pub static ratio_status_unit_view: &str = "ratio_status_unit_view";
+pub static len_status_unit_view: &str = "len_status_unit_view";
+pub static pos_status_unit_view: &str = "pos_status_unit_view";
+pub static osc_status_unit_view: &str = "osc_status_unit_view";
+pub static midi_status_unit_view: &str = "midi_status_unit_view";
+
+pub static input_controller_section_view: &str = "input_controller_section_view";
+pub static status_controller_section_view: &str = "status_controller_section_view";
+pub static protocol_controller_section_view: &str = "protocol_controller_section_view";
+
+pub static regex_display_unit_view: &str = "regex_display_unit_view";
+pub static control_section_view: &str = "control_section_view";
+pub static interactive_display_section_view: &str = "interactive_display_section_view";
+
+pub static canvas_base_section_view: &str = "canvas_base_section_view";
+pub static canvas_editor_section_view: &str = "canvas_editor_section_view";
+
+pub static doc_unit_view: &str = "doc_unit_view";
+pub static file_explorer_unit_view: &str = "file_explorer_unit_view";
+pub static file_contents_unit_view: &str = "file_contents_unit_view";
+
+pub static main_section_view: &str = "main_section_view";

@@ -92,8 +92,10 @@ fn main() {
   // });
   siv.add_global_callback(Key::Esc, move |s| {
     if !current_data.show_regex_display {
-      let mut text_view = s.find_name::<TextView>("regex_display_view").unwrap();
-      text_view
+      let mut regex_display_unit_view = s
+        .find_name::<TextView>(config::regex_display_unit_view)
+        .unwrap();
+      regex_display_unit_view
         .get_shared_content()
         .set_content(utils::build_doc_string(&config::APP_WELCOME_MSG));
     }
