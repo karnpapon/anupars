@@ -10,7 +10,7 @@ use cursive::{
   Printer, Vec2, XY,
 };
 
-use super::config;
+use crate::core::config;
 
 #[derive(Clone)]
 pub struct CanvasEditor {

@@ -18,10 +18,8 @@ use cursive::{
   Cursive, Printer, View, With,
 };
 
-use super::{
-  canvas_editor::{self, CanvasEditor},
-  config, utils,
-};
+use super::canvas_editor::{self, CanvasEditor};
+use crate::core::{config, utils};
 
 #[derive(Clone, Copy)]
 pub struct Menubar {

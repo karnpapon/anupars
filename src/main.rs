@@ -1,10 +1,10 @@
 mod core;
+mod view;
 
-use core::canvas_editor::CanvasEditor;
-// use core::anu::Anu;
-use core::controller::{Controller, ControllerData};
-use core::menubar::{self, Menubar};
+use core::anu::{Controller, ControllerData};
 use core::{config, utils};
+use view::canvas_editor::CanvasEditor;
+use view::menubar::{self, Menubar};
 
 use cursive::direction::{Absolute, Direction, Relative};
 use cursive::event::{Event, Key};
@@ -40,7 +40,6 @@ pub fn init_default_style(siv: &mut Cursive) {
 }
 
 fn main() {
-  // let mut anu = Anu::new().with_name("anu");
   let mut siv: Cursive = Cursive::new();
   let mut menubar = Menubar::new();
   let menu_app = Menubar::build_menu_app();
