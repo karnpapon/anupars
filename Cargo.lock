@@ -23,6 +23,7 @@ dependencies = [
  "cursive",
  "dirs",
  "lazy_static",
+ "rand",
  "unicode-width",
 ]
 
