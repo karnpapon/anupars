@@ -53,18 +53,20 @@ impl<T: Copy> Matrix<T> {
 
 trait Printable {
   fn display_char(&self, pos: cursive::XY<usize>) -> char;
+  fn should_rest(&self, pos: cursive::XY<usize>) -> bool;
 }
 
 impl Printable for char {
+  fn should_rest(&self, pos: cursive::XY<usize>) -> bool {
+    pos.x % config::GRID_ROW_SPACING == 0 && pos.y % config::GRID_COL_SPACING == 0
+  }
+
   fn display_char(&self, pos: cursive::XY<usize>) -> char {
     match *self {
-      '\0' => {
-        if pos.x % config::GRID_ROW_SPACING == 0 && pos.y % config::GRID_COL_SPACING == 0 {
-          '+'
-        } else {
-          '.'
-        }
-      }
+      '\0' => match self.should_rest(pos) {
+        true => '+',
+        false => '.',
+      },
       _ => *self,
     }
   }
