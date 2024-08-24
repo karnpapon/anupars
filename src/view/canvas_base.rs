@@ -8,7 +8,6 @@ use cursive::{
   Printer, Vec2,
 };
 use std::{
-  mem,
   sync::{Arc, Mutex},
   usize,
 };
@@ -16,11 +15,109 @@ use std::{
 use crate::core::config;
 
 #[derive(Clone)]
+struct Matrix<T> {
+  data: Vec<T>,
+  width: usize,
+  height: usize,
+}
+
+impl<T: Copy> Matrix<T> {
+  fn new(width: usize, height: usize, default: T) -> Matrix<T> {
+    let mut data: Vec<T> = Vec::with_capacity(width * height);
+    for _ in 0..width * height {
+      data.push(default);
+    }
+    Matrix {
+      data,
+      width,
+      height,
+    }
+  }
+
+  fn get(&self, x: usize, y: usize) -> T {
+    self.data[x + y * self.width]
+  }
+
+  fn set(&mut self, x: usize, y: usize, item: T) {
+    self.data[x + y * self.width] = item;
+  }
+
+  fn set_rect(&mut self, width: usize, height: usize, item: T) {
+    for i in 0..height {
+      for j in 0..width {
+        self.set(j, i, item);
+      }
+    }
+  }
+
+  // fn rotate_row(&mut self, y: usize, n: usize) {
+  //   let mut new_row = Vec::with_capacity(self.width);
+  //   for i in 0..self.width {
+  //     new_row.push(self.get((self.width + i - n) % self.width, y));
+  //   }
+  //   for i in 0..self.width {
+  //     self.set(i, y, new_row[i]);
+  //   }
+  // }
+
+  // fn rotate_column(&mut self, x: usize, n: usize) {
+  //   let mut new_col = Vec::with_capacity(self.height);
+  //   for i in 0..self.height {
+  //     new_col.push(self.get(x, (self.height + i - n) % self.height));
+  //   }
+  //   for i in 0..self.height {
+  //     self.set(x, i, new_col[i]);
+  //   }
+  // }
+
+  // fn each<F: FnMut(&T)>(&self, mut f: F) {
+  //   for item in self.data.iter() {
+  //     f(item);
+  //   }
+  // }
+}
+
+trait Printable {
+  fn display_char(&self, pos: cursive::XY<usize>) -> char;
+}
+
+impl Printable for char {
+  fn display_char(&self, pos: cursive::XY<usize>) -> char {
+    match *self {
+      '\0' => {
+        if pos.x % 9 == 0 && pos.y % 9 == 0 {
+          '+'
+        } else {
+          '.'
+        }
+      }
+      _ => *self,
+    }
+  }
+}
+
+impl<T: Printable + Copy> Matrix<T> {
+  fn print(&self, printer: &Printer) {
+    for y in 0..self.width {
+      for x in 0..self.height {
+        printer.print_styled(
+          (y, x),
+          &SpannedString::styled(
+            self.get(y, x).display_char((x, y).into()).to_string(),
+            Style::from_color_style(ColorStyle::front(ColorType::rgb(100, 100, 100))),
+          ),
+        );
+      }
+    }
+  }
+}
+
+#[derive(Clone)]
 pub struct CanvasBase {
   grid_row_spacing: usize,
   grid_col_spacing: usize,
   size: Vec2,
-  grid: Arc<Mutex<Vec<Vec<char>>>>,
+  grid: Arc<Mutex<Matrix<char>>>,
   text_contents: Option<String>,
 }
 
@@ -30,7 +127,7 @@ impl CanvasBase {
       grid_row_spacing: 9,
       grid_col_spacing: 9,
       size: Vec2::new(0, 0),
-      grid: Arc::new(Mutex::new(vec![])),
+      grid: Arc::new(Mutex::new(Matrix::new(0, 0, '\0'))),
       text_contents: None,
     }
   }
@@ -46,79 +143,79 @@ impl CanvasBase {
       .full_width()
   }
 
-  pub fn set_char_at(&mut self, x: usize, y: usize, glyph: char) {
-    let mut vec = self.grid.lock().unwrap();
-    vec[x][y] = glyph;
-  }
+  // pub fn set_char_at(&mut self, x: usize, y: usize, glyph: char) {
+  //   // let mut vec = self.grid.lock().unwrap();
+  //   // vec[x][y] = glyph;
+  // }
 
   pub fn resize(&mut self, size: Vec2) {
-    self.grid = Arc::new(Mutex::new(vec![vec!['\0'; size.x]; size.y]));
+    // self.grid = Arc::new(Mutex::new(vec![vec!['\0'; size.x]; size.y]));
+    self.grid = Arc::new(Mutex::new(Matrix::new(size.x, size.y, '\0')));
     self.size = size;
-    self.set_empty_char();
+    // self.set_empty_char();
+    self.grid().set_rect(size.x, size.y, '\0');
   }
 
-  pub fn set_empty_char(&mut self) {
-    let vec = self.grid();
+  // pub fn set_empty_char(&mut self) {
+  // let vec = self.grid();
 
-    for (x, row) in vec.iter().enumerate() {
-      for (y, &value) in row.iter().enumerate() {
-        let display_value = match value {
-          '\0' => {
-            if x % self.grid_row_spacing == 0 && y % self.grid_col_spacing == 0 {
-              '+'
-            } else {
-              '.'
-            }
-          }
-          _ => value,
-        };
+  // // vec.set_rect();
 
-        self.set_char_at(x, y, display_value);
-      }
-    }
-  }
+  // for (x, row) in vec.data.iter().enumerate() {
+  //   for (y, &value) in row.iter().enumerate() {
+  //     let display_value = match value {
+  //       '\0' => {
+  //         if x % self.grid_row_spacing == 0 && y % self.grid_col_spacing == 0 {
+  //           '+'
+  //         } else {
+  //           '.'
+  //         }
+  //       }
+  //       _ => value,
+  //     };
+
+  //     self.set_char_at(x, y, display_value);
+  //   }
+  // }
+  // }
 
   pub fn update_text_contents(&mut self, contents: &str) {
     self.text_contents = Some(String::from(contents));
   }
 
   pub fn update_grid_src(&mut self) {
-    let mut vec = self.grid();
-    if let Some(tc) = self.text_contents.as_ref() {
-      let rows: usize = vec.len();
-      let cols: usize = vec[0].len();
+    // if self.text_contents.as_ref().is_none() {
+    //   return;
+    // };
 
-      for row in 0..rows {
-        for col in 0..cols {
-          if let Some(char) = tc.chars().nth(col + (row * cols)) {
-            _ = mem::replace(&mut vec[row][col], char);
-            // self.set_char_at(row, col, char);
-          }
-        }
-      }
-    }
+    // let vec = self.grid();
+    // let rows: usize = vec.len();
+    // let cols: usize = vec[0].len();
+
+    // for row in 0..rows {
+    //   for col in 0..cols {
+    //     if let Some(char) = self
+    //       .text_contents
+    //       .as_ref()
+    //       .unwrap()
+    //       .chars()
+    //       .nth(col + (row * cols))
+    //     {
+    //       self.set_char_at(row, col, char);
+    //       println!("has text={:?}", vec[0]);
+    //     }
+    //   }
+    // }
   }
 
-  pub fn grid(&self) -> Vec<Vec<char>> {
+  pub fn grid(&self) -> Matrix<char> {
     self.grid.lock().unwrap().clone()
   }
 }
 
 fn draw(canvas: &CanvasBase, printer: &Printer) {
-  let grid = canvas.grid();
-
   if canvas.size > Vec2::new(0, 0) {
-    for (x, row) in grid.iter().enumerate() {
-      for (y, &value) in row.iter().enumerate() {
-        printer.print_styled(
-          (y, x),
-          &SpannedString::styled(
-            value.to_string(),
-            Style::from_color_style(ColorStyle::front(ColorType::rgb(100, 100, 100))),
-          ),
-        );
-      }
-    }
+    canvas.grid().print(printer);
   }
 }
 

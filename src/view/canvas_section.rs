@@ -34,7 +34,7 @@ impl CanvasSection {
     CanvasSection {}
   }
 
-  pub fn build() -> ResizedView<ResizedView<FocusTracker<StackView>>> {
+  pub fn build() -> FocusTracker<StackView> {
     FocusTracker::new(
       StackView::new()
         .layer(Transparent(CanvasBase::build()))
@@ -83,7 +83,7 @@ impl CanvasSection {
     //     });
     //   EventResult::consumed()
     // })
-    .full_width()
-    .full_height()
+    // .full_width()
+    // .full_height()
   }
 }
