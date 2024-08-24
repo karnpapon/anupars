@@ -6,11 +6,12 @@ use std::{
   io::{self, Read},
   ops::DerefMut,
   path::{Path, PathBuf},
+  sync::Arc,
 };
 
 use cursive::{
   align::HAlign,
-  event::{Event, Key},
+  event::{Callback, Event, EventResult, Key},
   menu::{self, Tree},
   view::{Margins, Nameable, Resizable},
   views::{
@@ -19,6 +20,7 @@ use cursive::{
   },
   Cursive, CursiveExt, Printer, View, With,
 };
+use rand::Rng;
 
 use super::{
   canvas_base::{self, CanvasBase},
@@ -172,11 +174,17 @@ pub fn set_preview_contents(siv: &mut Cursive, file: &PathBuf) {
 }
 
 fn set_selected_contents(siv: &mut Cursive, file: &PathBuf) {
+  siv.pop_layer();
   if let Ok(contents) = read_file(Path::new(file)) {
-    if let Some(mut view) = siv.find_name::<Canvas<CanvasBase>>(config::canvas_base_section_view) {
-      view.state_mut().update_grid_src(&contents);
-      view.set_draw(canvas_base::draw);
-    }
+    siv
+      .call_on_name(
+        config::canvas_base_section_view,
+        move |c: &mut Canvas<CanvasBase>| {
+          c.state_mut().update_text_contents(&contents);
+          c.state_mut().update_grid_src();
+        },
+      )
+      .unwrap();
   }
 }
 

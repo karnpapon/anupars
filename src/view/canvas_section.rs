@@ -37,18 +37,8 @@ impl CanvasSection {
   pub fn build() -> ResizedView<ResizedView<FocusTracker<StackView>>> {
     FocusTracker::new(
       StackView::new()
-        .layer(Transparent(
-          CanvasBase::new()
-            .with_name(config::canvas_base_section_view)
-            .full_height()
-            .full_width(),
-        ))
-        .layer(Transparent(
-          CanvasEditor::new()
-            .with_name(config::canvas_editor_section_view)
-            .full_height()
-            .full_width(),
-        )),
+        .layer(Transparent(CanvasBase::build()))
+        .layer(Transparent(CanvasEditor::build())),
     )
     // .on_focus(|view| {
     //   view
@@ -60,7 +50,7 @@ impl CanvasSection {
     //     .get_inner_mut()
     //     .get_mut()
     //     .set_draw(move |s, printer| {
-    //       for (x, row) in s.grid.iter().enumerate() {
+    //       for (x, row) in s.grid().iter().enumerate() {
     //         for (y, &value) in row.iter().enumerate() {
     //           printer.print((y, x), &value.to_string())
     //         }
@@ -79,7 +69,7 @@ impl CanvasSection {
     //     .get_inner_mut()
     //     .get_mut()
     //     .set_draw(move |s, printer| {
-    //       for (x, row) in s.grid.iter().enumerate() {
+    //       for (x, row) in s.grid().iter().enumerate() {
     //         for (y, &value) in row.iter().enumerate() {
     //           printer.print_styled(
     //             (y, x),

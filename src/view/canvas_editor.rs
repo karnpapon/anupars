@@ -5,8 +5,8 @@ use cursive::{
   event::{Callback, Event, EventResult, Key, MouseEvent},
   theme::Style,
   utils::span::SpannedString,
-  view::CannotFocus,
-  views::Canvas,
+  view::{CannotFocus, Nameable, Resizable},
+  views::{Canvas, NamedView, ResizedView},
   Printer, Vec2, XY,
 };
 
@@ -59,8 +59,8 @@ impl Marker {
 }
 
 impl CanvasEditor {
-  pub fn new() -> Canvas<CanvasEditor> {
-    Canvas::new(CanvasEditor {
+  pub fn new() -> CanvasEditor {
+    CanvasEditor {
       grid_row_spacing: 9,
       grid_col_spacing: 9,
       size: Vec2::new(0, 0),
@@ -73,11 +73,18 @@ impl CanvasEditor {
         drag_start_x: 0,
       },
       grid: vec![],
-    })
-    .with_draw(draw)
-    .with_layout(layout)
-    .with_on_event(on_event)
-    .with_take_focus(take_focus)
+    }
+  }
+
+  pub fn build() -> ResizedView<ResizedView<NamedView<Canvas<CanvasEditor>>>> {
+    Canvas::new(CanvasEditor::new())
+      .with_draw(draw)
+      .with_layout(layout)
+      .with_on_event(on_event)
+      .with_take_focus(take_focus)
+      .with_name(config::canvas_editor_section_view)
+      .full_height()
+      .full_width()
   }
 
   pub fn char_at(&self, x: usize, y: usize) -> char {

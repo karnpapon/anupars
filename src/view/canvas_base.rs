@@ -1,49 +1,66 @@
-use std::usize;
-
 use cursive::{
   direction::Direction,
-  event::{Event, EventResult, Key},
+  event::{Event, EventResult},
   theme::{ColorStyle, ColorType, Style},
   utils::span::SpannedString,
-  view::CannotFocus,
-  views::Canvas,
+  view::{CannotFocus, Nameable, Resizable},
+  views::{Canvas, NamedView, ResizedView},
   Printer, Vec2,
 };
+use std::{
+  mem,
+  sync::{Arc, Mutex},
+  usize,
+};
+
+use crate::core::config;
 
 #[derive(Clone)]
 pub struct CanvasBase {
-  pub grid_row_spacing: usize,
-  pub grid_col_spacing: usize,
-  pub size: Vec2,
-  pub grid: Vec<Vec<char>>,
+  grid_row_spacing: usize,
+  grid_col_spacing: usize,
+  size: Vec2,
+  grid: Arc<Mutex<Vec<Vec<char>>>>,
+  text_contents: Option<String>,
 }
 
 impl CanvasBase {
-  pub fn new() -> Canvas<CanvasBase> {
-    Canvas::new(CanvasBase {
+  pub fn new() -> CanvasBase {
+    CanvasBase {
       grid_row_spacing: 9,
       grid_col_spacing: 9,
       size: Vec2::new(0, 0),
-      grid: vec![],
-    })
-    .with_draw(draw)
-    .with_layout(layout)
-    .with_take_focus(take_focus)
+      grid: Arc::new(Mutex::new(vec![])),
+      text_contents: None,
+    }
+  }
+
+  pub fn build() -> ResizedView<ResizedView<NamedView<Canvas<CanvasBase>>>> {
+    Canvas::new(CanvasBase::new())
+      .with_draw(draw)
+      .with_layout(layout)
+      .with_on_event(on_event)
+      .with_take_focus(take_focus)
+      .with_name(config::canvas_base_section_view)
+      .full_height()
+      .full_width()
   }
 
   pub fn set_char_at(&mut self, x: usize, y: usize, glyph: char) {
-    self.grid[x][y] = glyph;
+    let mut vec = self.grid.lock().unwrap();
+    vec[x][y] = glyph;
   }
 
   pub fn resize(&mut self, size: Vec2) {
-    self.grid = vec![vec!['\0'; size.x]; size.y];
+    self.grid = Arc::new(Mutex::new(vec![vec!['\0'; size.x]; size.y]));
     self.size = size;
     self.set_empty_char();
   }
 
   pub fn set_empty_char(&mut self) {
-    let temp_grid = self.grid.clone();
-    for (x, row) in temp_grid.iter().enumerate() {
+    let vec = self.grid();
+
+    for (x, row) in vec.iter().enumerate() {
       for (y, &value) in row.iter().enumerate() {
         let display_value = match value {
           '\0' => {
@@ -61,34 +78,42 @@ impl CanvasBase {
     }
   }
 
-  // pub fn update_grid_src(&mut self, src: &str) -> Vec<Vec<char>> {
-  pub fn update_grid_src(&mut self, src: &str) {
-    let rows: usize = self.grid.len();
-    let cols: usize = self.grid[0].len();
+  pub fn update_text_contents(&mut self, contents: &str) {
+    self.text_contents = Some(String::from(contents));
+  }
 
-    for row in 0..rows {
-      for col in 0..cols {
-        if let Some(char) = src.chars().nth(col + (row * cols)) {
-          self.set_char_at(row, col, char);
+  pub fn update_grid_src(&mut self) {
+    let mut vec = self.grid();
+    if let Some(tc) = self.text_contents.as_ref() {
+      let rows: usize = vec.len();
+      let cols: usize = vec[0].len();
+
+      for row in 0..rows {
+        for col in 0..cols {
+          if let Some(char) = tc.chars().nth(col + (row * cols)) {
+            _ = mem::replace(&mut vec[row][col], char);
+            // self.set_char_at(row, col, char);
+          }
         }
       }
     }
-    // self.grid.clone()
+  }
+
+  pub fn grid(&self) -> Vec<Vec<char>> {
+    self.grid.lock().unwrap().clone()
   }
 }
 
-pub fn layout(canvas: &mut CanvasBase, size: Vec2) {
-  canvas.resize(size)
-}
+fn draw(canvas: &CanvasBase, printer: &Printer) {
+  let grid = canvas.grid();
 
-pub fn draw(canvas: &CanvasBase, printer: &Printer) {
   if canvas.size > Vec2::new(0, 0) {
-    for (x, row) in canvas.grid.iter().enumerate() {
+    for (x, row) in grid.iter().enumerate() {
       for (y, &value) in row.iter().enumerate() {
         printer.print_styled(
           (y, x),
           &SpannedString::styled(
-            &value.to_string(),
+            value.to_string(),
             Style::from_color_style(ColorStyle::front(ColorType::rgb(100, 100, 100))),
           ),
         );
@@ -97,6 +122,14 @@ pub fn draw(canvas: &CanvasBase, printer: &Printer) {
   }
 }
 
-fn take_focus(_: &mut CanvasBase, _: Direction) -> Result<EventResult, CannotFocus> {
+fn layout(canvas: &mut CanvasBase, size: Vec2) {
+  canvas.resize(size)
+}
+
+fn take_focus(canvas: &mut CanvasBase, _: Direction) -> Result<EventResult, CannotFocus> {
   Ok(EventResult::Consumed(None))
+}
+
+fn on_event(canvas: &mut CanvasBase, _: Event) -> EventResult {
+  EventResult::Consumed(None)
 }
