@@ -1,15 +1,8 @@
 use cursive::{
   event::{Event, EventResult},
-  theme::{ColorStyle, ColorType, Style},
-  utils::span::SpannedString,
-  view::{Nameable, Resizable},
-  views::{
-    stack_view::Transparent, Canvas, FocusTracker, LayerPosition, NamedView, ResizedView, StackView,
-  },
+  views::{stack_view::Transparent, FocusTracker, StackView},
   Printer, View,
 };
-
-use crate::core::{anu::AnuData, config};
 
 use super::{canvas_base::CanvasBase, canvas_editor::CanvasEditor};
 

@@ -1,8 +1,6 @@
 use cursive::{
   direction::Direction,
   event::{Event, EventResult},
-  theme::{ColorStyle, ColorType, Style},
-  utils::span::SpannedString,
   view::{CannotFocus, Nameable, Resizable},
   views::{Canvas, NamedView, ResizedView},
   Printer, Vec2,
@@ -12,81 +10,7 @@ use std::{
   usize,
 };
 
-use crate::core::config;
-
-#[derive(Clone)]
-struct Matrix<T> {
-  data: Vec<T>,
-  width: usize,
-  height: usize,
-}
-
-impl<T: Copy> Matrix<T> {
-  fn new(width: usize, height: usize, default: T) -> Matrix<T> {
-    let mut data: Vec<T> = Vec::with_capacity(width * height);
-    for _ in 0..width * height {
-      data.push(default);
-    }
-    Matrix {
-      data,
-      width,
-      height,
-    }
-  }
-
-  fn get(&self, x: usize, y: usize) -> T {
-    self.data[x + y * self.width]
-  }
-
-  fn set(&mut self, x: usize, y: usize, item: T) {
-    self.data[x + y * self.width] = item;
-  }
-
-  fn set_rect(&mut self, width: usize, height: usize, item: T) {
-    for i in 0..height {
-      for j in 0..width {
-        self.set(j, i, item);
-      }
-    }
-  }
-}
-
-trait Printable {
-  fn display_char(&self, pos: cursive::XY<usize>) -> char;
-  fn should_rest(&self, pos: cursive::XY<usize>) -> bool;
-}
-
-impl Printable for char {
-  fn should_rest(&self, pos: cursive::XY<usize>) -> bool {
-    pos.x % config::GRID_ROW_SPACING == 0 && pos.y % config::GRID_COL_SPACING == 0
-  }
-
-  fn display_char(&self, pos: cursive::XY<usize>) -> char {
-    match *self {
-      '\0' => match self.should_rest(pos) {
-        true => '+',
-        false => '.',
-      },
-      _ => *self,
-    }
-  }
-}
-
-impl<T: Printable + Copy> Matrix<T> {
-  fn print(&self, printer: &Printer) {
-    for y in 0..self.width {
-      for x in 0..self.height {
-        printer.print_styled(
-          (y, x),
-          &SpannedString::styled(
-            self.get(y, x).display_char((x, y).into()).to_string(),
-            Style::from_color_style(ColorStyle::front(ColorType::rgb(100, 100, 100))),
-          ),
-        );
-      }
-    }
-  }
-}
+use crate::core::{config, traits::Matrix};
 
 #[derive(Clone)]
 pub struct CanvasBase {
@@ -164,10 +88,10 @@ fn layout(canvas: &mut CanvasBase, size: Vec2) {
   canvas.resize(size)
 }
 
-fn take_focus(canvas: &mut CanvasBase, _: Direction) -> Result<EventResult, CannotFocus> {
+fn take_focus(_: &mut CanvasBase, _: Direction) -> Result<EventResult, CannotFocus> {
   Ok(EventResult::Consumed(None))
 }
 
-fn on_event(canvas: &mut CanvasBase, _: Event) -> EventResult {
+fn on_event(_: &mut CanvasBase, _: Event) -> EventResult {
   EventResult::Consumed(None)
 }

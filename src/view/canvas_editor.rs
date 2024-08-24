@@ -1,37 +1,90 @@
-use std::usize;
+use std::{
+  sync::{Arc, Mutex},
+  usize,
+};
 
 use cursive::{
-  direction::Direction,
   event::{Callback, Event, EventResult, Key, MouseEvent},
   theme::Style,
   utils::span::SpannedString,
   view::{CannotFocus, Nameable, Resizable},
-  views::{Canvas, NamedView, ResizedView},
+  views::{Canvas, NamedView, ResizedView, TextView},
   Printer, Vec2, XY,
 };
 
-use crate::core::config;
+use crate::core::{config, traits::Matrix};
 
 #[derive(Clone)]
 pub struct CanvasEditor {
-  pub grid_row_spacing: usize,
-  pub grid_col_spacing: usize,
   pub size: Vec2,
   pub marker: Marker,
-  pub grid: Vec<Vec<char>>,
+  grid: Arc<Mutex<Matrix<char>>>,
+  text_contents: Option<String>,
 }
 
 #[derive(Clone, Default)]
 pub struct Marker {
   is_playing: bool,
-  grid_h: usize,
   pos: Vec2,
+  grid_h: usize,
   grid_w: usize,
   drag_start_x: usize,
   drag_start_y: usize,
 }
 
+enum Direction {
+  Up,
+  Down,
+  Left,
+  Right,
+  Idle,
+}
+
+impl Direction {
+  pub fn get_direction(&self) -> (i32, i32) {
+    match self {
+      Direction::Right => (1, 0),
+      Direction::Up => (0, -1),
+      Direction::Left => (-1, 0),
+      Direction::Down => (0, 1),
+      Direction::Idle => (0, 0),
+    }
+  }
+}
+
 impl Marker {
+  // pub fn set(&mut self, x: usize, y: usize, item: T) {
+  //   self.data[x + y * self.width] = item;
+  // }
+
+  pub fn print(&self, printer: &Printer) {
+    for y in 0..self.grid_w {
+      for x in 0..self.grid_h {
+        printer.print_styled(
+          (self.pos.x + y, self.pos.y + x),
+          &SpannedString::styled(
+            // self.get(self.pos.x, self.pos.y).to_string(),
+            '.',
+            Style::highlight(),
+          ),
+        );
+      }
+    }
+  }
+
+  fn set_move(&mut self, direction: Direction) -> EventResult {
+    self.pos = self.pos.saturating_add(direction.get_direction());
+
+    let pos_x = self.pos.x;
+    let pos_y = self.pos.y;
+
+    EventResult::Consumed(Some(Callback::from_fn(move |siv| {
+      siv.call_on_name(config::pos_status_unit_view, move |view: &mut TextView| {
+        view.set_content(format!("x:{:?},y:{:?}", pos_x, pos_y));
+      });
+    })))
+  }
+
   pub fn set_current_pos(&mut self, pos: XY<usize>, offset: XY<usize>) {
     let pos_x = pos.x.abs_diff(1);
     let pos_y = pos.y.abs_diff(offset.y);
@@ -61,8 +114,6 @@ impl Marker {
 impl CanvasEditor {
   pub fn new() -> CanvasEditor {
     CanvasEditor {
-      grid_row_spacing: 9,
-      grid_col_spacing: 9,
       size: Vec2::new(0, 0),
       marker: Marker {
         pos: Vec2::new(0, 0),
@@ -72,7 +123,8 @@ impl CanvasEditor {
         drag_start_y: 0,
         drag_start_x: 0,
       },
-      grid: vec![],
+      grid: Arc::new(Mutex::new(Matrix::new(0, 0, '\0'))),
+      text_contents: None,
     }
   }
 
@@ -87,53 +139,24 @@ impl CanvasEditor {
       .full_width()
   }
 
-  pub fn char_at(&self, x: usize, y: usize) -> char {
-    self.grid[y][x]
-  }
-
-  pub fn set_char_at(&mut self, x: usize, y: usize, glyph: char) {
-    self.grid[x][y] = glyph;
-  }
-
   pub fn resize(&mut self, size: Vec2) {
-    self.grid = vec![vec!['\0'; size.x]; size.y];
+    self.grid = Arc::new(Mutex::new(Matrix::new(size.x, size.y, '\0')));
     self.size = size;
-    self.set_empty_char();
+    self.grid().set_rect(size.x, size.y, '\0');
   }
 
-  pub fn set_empty_char(&mut self) {
-    let temp_grid = self.grid.clone();
-    for (x, row) in temp_grid.iter().enumerate() {
-      for (y, &value) in row.iter().enumerate() {
-        let display_value = match value {
-          '\0' => {
-            if x % self.grid_row_spacing == 0 && y % self.grid_col_spacing == 0 {
-              '+'
-            } else {
-              '.'
-            }
-          }
-          _ => value,
-        };
-
-        self.set_char_at(x, y, display_value);
-      }
-    }
+  fn grid(&self) -> Matrix<char> {
+    self.grid.lock().unwrap().clone()
   }
 
-  // pub fn update_grid_src(&mut self, src: &str) -> Vec<Vec<char>> {
-  pub fn update_grid_src(&mut self, src: &str) {
-    let rows: usize = self.grid.len();
-    let cols: usize = self.grid[0].len();
+  // fn get(&self, x: usize, y: usize) -> T {
+  //   self.grid().data[x + y * self.width]
+  // }
+}
 
-    for row in 0..rows {
-      for col in 0..cols {
-        if let Some(char) = src.chars().nth(col + (row * cols)) {
-          self.set_char_at(row, col, char);
-        }
-      }
-    }
-    // self.grid.clone()
+fn draw(canvas: &CanvasEditor, printer: &Printer) {
+  if canvas.size > Vec2::new(0, 0) {
+    canvas.grid().print(printer);
   }
 }
 
@@ -141,32 +164,19 @@ fn layout(canvas: &mut CanvasEditor, size: Vec2) {
   canvas.resize(size)
 }
 
-pub fn draw(canvas: &CanvasEditor, printer: &Printer) {
-  // if canvas.size > Vec2::new(0, 0) {
-  //   for (x, row) in canvas.grid.iter().enumerate() {
-  //     for (y, &value) in row.iter().enumerate() {
-  //       printer.print_styled(
-  //         (y, x),
-  //         &SpannedString::styled(
-  //           &value.to_string(),
-  //           Style::from_color_style(ColorStyle::front(ColorType::rgb(100, 100, 100))),
-  //         ),
-  //       );
-  //     }
-  //   }
-  // }
-}
-
-fn take_focus(_: &mut CanvasEditor, _: Direction) -> Result<EventResult, CannotFocus> {
+fn take_focus(
+  _: &mut CanvasEditor,
+  _: cursive::direction::Direction,
+) -> Result<EventResult, CannotFocus> {
   Ok(EventResult::Consumed(None))
 }
 
 fn on_event(canvas: &mut CanvasEditor, event: Event) -> EventResult {
   match event {
-    Event::Key(Key::Right) => {
-      // canvas.marker.pos.x += 1;
-      EventResult::consumed()
-    }
+    Event::Key(Key::Left) => canvas.marker.set_move(Direction::Left),
+    Event::Key(Key::Right) => canvas.marker.set_move(Direction::Right),
+    Event::Key(Key::Up) => canvas.marker.set_move(Direction::Up),
+    Event::Key(Key::Down) => canvas.marker.set_move(Direction::Down),
     Event::Refresh => EventResult::consumed(),
     Event::Mouse {
       offset,
@@ -174,21 +184,14 @@ fn on_event(canvas: &mut CanvasEditor, event: Event) -> EventResult {
       event: MouseEvent::Press(_btn),
     } => {
       canvas.marker.set_current_pos(position, offset);
-
-      let current_pos = canvas.marker.pos;
+      canvas.marker.set_move(Direction::Idle);
 
       EventResult::Consumed(Some(Callback::from_fn(move |siv| {
         siv.call_on_name(
           config::canvas_editor_section_view,
-          move |view: &mut Canvas<CanvasEditor>| {
+          |view: &mut Canvas<CanvasEditor>| {
             view.set_draw(move |v, printer| {
-              printer.print_styled(
-                current_pos,
-                &SpannedString::styled(
-                  v.char_at(current_pos.x, current_pos.y).to_string(),
-                  Style::highlight(),
-                ),
-              )
+              v.marker.print(printer);
             });
           },
         );
@@ -201,43 +204,28 @@ fn on_event(canvas: &mut CanvasEditor, event: Event) -> EventResult {
     } => {
       let pos_x = position.x.abs_diff(1);
       let pos_y = position.y.abs_diff(offset.y);
-
       canvas.marker.set_grid_area((pos_x, pos_y).into());
 
-      let Marker {
-        drag_start_x,
-        drag_start_y,
-        grid_w,
-        grid_h,
-        ..
-      } = canvas.marker;
-
-      let new_x = drag_start_x;
-      let new_y = drag_start_y;
-      let new_w = grid_w;
-      let new_h = grid_h;
-
-      EventResult::Consumed(Some(Callback::from_fn(move |siv| {
-        siv.call_on_name(
-          config::canvas_editor_section_view,
-          move |view: &mut Canvas<CanvasEditor>| {
-            view.set_draw(move |v, printer| {
-              for w in 0..new_w {
-                for h in 0..new_h {
-                  printer.print_styled(
-                    (new_x + w, new_y + h),
-                    &SpannedString::styled(
-                      v.char_at(new_x + w, new_y + h).to_string(),
-                      Style::highlight(),
-                    ),
-                  );
-                }
-              }
-            });
-          },
-        );
-      })))
+      EventResult::Ignored
     }
     _ => EventResult::Ignored,
   }
 }
+
+// ------------- (temp) helpers -------------------
+
+fn run<F>(f: F) -> impl Fn(&mut cursive::Cursive)
+where
+  F: Fn(&mut CanvasEditor),
+{
+  move |s| {
+    s.call_on_name(
+      config::canvas_editor_section_view,
+      |c: &mut Canvas<CanvasEditor>| {
+        f(c.state_mut());
+      },
+    );
+  }
+}
+
+// -----------------------------------------------

@@ -1,31 +1,24 @@
 use std::{
-  borrow::{Borrow, BorrowMut},
   error::Error,
   ffi::OsString,
   fs::{self, File},
   io::{self, Read},
-  ops::DerefMut,
   path::{Path, PathBuf},
-  sync::Arc,
 };
 
 use cursive::{
   align::HAlign,
-  event::{Callback, Event, EventResult, Key},
+  event::{Event, Key},
   menu::{self, Tree},
   view::{Margins, Nameable, Resizable},
   views::{
     Canvas, Dialog, DummyView, HideableView, LinearLayout, NamedView, OnEventView, ResizedView,
     SelectView, TextView,
   },
-  Cursive, CursiveExt, Printer, View, With,
+  Cursive, Printer, View, With,
 };
-use rand::Rng;
 
-use super::{
-  canvas_base::{self, CanvasBase},
-  canvas_editor::{self, CanvasEditor},
-};
+use super::canvas_base::CanvasBase;
 use crate::core::{config, utils};
 
 #[derive(Clone, Copy)]
