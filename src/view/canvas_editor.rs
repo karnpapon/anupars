@@ -75,8 +75,16 @@ impl Marker {
     }
   }
 
-  fn set_move(&mut self, direction: Direction) -> EventResult {
-    self.pos = self.pos.saturating_add(direction.get_direction());
+  fn set_move(&mut self, direction: Direction, canvas_size: Vec2) -> EventResult {
+    let next_pos = self.pos.saturating_add(direction.get_direction());
+    let next_pos_bottom_right: Vec2 =
+      (next_pos.x + self.grid_w - 1, next_pos.y + self.grid_h - 1).into();
+
+    if !next_pos_bottom_right.fits_in_rect((0, 0), canvas_size) {
+      return EventResult::Ignored;
+    }
+
+    self.pos = next_pos;
 
     let pos_x = self.pos.x;
     let pos_y = self.pos.y;
@@ -176,10 +184,10 @@ fn take_focus(
 
 fn on_event(canvas: &mut CanvasEditor, event: Event) -> EventResult {
   match event {
-    Event::Key(Key::Left) => canvas.marker.set_move(Direction::Left),
-    Event::Key(Key::Right) => canvas.marker.set_move(Direction::Right),
-    Event::Key(Key::Up) => canvas.marker.set_move(Direction::Up),
-    Event::Key(Key::Down) => canvas.marker.set_move(Direction::Down),
+    Event::Key(Key::Left) => canvas.marker.set_move(Direction::Left, canvas.size),
+    Event::Key(Key::Right) => canvas.marker.set_move(Direction::Right, canvas.size),
+    Event::Key(Key::Up) => canvas.marker.set_move(Direction::Up, canvas.size),
+    Event::Key(Key::Down) => canvas.marker.set_move(Direction::Down, canvas.size),
     Event::Refresh => EventResult::consumed(),
     Event::Mouse {
       offset,
@@ -187,7 +195,7 @@ fn on_event(canvas: &mut CanvasEditor, event: Event) -> EventResult {
       event: MouseEvent::Press(_btn),
     } => {
       canvas.marker.set_current_pos(position, offset);
-      canvas.marker.set_move(Direction::Idle);
+      canvas.marker.set_move(Direction::Idle, canvas.size);
 
       let pos_x = canvas.marker.pos.x;
       let pos_y = canvas.marker.pos.y;
