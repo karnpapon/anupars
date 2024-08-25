@@ -8,7 +8,7 @@ use super::config;
 
 #[derive(Clone)]
 pub struct Matrix<T> {
-  data: Vec<T>,
+  pub data: Vec<T>,
   pub width: usize,
   pub height: usize,
 }
@@ -26,7 +26,7 @@ impl<T: Copy> Matrix<T> {
     }
   }
 
-  fn get(&self, x: usize, y: usize) -> T {
+  pub fn get(&self, x: usize, y: usize) -> T {
     self.data[x + y * self.width]
   }
 
@@ -45,7 +45,9 @@ impl<T: Copy> Matrix<T> {
 
 pub trait Printable {
   fn display_char(&self, pos: cursive::XY<usize>) -> char;
-  fn should_rest(&self, pos: cursive::XY<usize>) -> bool;
+  fn should_rest(&self, pos: cursive::XY<usize>) -> bool {
+    false
+  }
 }
 
 impl Printable for char {

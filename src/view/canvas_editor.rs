@@ -12,13 +12,16 @@ use cursive::{
   Printer, Vec2, XY,
 };
 
-use crate::core::{config, traits::Matrix};
+use crate::core::{
+  config,
+  traits::{Matrix, Printable},
+};
 
 #[derive(Clone)]
 pub struct CanvasEditor {
   pub size: Vec2,
   pub marker: Marker,
-  grid: Arc<Mutex<Matrix<char>>>,
+  pub grid: Arc<Mutex<Matrix<char>>>,
   text_contents: Option<String>,
 }
 
@@ -53,18 +56,18 @@ impl Direction {
 }
 
 impl Marker {
-  // pub fn set(&mut self, x: usize, y: usize, item: T) {
-  //   self.data[x + y * self.width] = item;
-  // }
-
-  pub fn print(&self, printer: &Printer) {
-    for y in 0..self.grid_w {
-      for x in 0..self.grid_h {
+  pub fn print(&self, printer: &Printer, editor: &CanvasEditor) {
+    for x in 0..self.grid_w {
+      for y in 0..self.grid_h {
+        let offset_x = self.pos.x + x;
+        let offset_y = self.pos.y + y;
         printer.print_styled(
-          (self.pos.x + y, self.pos.y + x),
+          (offset_x, offset_y),
           &SpannedString::styled(
-            // self.get(self.pos.x, self.pos.y).to_string(),
-            '.',
+            editor
+              .get(offset_x, offset_y)
+              .display_char((offset_x, offset_y).into())
+              .to_string(),
             Style::highlight(),
           ),
         );
@@ -149,9 +152,9 @@ impl CanvasEditor {
     self.grid.lock().unwrap().clone()
   }
 
-  // fn get(&self, x: usize, y: usize) -> T {
-  //   self.grid().data[x + y * self.width]
-  // }
+  pub fn get(&self, x: usize, y: usize) -> char {
+    self.grid().get(x, y)
+  }
 }
 
 fn draw(canvas: &CanvasEditor, printer: &Printer) {
@@ -191,7 +194,7 @@ fn on_event(canvas: &mut CanvasEditor, event: Event) -> EventResult {
           config::canvas_editor_section_view,
           |view: &mut Canvas<CanvasEditor>| {
             view.set_draw(move |v, printer| {
-              v.marker.print(printer);
+              v.marker.print(printer, v);
             });
           },
         );
