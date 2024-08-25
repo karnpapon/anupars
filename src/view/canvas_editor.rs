@@ -77,10 +77,11 @@ impl Marker {
 
   fn set_move(&mut self, direction: Direction, canvas_size: Vec2) -> EventResult {
     let next_pos = self.pos.saturating_add(direction.get_direction());
-    let next_pos_bottom_right: Vec2 = self
-      .area
-      .bottom_right()
-      .saturating_add(direction.get_direction());
+    let next_pos_bottom_right: Vec2 = (
+      next_pos.x + self.area.width() - 1,
+      next_pos.y + self.area.height() - 1,
+    )
+      .into();
 
     if !next_pos_bottom_right.fits_in_rect((0, 0), canvas_size) {
       return EventResult::Ignored;
