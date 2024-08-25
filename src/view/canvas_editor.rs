@@ -189,6 +189,9 @@ fn on_event(canvas: &mut CanvasEditor, event: Event) -> EventResult {
       canvas.marker.set_current_pos(position, offset);
       canvas.marker.set_move(Direction::Idle);
 
+      let pos_x = canvas.marker.pos.x;
+      let pos_y = canvas.marker.pos.y;
+
       EventResult::Consumed(Some(Callback::from_fn(move |siv| {
         siv.call_on_name(
           config::canvas_editor_section_view,
@@ -198,6 +201,10 @@ fn on_event(canvas: &mut CanvasEditor, event: Event) -> EventResult {
             });
           },
         );
+
+        siv.call_on_name(config::pos_status_unit_view, move |view: &mut TextView| {
+          view.set_content(format!("x:{:?},y:{:?}", pos_x, pos_y))
+        });
       })))
     }
     Event::Mouse {
@@ -208,8 +215,14 @@ fn on_event(canvas: &mut CanvasEditor, event: Event) -> EventResult {
       let pos_x = position.x.abs_diff(1);
       let pos_y = position.y.abs_diff(offset.y);
       canvas.marker.set_grid_area((pos_x, pos_y).into());
+      let grid_w = canvas.marker.grid_w;
+      let grid_h = canvas.marker.grid_h;
 
-      EventResult::Ignored
+      EventResult::Consumed(Some(Callback::from_fn(move |siv| {
+        siv.call_on_name(config::len_status_unit_view, move |view: &mut TextView| {
+          view.set_content(format!("w:{:?},h:{:?}", grid_w, grid_h));
+        });
+      })))
     }
     _ => EventResult::Ignored,
   }
