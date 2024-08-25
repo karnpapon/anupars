@@ -167,7 +167,7 @@ impl CanvasEditor {
 
 fn draw(canvas: &CanvasEditor, printer: &Printer) {
   if canvas.size > Vec2::new(0, 0) {
-    canvas.grid().print(printer);
+    canvas.marker.print(printer, canvas);
   }
 }
 
@@ -201,15 +201,6 @@ fn on_event(canvas: &mut CanvasEditor, event: Event) -> EventResult {
       let pos_y = canvas.marker.pos.y;
 
       EventResult::Consumed(Some(Callback::from_fn(move |siv| {
-        siv.call_on_name(
-          config::canvas_editor_section_view,
-          |view: &mut Canvas<CanvasEditor>| {
-            view.set_draw(move |v, printer| {
-              v.marker.print(printer, v);
-            });
-          },
-        );
-
         siv.call_on_name(config::pos_status_unit_view, move |view: &mut TextView| {
           view.set_content(format!("x:{:?},y:{:?}", pos_x, pos_y))
         });
