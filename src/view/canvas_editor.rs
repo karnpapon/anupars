@@ -15,6 +15,7 @@ use cursive::{
 use crate::core::{
   config,
   traits::{Matrix, Printable},
+  utils,
 };
 
 #[derive(Clone)]
@@ -91,7 +92,7 @@ impl Marker {
 
     EventResult::Consumed(Some(Callback::from_fn(move |siv| {
       siv.call_on_name(config::pos_status_unit_view, move |view: &mut TextView| {
-        view.set_content(format!("x:{:?},y:{:?}", pos_x, pos_y));
+        view.set_content(utils::build_pos_status_str(pos_x, pos_y));
       });
     })))
   }
@@ -199,10 +200,16 @@ fn on_event(canvas: &mut CanvasEditor, event: Event) -> EventResult {
 
       let pos_x = canvas.marker.pos.x;
       let pos_y = canvas.marker.pos.y;
+      let grid_w = canvas.marker.grid_w;
+      let grid_h = canvas.marker.grid_h;
 
       EventResult::Consumed(Some(Callback::from_fn(move |siv| {
         siv.call_on_name(config::pos_status_unit_view, move |view: &mut TextView| {
-          view.set_content(format!("x:{:?},y:{:?}", pos_x, pos_y))
+          view.set_content(utils::build_pos_status_str(pos_x, pos_y))
+        });
+
+        siv.call_on_name(config::len_status_unit_view, move |view: &mut TextView| {
+          view.set_content(utils::build_len_status_str(grid_w, grid_h));
         });
       })))
     }
@@ -219,7 +226,7 @@ fn on_event(canvas: &mut CanvasEditor, event: Event) -> EventResult {
 
       EventResult::Consumed(Some(Callback::from_fn(move |siv| {
         siv.call_on_name(config::len_status_unit_view, move |view: &mut TextView| {
-          view.set_content(format!("w:{:?},h:{:?}", grid_w, grid_h));
+          view.set_content(utils::build_len_status_str(grid_w, grid_h));
         });
       })))
     }

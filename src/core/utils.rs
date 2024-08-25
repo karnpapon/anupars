@@ -13,3 +13,11 @@ pub fn build_doc_string(src: &config::StaticStrStr) -> String {
 
   doc_str
 }
+
+pub fn build_len_status_str(w: usize, h: usize) -> String {
+  format!("w:{w},h:{h}")
+}
+
+pub fn build_pos_status_str(x: usize, y: usize) -> String {
+  format!("x:{x},y:{y}")
+}
