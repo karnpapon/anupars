@@ -4,12 +4,12 @@ use std::{
 };
 
 use cursive::{
-  event::{Callback, Event, EventResult, Key, MouseEvent},
+  event::{Callback, Event, EventResult, Key, MouseButton, MouseEvent},
   theme::Style,
   utils::span::SpannedString,
   view::{CannotFocus, Nameable, Resizable},
   views::{Canvas, NamedView, ResizedView, TextView},
-  Printer, Vec2, XY,
+  Printer, Rect, Vec2, XY,
 };
 
 use crate::core::{
@@ -26,12 +26,11 @@ pub struct CanvasEditor {
   text_contents: Option<String>,
 }
 
-#[derive(Clone, Default)]
+#[derive(Clone)]
 pub struct Marker {
   is_playing: bool,
   pos: Vec2,
-  grid_h: usize,
-  grid_w: usize,
+  area: Rect,
   drag_start_x: usize,
   drag_start_y: usize,
 }
@@ -58,8 +57,8 @@ impl Direction {
 
 impl Marker {
   pub fn print(&self, printer: &Printer, editor: &CanvasEditor) {
-    for x in 0..self.grid_w {
-      for y in 0..self.grid_h {
+    for x in 0..self.area.width() {
+      for y in 0..self.area.height() {
         let offset_x = self.pos.x + x;
         let offset_y = self.pos.y + y;
         printer.print_styled(
@@ -78,8 +77,10 @@ impl Marker {
 
   fn set_move(&mut self, direction: Direction, canvas_size: Vec2) -> EventResult {
     let next_pos = self.pos.saturating_add(direction.get_direction());
-    let next_pos_bottom_right: Vec2 =
-      (next_pos.x + self.grid_w - 1, next_pos.y + self.grid_h - 1).into();
+    let next_pos_bottom_right: Vec2 = self
+      .area
+      .bottom_right()
+      .saturating_add(direction.get_direction());
 
     if !next_pos_bottom_right.fits_in_rect((0, 0), canvas_size) {
       return EventResult::Ignored;
@@ -116,8 +117,7 @@ impl Marker {
       false => self.pos.y,
     };
 
-    self.grid_w = new_w;
-    self.grid_h = new_h;
+    self.area = Rect::from_size((new_x, new_y), (new_w, new_h));
     self.drag_start_x = new_x;
     self.drag_start_y = new_y;
   }
@@ -130,8 +130,7 @@ impl CanvasEditor {
       marker: Marker {
         pos: Vec2::new(0, 0),
         is_playing: false,
-        grid_h: 1,
-        grid_w: 1,
+        area: Rect::from_point((0, 0)),
         drag_start_y: 0,
         drag_start_x: 0,
       },
@@ -154,7 +153,6 @@ impl CanvasEditor {
   pub fn resize(&mut self, size: Vec2) {
     self.grid = Arc::new(Mutex::new(Matrix::new(size.x, size.y, '\0')));
     self.size = size;
-    // self.grid().set_rect(size.x, size.y, '\0');
   }
 
   fn grid(&self) -> Matrix<char> {
@@ -167,9 +165,7 @@ impl CanvasEditor {
 }
 
 fn draw(canvas: &CanvasEditor, printer: &Printer) {
-  // if canvas.size > Vec2::new(0, 0) {
   canvas.marker.print(printer, canvas);
-  // }
 }
 
 fn layout(canvas: &mut CanvasEditor, size: Vec2) {
@@ -185,11 +181,11 @@ fn take_focus(
 
 fn on_event(canvas: &mut CanvasEditor, event: Event) -> EventResult {
   match event {
+    Event::Refresh => EventResult::consumed(),
     Event::Key(Key::Left) => canvas.marker.set_move(Direction::Left, canvas.size),
     Event::Key(Key::Right) => canvas.marker.set_move(Direction::Right, canvas.size),
     Event::Key(Key::Up) => canvas.marker.set_move(Direction::Up, canvas.size),
     Event::Key(Key::Down) => canvas.marker.set_move(Direction::Down, canvas.size),
-    Event::Refresh => EventResult::consumed(),
     Event::Mouse {
       offset,
       position,
@@ -200,8 +196,8 @@ fn on_event(canvas: &mut CanvasEditor, event: Event) -> EventResult {
 
       let pos_x = canvas.marker.pos.x;
       let pos_y = canvas.marker.pos.y;
-      let grid_w = canvas.marker.grid_w;
-      let grid_h = canvas.marker.grid_h;
+      let w = canvas.marker.area.width();
+      let h = canvas.marker.area.height();
 
       EventResult::Consumed(Some(Callback::from_fn(move |siv| {
         siv.call_on_name(config::pos_status_unit_view, move |view: &mut TextView| {
@@ -209,14 +205,14 @@ fn on_event(canvas: &mut CanvasEditor, event: Event) -> EventResult {
         });
 
         siv.call_on_name(config::len_status_unit_view, move |view: &mut TextView| {
-          view.set_content(utils::build_len_status_str(grid_w, grid_h));
+          view.set_content(utils::build_len_status_str(w, h));
         });
       })))
     }
     Event::Mouse {
       offset,
       position,
-      event: MouseEvent::Hold(_),
+      event: MouseEvent::Hold(MouseButton::Left),
     } => {
       // TODO: not sure why these (`MouseEvent::Hold`) sometimes being called twice (bug?) !?
       // need more investigate on this
@@ -224,12 +220,12 @@ fn on_event(canvas: &mut CanvasEditor, event: Event) -> EventResult {
       let pos_x = position.x.abs_diff(1);
       let pos_y = position.y.abs_diff(offset.y);
       canvas.marker.set_grid_area((pos_x, pos_y).into());
-      let grid_w = canvas.marker.grid_w;
-      let grid_h = canvas.marker.grid_h;
+      let w = canvas.marker.area.width();
+      let h = canvas.marker.area.height();
 
       EventResult::Consumed(Some(Callback::from_fn(move |siv| {
         siv.call_on_name(config::len_status_unit_view, move |view: &mut TextView| {
-          view.set_content(utils::build_len_status_str(grid_w, grid_h));
+          view.set_content(utils::build_len_status_str(w, h));
         });
       })))
     }
