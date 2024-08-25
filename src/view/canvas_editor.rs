@@ -218,6 +218,9 @@ fn on_event(canvas: &mut CanvasEditor, event: Event) -> EventResult {
       position,
       event: MouseEvent::Hold(_),
     } => {
+      // TODO: not sure why these (`MouseEvent::Hold`) sometimes being called twice (bug?) !?
+      // need more investigate on this
+
       let pos_x = position.x.abs_diff(1);
       let pos_y = position.y.abs_diff(offset.y);
       canvas.marker.set_grid_area((pos_x, pos_y).into());

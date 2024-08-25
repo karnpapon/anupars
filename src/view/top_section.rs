@@ -33,7 +33,7 @@ impl TopSection {
 
   pub fn build(current_data: &mut AnuData) -> FocusTracker<NamedView<Dialog>> {
     let regex_input_unit_view = EditView::new()
-      .content(current_data.string.clone())
+      .content(current_data.input_regex.clone())
       .style(Style::highlight_inactive())
       .on_edit(input_edit)
       .on_submit(input_submit)

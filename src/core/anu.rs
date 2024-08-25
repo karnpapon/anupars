@@ -13,8 +13,6 @@ use crate::view::{
 #[derive(Clone, Default)]
 pub struct AnuData {
   pub boolean: bool,
-  pub string: String,
-  pub number: usize,
   pub mode_state: RadioGroup<bool>,
   pub flag_state: RadioGroup<bool>,
   pub input_regex: String,
