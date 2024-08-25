@@ -58,7 +58,7 @@ impl Printable for char {
   fn display_char(&self, pos: cursive::XY<usize>) -> char {
     match *self {
       '\0' => match self.should_rest(pos) {
-        true => '+',
+        true => ':',
         false => '.',
       },
       _ => *self,

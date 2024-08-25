@@ -42,7 +42,7 @@ impl CanvasBase {
   pub fn resize(&mut self, size: Vec2) {
     self.grid = Arc::new(Mutex::new(Matrix::new(size.x, size.y, '\0')));
     self.size = size;
-    self.grid().set_rect(size.x, size.y, '\0');
+    // self.grid().set_rect(size.x, size.y, '\0');
   }
 
   pub fn update_text_contents(&mut self, contents: &str) {

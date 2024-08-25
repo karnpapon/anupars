@@ -154,7 +154,7 @@ impl CanvasEditor {
   pub fn resize(&mut self, size: Vec2) {
     self.grid = Arc::new(Mutex::new(Matrix::new(size.x, size.y, '\0')));
     self.size = size;
-    self.grid().set_rect(size.x, size.y, '\0');
+    // self.grid().set_rect(size.x, size.y, '\0');
   }
 
   fn grid(&self) -> Matrix<char> {
@@ -167,9 +167,9 @@ impl CanvasEditor {
 }
 
 fn draw(canvas: &CanvasEditor, printer: &Printer) {
-  if canvas.size > Vec2::new(0, 0) {
-    canvas.marker.print(printer, canvas);
-  }
+  // if canvas.size > Vec2::new(0, 0) {
+  canvas.marker.print(printer, canvas);
+  // }
 }
 
 fn layout(canvas: &mut CanvasEditor, size: Vec2) {
