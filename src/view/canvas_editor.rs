@@ -153,7 +153,7 @@ impl CanvasEditor {
   }
 
   pub fn get(&self, x: usize, y: usize) -> char {
-    self.grid().get(x, y)
+    *self.grid().get(x, y).unwrap_or(&'.')
   }
 }
 

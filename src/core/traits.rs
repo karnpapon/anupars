@@ -6,7 +6,7 @@ use cursive::{
 
 use super::config;
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct Matrix<T> {
   pub data: Vec<T>,
   pub width: usize,
@@ -26,8 +26,8 @@ impl<T: Copy> Matrix<T> {
     }
   }
 
-  pub fn get(&self, x: usize, y: usize) -> T {
-    self.data[x + y * self.width]
+  pub fn get(&self, x: usize, y: usize) -> Option<&T> {
+    self.data.get(x + y * self.width)
   }
 
   pub fn set(&mut self, x: usize, y: usize, item: T) {
@@ -73,7 +73,11 @@ impl<T: Printable + Copy> Matrix<T> {
         printer.print_styled(
           (y, x),
           &SpannedString::styled(
-            self.get(y, x).display_char((x, y).into()).to_string(),
+            self
+              .get(y, x)
+              .unwrap()
+              .display_char((x, y).into())
+              .to_string(),
             Style::from_color_style(ColorStyle::front(ColorType::rgb(100, 100, 100))),
           ),
         );
