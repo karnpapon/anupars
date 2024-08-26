@@ -17,13 +17,13 @@ impl Default for MiddleSection {
   }
 }
 
-impl View for MiddleSection {
-  fn draw(&self, _: &Printer) {}
+// impl View for MiddleSection {
+//   fn draw(&self, _: &Printer) {}
 
-  fn on_event(&mut self, _: Event) -> EventResult {
-    EventResult::Consumed(None)
-  }
-}
+//   fn on_event(&mut self, _: Event) -> EventResult {
+//     EventResult::Consumed(None)
+//   }
+// }
 
 impl MiddleSection {
   pub fn new() -> Self {

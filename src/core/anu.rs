@@ -2,7 +2,7 @@ use cursive::{
   event::{Event, EventResult},
   view::{Nameable, Resizable},
   views::{DummyView, LinearLayout, NamedView, RadioGroup},
-  Printer, View,
+  Printer, Vec2, View,
 };
 
 use super::config;
@@ -27,11 +27,17 @@ impl Default for Anu {
   }
 }
 
-impl View for Anu {
-  fn draw(&self, _: &Printer) {}
+impl cursive::view::View for Anu {
+  fn draw(&self, _: &Printer) {
+    println!(" Anu draw()")
+  }
 
   fn on_event(&mut self, _: Event) -> EventResult {
     EventResult::Consumed(None)
+  }
+
+  fn layout(&mut self, size: Vec2) {
+    println!("layout Anu = {:?}", size);
   }
 }
 

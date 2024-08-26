@@ -33,9 +33,9 @@ impl Default for Menubar {
   }
 }
 
-impl View for Menubar {
-  fn draw(&self, _: &Printer) {}
-}
+// impl View for Menubar {
+//   fn draw(&self, _: &Printer) {}
+// }
 
 impl Menubar {
   pub fn new() -> Self {

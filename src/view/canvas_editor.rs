@@ -23,7 +23,7 @@ pub struct CanvasEditor {
   pub size: Vec2,
   pub marker: Marker,
   pub grid: Arc<Mutex<Matrix<char>>>,
-  text_contents: Option<String>,
+  // text_contents: Option<String>,
 }
 
 #[derive(Clone)]
@@ -136,7 +136,7 @@ impl CanvasEditor {
         drag_start_x: 0,
       },
       grid: Arc::new(Mutex::new(Matrix::new(0, 0, '\0'))),
-      text_contents: None,
+      // text_contents: None,
     }
   }
 

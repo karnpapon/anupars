@@ -6,7 +6,7 @@ use cursive::{
 
 use super::config;
 
-#[derive(Clone, Default)]
+#[derive(Clone, Default, Debug)]
 pub struct Matrix<T> {
   pub data: Vec<T>,
   pub width: usize,
@@ -31,7 +31,7 @@ impl<T: Copy> Matrix<T> {
   }
 
   pub fn set(&mut self, x: usize, y: usize, item: T) {
-    self.data[x + y * self.width] = item;
+    self.data[x + y * self.height] = item;
   }
 
   pub fn set_rect(&mut self, width: usize, height: usize, item: T) {

@@ -18,13 +18,13 @@ impl Default for TopSection {
   }
 }
 
-impl View for TopSection {
-  fn draw(&self, _: &Printer) {}
+// impl View for TopSection {
+//   fn draw(&self, _: &Printer) {}
 
-  fn on_event(&mut self, _: Event) -> EventResult {
-    EventResult::Consumed(None)
-  }
-}
+//   fn on_event(&mut self, _: Event) -> EventResult {
+//     EventResult::Consumed(None)
+//   }
+// }
 
 impl TopSection {
   pub fn new() -> Self {
