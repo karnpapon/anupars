@@ -22,7 +22,7 @@ use crate::core::{
 pub struct CanvasEditor {
   size: Vec2,
   marker: Marker,
-  grid: Arc<Mutex<Matrix<char>>>,
+  grid: Matrix<char>,
 }
 
 #[derive(Clone)]
@@ -132,7 +132,7 @@ impl CanvasEditor {
         drag_start_y: 0,
         drag_start_x: 0,
       },
-      grid: Arc::new(Mutex::new(Matrix::new(0, 0, '\0'))),
+      grid: Matrix::new(0, 0, '\0'),
       // text_contents: None,
     }
   }
@@ -149,16 +149,12 @@ impl CanvasEditor {
   }
 
   pub fn resize(&mut self, size: Vec2) {
-    self.grid = Arc::new(Mutex::new(Matrix::new(size.x, size.y, '\0')));
+    self.grid = Matrix::new(size.x, size.y, '\0');
     self.size = size;
   }
 
-  fn grid(&self) -> Matrix<char> {
-    self.grid.lock().unwrap().clone()
-  }
-
   pub fn get(&self, x: usize, y: usize) -> char {
-    *self.grid().get(x, y).unwrap_or(&'.')
+    *self.grid.get(x, y).unwrap_or(&'.')
   }
 }
 
