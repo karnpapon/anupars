@@ -1,8 +1,4 @@
-use cursive::{
-  event::{Event, EventResult},
-  views::{stack_view::Transparent, FocusTracker, StackView},
-  Printer, Vec2, View,
-};
+use cursive::views::{stack_view::Transparent, FocusTracker, StackView};
 
 use super::{canvas_base::CanvasBase, canvas_editor::CanvasEditor};
 
@@ -11,18 +7,6 @@ pub struct CanvasSection {}
 impl Default for CanvasSection {
   fn default() -> Self {
     Self::new()
-  }
-}
-
-impl View for CanvasSection {
-  fn draw(&self, _: &Printer) {}
-
-  fn on_event(&mut self, _: Event) -> EventResult {
-    EventResult::Consumed(None)
-  }
-
-  fn layout(&mut self, size: Vec2) {
-    println!("seizeeeeeeeee={:?}", size);
   }
 }
 
