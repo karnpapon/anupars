@@ -1,7 +1,7 @@
 mod core;
 mod view;
 
-use core::anu::{Anu, AnuData};
+use core::anu::Anu;
 use core::{config, utils};
 use view::menubar::Menubar;
 
@@ -51,14 +51,14 @@ fn main() {
   siv.set_autohide_menu(false);
   siv.set_autorefresh(true);
   siv.set_user_data(Menubar::default());
-  siv.set_user_data(AnuData::default());
-  let mut current_data = siv
-    .with_user_data(|controller_data: &mut AnuData| controller_data.clone())
+  siv.set_user_data(Anu::default());
+  let current_data = siv
+    .with_user_data(|controller_data: &mut Anu| controller_data.clone())
     .unwrap();
 
   init_default_style(&mut siv);
 
-  let main_views = anu.build(&mut current_data);
+  let main_views = anu.build();
 
   siv
     .menubar()

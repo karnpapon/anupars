@@ -5,12 +5,18 @@ use cursive::{
   utils::span::SpannedString,
   view::{Nameable, Resizable},
   views::{Dialog, EditView, FocusTracker, LinearLayout, ListView, NamedView, TextView},
-  Cursive, Printer, View, With,
+  Cursive, Printer, Vec2, View, With,
 };
 
-use crate::core::{anu::AnuData, config};
+use crate::core::{anu::Anu, config, utils};
 
-pub struct TopSection {}
+#[derive(Clone)]
+pub struct TopSection {
+  bpm: usize,
+  ratio: (usize, usize),
+  pos: Vec2,
+  len: (usize, usize),
+}
 
 impl Default for TopSection {
   fn default() -> Self {
@@ -18,22 +24,19 @@ impl Default for TopSection {
   }
 }
 
-// impl View for TopSection {
-//   fn draw(&self, _: &Printer) {}
-
-//   fn on_event(&mut self, _: Event) -> EventResult {
-//     EventResult::Consumed(None)
-//   }
-// }
-
 impl TopSection {
   pub fn new() -> Self {
-    TopSection {}
+    TopSection {
+      bpm: 120,
+      ratio: (1, 16),
+      pos: Vec2::zero(),
+      len: (1, 1),
+    }
   }
 
-  pub fn build(current_data: &mut AnuData) -> FocusTracker<NamedView<Dialog>> {
+  pub fn build(app: &mut Anu) -> FocusTracker<NamedView<Dialog>> {
     let regex_input_unit_view = EditView::new()
-      .content(current_data.input_regex.clone())
+      .content(app.input_regex.clone())
       .style(Style::highlight_inactive())
       .on_edit(input_edit)
       .on_submit(input_submit)
@@ -41,32 +44,33 @@ impl TopSection {
       .fixed_width(25);
 
     let flag_view = LinearLayout::horizontal()
-      .child(current_data.flag_state.button(true, "g"))
-      .child(current_data.flag_state.button(false, "i"))
-      .child(current_data.flag_state.button(false, "m"))
-      .child(current_data.flag_state.button(false, "u"))
-      .child(current_data.flag_state.button(false, "s"))
-      .child(current_data.flag_state.button(false, "y"))
+      .child(app.flag_state.button(true, "g"))
+      .child(app.flag_state.button(false, "i"))
+      .child(app.flag_state.button(false, "m"))
+      .child(app.flag_state.button(false, "u"))
+      .child(app.flag_state.button(false, "s"))
+      .child(app.flag_state.button(false, "y"))
       .with(|layout| {
-        if current_data.boolean {
+        if app.boolean {
           layout.set_focus_index(1).unwrap();
         }
       });
 
-    let mode_view =
-      LinearLayout::horizontal()
-        .child(current_data.mode_state.button(false, "Realtime"))
-        .child(current_data.mode_state.button(true, "True").with_if(
-          current_data.boolean,
-          |button| {
+    let mode_view = LinearLayout::horizontal()
+      .child(app.mode_state.button(false, "Realtime"))
+      .child(
+        app
+          .mode_state
+          .button(true, "True")
+          .with_if(app.boolean, |button| {
             button.select();
-          },
-        ))
-        .with(|layout| {
-          if current_data.boolean {
-            layout.set_focus_index(1).unwrap();
-          }
-        });
+          }),
+      )
+      .with(|layout| {
+        if app.boolean {
+          layout.set_focus_index(1).unwrap();
+        }
+      });
 
     let input_status_unit_view = TextView::new("-")
       .with_name(config::input_status_unit_view)
@@ -82,19 +86,23 @@ impl TopSection {
     let status_controller_section_view = ListView::new()
       .child(
         "BPM: ",
-        TextView::new("-").with_name(config::bpm_status_unit_view),
+        TextView::new(utils::build_bpm_status_str(app.top_section.bpm))
+          .with_name(config::bpm_status_unit_view),
       )
       .child(
         "RTO: ",
-        TextView::new("-").with_name(config::ratio_status_unit_view),
+        TextView::new(utils::build_ratio_status_str(app.top_section.ratio))
+          .with_name(config::ratio_status_unit_view),
       )
       .child(
         "LEN: ",
-        TextView::new("-").with_name(config::len_status_unit_view),
+        TextView::new(utils::build_len_status_str(app.top_section.len))
+          .with_name(config::len_status_unit_view),
       )
       .child(
         "POS: ",
-        TextView::new("-").with_name(config::pos_status_unit_view),
+        TextView::new(utils::build_pos_status_str(app.top_section.pos))
+          .with_name(config::pos_status_unit_view),
       )
       .full_width();
 
