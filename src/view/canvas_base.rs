@@ -5,10 +5,7 @@ use cursive::{
   views::{Canvas, NamedView, ResizedView},
   Printer, Vec2,
 };
-use std::{
-  sync::{Arc, Mutex},
-  usize,
-};
+use std::usize;
 
 use crate::core::{config, traits::Matrix};
 

@@ -1,7 +1,4 @@
-use std::{
-  sync::{Arc, Mutex},
-  usize,
-};
+use std::usize;
 
 use cursive::{
   event::{Callback, Event, EventResult, Key, MouseButton, MouseEvent},
@@ -17,8 +14,6 @@ use crate::core::{
   traits::{Matrix, Printable},
   utils,
 };
-
-use super::canvas_base::CanvasBase;
 
 #[derive(Clone)]
 pub struct CanvasEditor {
@@ -184,7 +179,7 @@ impl CanvasEditor {
   }
 
   pub fn get(&self, x: usize, y: usize) -> char {
-    *self.grid.get(x, y).unwrap_or(&'+')
+    *self.grid.get(x, y).unwrap_or(&'.')
   }
 }
 
