@@ -18,11 +18,14 @@ use crate::core::{
   utils,
 };
 
+use super::canvas_base::CanvasBase;
+
 #[derive(Clone)]
 pub struct CanvasEditor {
   size: Vec2,
   marker: Marker,
   grid: Matrix<char>,
+  text_contents: Option<String>,
 }
 
 #[derive(Clone)]
@@ -133,7 +136,7 @@ impl CanvasEditor {
         drag_start_x: 0,
       },
       grid: Matrix::new(0, 0, '\0'),
-      // text_contents: None,
+      text_contents: None,
     }
   }
 
@@ -148,13 +151,40 @@ impl CanvasEditor {
       .full_width()
   }
 
+  pub fn update_text_contents(&mut self, contents: &str) {
+    self.text_contents = Some(String::from(contents));
+  }
+
+  pub fn update_grid_src(&mut self) {
+    if self.text_contents.as_ref().is_none() {
+      return;
+    };
+
+    let rows: usize = self.grid.width;
+    let cols: usize = self.grid.height;
+
+    for row in 0..rows {
+      for col in 0..cols {
+        if let Some(char) = self
+          .text_contents
+          .as_ref()
+          .unwrap()
+          .chars()
+          .nth(col + (row * cols))
+        {
+          self.grid.set(col, row, char);
+        }
+      }
+    }
+  }
+
   pub fn resize(&mut self, size: Vec2) {
     self.grid = Matrix::new(size.x, size.y, '\0');
     self.size = size;
   }
 
   pub fn get(&self, x: usize, y: usize) -> char {
-    *self.grid.get(x, y).unwrap_or(&'.')
+    *self.grid.get(x, y).unwrap_or(&'+')
   }
 }
 
@@ -163,7 +193,9 @@ fn draw(canvas: &CanvasEditor, printer: &Printer) {
 }
 
 fn layout(canvas: &mut CanvasEditor, size: Vec2) {
-  canvas.resize(size)
+  if canvas.size == Vec2::ZERO {
+    canvas.resize(size)
+  }
 }
 
 fn take_focus(

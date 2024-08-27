@@ -18,7 +18,7 @@ use cursive::{
   Cursive, Printer, View, With,
 };
 
-use super::canvas_base::CanvasBase;
+use super::{canvas_base::CanvasBase, canvas_editor::CanvasEditor};
 use crate::core::{config, utils};
 
 #[derive(Clone, Copy)]
@@ -172,7 +172,17 @@ fn set_selected_contents(siv: &mut Cursive, file: &PathBuf) {
     siv
       .call_on_name(
         config::canvas_base_section_view,
-        move |c: &mut Canvas<CanvasBase>| {
+        |c: &mut Canvas<CanvasBase>| {
+          c.state_mut().update_text_contents(&contents);
+          c.state_mut().update_grid_src();
+        },
+      )
+      .unwrap();
+
+    siv
+      .call_on_name(
+        config::canvas_editor_section_view,
+        move |c: &mut Canvas<CanvasEditor>| {
           c.state_mut().update_text_contents(&contents);
           c.state_mut().update_grid_src();
         },
