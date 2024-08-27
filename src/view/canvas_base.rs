@@ -16,22 +16,6 @@ pub struct CanvasBase {
   text_contents: Option<String>,
 }
 
-impl cursive::view::View for CanvasBase {
-  fn draw(&self, printer: &Printer) {
-    if self.size > Vec2::new(0, 0) {
-      self.grid.print(printer);
-    }
-  }
-
-  fn on_event(&mut self, _: Event) -> EventResult {
-    EventResult::Consumed(None)
-  }
-
-  fn layout(&mut self, size: Vec2) {
-    self.resize(size)
-  }
-}
-
 impl CanvasBase {
   pub fn new() -> CanvasBase {
     CanvasBase {

@@ -20,15 +20,13 @@ use crate::core::{
 
 #[derive(Clone)]
 pub struct CanvasEditor {
-  pub size: Vec2,
-  pub marker: Marker,
-  pub grid: Arc<Mutex<Matrix<char>>>,
-  // text_contents: Option<String>,
+  size: Vec2,
+  marker: Marker,
+  grid: Arc<Mutex<Matrix<char>>>,
 }
 
 #[derive(Clone)]
 pub struct Marker {
-  is_playing: bool,
   pos: Vec2,
   area: Rect,
   drag_start_x: usize,
@@ -83,7 +81,7 @@ impl Marker {
     )
       .into();
 
-    if !next_pos_bottom_right.fits_in_rect((0, 0), canvas_size) {
+    if !next_pos_bottom_right.fits_in_rect(Vec2::ZERO, canvas_size) {
       return EventResult::Ignored;
     }
 
@@ -127,11 +125,10 @@ impl Marker {
 impl CanvasEditor {
   pub fn new() -> CanvasEditor {
     CanvasEditor {
-      size: Vec2::new(0, 0),
+      size: Vec2::zero(),
       marker: Marker {
-        pos: Vec2::new(0, 0),
-        is_playing: false,
-        area: Rect::from_point((0, 0)),
+        pos: Vec2::zero(),
+        area: Rect::from_point(Vec2::zero()),
         drag_start_y: 0,
         drag_start_x: 0,
       },
