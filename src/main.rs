@@ -3,11 +3,12 @@ mod view;
 
 use core::anu::Anu;
 use core::{config, utils};
+use view::canvas_editor::CanvasEditor;
 use view::menubar::Menubar;
 
-use cursive::event::Key;
+use cursive::event::{Event, Key};
 use cursive::theme::{BorderStyle, Palette};
-use cursive::views::TextView;
+use cursive::views::{Canvas, TextView};
 use cursive::{Cursive, CursiveExt, With};
 
 pub fn init_default_style(siv: &mut Cursive) {
@@ -105,5 +106,18 @@ fn main() {
     s.select_menubar();
   });
 
+  siv.add_global_callback(Event::Char(' '), move |s| {
+    // s.select_menubar();
+    s.call_on_name(
+      config::canvas_editor_section_view,
+      |c: &mut Canvas<CanvasEditor>| {
+        let is_playing = c.state_mut().marker_mut().is_playing;
+        c.state_mut().set_playing(!is_playing)
+      },
+    )
+    .unwrap();
+  });
+
+  // anu.run_clock();
   siv.run();
 }

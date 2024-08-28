@@ -1,12 +1,27 @@
+use std::{
+  sync::mpsc::{channel, Sender},
+  thread::spawn,
+};
+
 use cursive::{
   view::{Nameable, Resizable},
   views::{DummyView, LinearLayout, NamedView, RadioGroup},
 };
 
-use super::config;
+use super::{
+  clock::{clock, metronome},
+  config,
+};
 use crate::view::{
   canvas_section::CanvasSection, middle_section::MiddleSection, top_section::TopSection,
 };
+
+#[derive(Clone, Copy, Debug)]
+pub enum Message {
+  Time(clock::Time),
+  Signature(clock::Signature),
+  Tempo(clock::Tempo),
+}
 
 #[derive(Clone, Default)]
 pub struct Anu {
@@ -30,6 +45,25 @@ impl Anu {
     }
   }
 
+  pub fn start(_metronome_tx: Sender<metronome::Message>) -> Sender<Message> {
+    let (tx, rx) = channel();
+
+    spawn(move || {
+      for interface_message in rx {
+        match interface_message {
+          Message::Time(time) => {
+            println!("time:{:?}", time)
+          }
+          _ => {
+            // do something
+          }
+        }
+      }
+    });
+
+    tx
+  }
+
   pub fn build(&mut self) -> NamedView<LinearLayout> {
     let top_section = TopSection::build(self);
     let middle_section = MiddleSection::build();
@@ -42,5 +76,10 @@ impl Anu {
       .child(padding_section)
       .child(canvas_section)
       .with_name(config::main_section_view)
+  }
+
+  pub fn run_clock(&self) {
+    let control = metronome::Metronome::new();
+    control.run();
   }
 }

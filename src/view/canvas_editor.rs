@@ -1,4 +1,4 @@
-use std::usize;
+use std::{time::Instant, usize};
 
 use cursive::{
   event::{Callback, Event, EventResult, Key, MouseButton, MouseEvent},
@@ -21,6 +21,7 @@ pub struct CanvasEditor {
   marker: Marker,
   grid: Matrix<char>,
   text_contents: Option<String>,
+  clock: u64,
 }
 
 #[derive(Clone)]
@@ -29,6 +30,9 @@ pub struct Marker {
   area: Rect,
   drag_start_x: usize,
   drag_start_y: usize,
+  pub is_playing: bool,
+  accum_secs: f64,
+  tick_num: usize,
 }
 
 enum Direction {
@@ -129,9 +133,13 @@ impl CanvasEditor {
         area: Rect::from_point(Vec2::zero()),
         drag_start_y: 0,
         drag_start_x: 0,
+        is_playing: false,
+        accum_secs: 0.0,
+        tick_num: 0,
       },
       grid: Matrix::new(0, 0, '\0'),
       text_contents: None,
+      clock: 0,
     }
   }
 
@@ -179,7 +187,28 @@ impl CanvasEditor {
   }
 
   pub fn get(&self, x: usize, y: usize) -> char {
+    if self.marker.pos.eq(&(x, y)) && self.marker.is_playing {
+      return '>';
+    }
     *self.grid.get(x, y).unwrap_or(&'.')
+  }
+
+  pub fn marker_mut(&mut self) -> &mut Marker {
+    &mut self.marker
+  }
+
+  pub fn set_playing(&mut self, playing: bool) {
+    if playing == self.marker.is_playing {
+      return;
+    }
+    if playing {
+      self.marker.is_playing = true;
+      self.clock = Instant::now().elapsed().as_secs();
+      self.marker.accum_secs = 60.0 / 120.0 / 4.0;
+      self.marker.accum_secs -= 0.0001;
+    } else {
+      self.marker.is_playing = false;
+    }
   }
 }
 
@@ -253,21 +282,3 @@ fn on_event(canvas: &mut CanvasEditor, event: Event) -> EventResult {
     _ => EventResult::Ignored,
   }
 }
-
-// ------------- (temp) helpers -------------------
-
-fn run<F>(f: F) -> impl Fn(&mut cursive::Cursive)
-where
-  F: Fn(&mut CanvasEditor),
-{
-  move |s| {
-    s.call_on_name(
-      config::canvas_editor_section_view,
-      |c: &mut Canvas<CanvasEditor>| {
-        f(c.state_mut());
-      },
-    );
-  }
-}
-
-// -----------------------------------------------
