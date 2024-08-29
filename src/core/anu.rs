@@ -5,7 +5,7 @@ use cursive::{
 // use std::sync::mpsc::{channel, Receiver, Sender};
 use std::{
   sync::mpsc::{channel, Receiver, Sender},
-  thread::spawn,
+  thread,
 };
 
 use super::{
@@ -21,9 +21,11 @@ pub enum Message {
   Time(clock::Time),
   Signature(clock::Signature),
   Tempo(clock::Tempo),
+  Start,
+  Pause,
 }
 
-#[derive(Clone, Default)]
+#[derive(Clone)]
 pub struct Anu {
   pub boolean: bool,
   pub mode_state: RadioGroup<bool>,

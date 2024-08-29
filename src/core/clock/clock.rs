@@ -1,10 +1,10 @@
+use super::metronome;
+use crossbeam_utils::sync::{Parker, Unparker};
 use num::integer::Integer;
 use num::rational::Ratio;
 use std::sync::mpsc::{channel, Sender, TryRecvError};
-use std::thread::{sleep, spawn};
+use std::thread::{self, sleep};
 use std::time::{Duration, Instant};
-
-use super::metronome;
 
 pub type Tick = Ratio<i64>;
 pub type Tempo = Ratio<i64>;
@@ -236,6 +236,8 @@ pub enum Message {
   Tempo(Tempo),
   NudgeTempo(NudgeTempo),
   Reset,
+  Pause,
+  Start,
   Signature(Signature),
   Tap,
 }
@@ -261,6 +263,9 @@ impl Clock {
 
     let (tx, rx) = channel();
 
+    let p: Parker = Parker::new();
+    let u: Unparker = p.unparker().clone();
+
     metronome_tx
       .send(metronome::Message::Signature(Signature::default()))
       .unwrap();
@@ -268,7 +273,8 @@ impl Clock {
       .send(metronome::Message::Tempo(clock.tempo))
       .unwrap();
 
-    spawn(move || {
+    // p.park();
+    thread::spawn(move || {
       loop {
         // wait a tick
         #[allow(unused_variables)]
@@ -279,9 +285,9 @@ impl Clock {
         while !is_empty {
           let message_result = rx.try_recv();
           match message_result {
-            Ok(Message::Reset) => {
-              clock.reset();
-            }
+            Ok(Message::Reset) => clock.reset(),
+            Ok(Message::Start) => u.unpark(),
+            Ok(Message::Pause) => p.park(),
             Ok(Message::Signature(signature)) => {
               clock.set_signature(signature);
             }
@@ -320,6 +326,8 @@ impl Clock {
 
     tx
   }
+
+  pub fn pause(&mut self) {}
 
   pub fn reset(&mut self) {
     self.time = Time::new(self.signature);

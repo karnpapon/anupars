@@ -31,8 +31,6 @@ pub struct Marker {
   drag_start_x: usize,
   drag_start_y: usize,
   pub is_playing: bool,
-  accum_secs: f64,
-  tick_num: usize,
 }
 
 enum Direction {
@@ -133,9 +131,7 @@ impl CanvasEditor {
         area: Rect::from_point(Vec2::zero()),
         drag_start_y: 0,
         drag_start_x: 0,
-        is_playing: false,
-        accum_secs: 0.0,
-        tick_num: 0,
+        is_playing: true,
       },
       grid: Matrix::new(0, 0, '\0'),
       text_contents: None,
@@ -197,18 +193,9 @@ impl CanvasEditor {
     &mut self.marker
   }
 
-  pub fn set_playing(&mut self, playing: bool) {
-    if playing == self.marker.is_playing {
-      return;
-    }
-    if playing {
-      self.marker.is_playing = true;
-      self.clock = Instant::now().elapsed().as_secs();
-      self.marker.accum_secs = 60.0 / 120.0 / 4.0;
-      self.marker.accum_secs -= 0.0001;
-    } else {
-      self.marker.is_playing = false;
-    }
+  pub fn set_playing(&mut self) -> bool {
+    self.marker.is_playing = !self.marker.is_playing;
+    self.marker.is_playing
   }
 }
 

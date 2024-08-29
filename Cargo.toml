@@ -17,6 +17,7 @@ cfonts = "1.2.0"
 unicode-width = "0.1.13"
 rand = "0.8"
 num = "0.4.3"
+crossbeam-utils = "0.8"
 
 [profile.release]
 panic = "abort"   # Strip expensive panic clean-up logic

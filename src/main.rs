@@ -44,13 +44,14 @@ fn main() {
   let menu_app = Menubar::build_menu_app();
   let menu_help = Menubar::build_menu_help();
   let mut anu: Anu = Anu::new();
-
+  let metronome = metronome::Metronome::new();
+  let m_tx = metronome.tx.clone();
   let cb_sink = siv.cb_sink().clone();
 
   siv.set_autohide_menu(false);
   siv.set_autorefresh(true);
   siv.set_user_data(Menubar::default());
-  siv.set_user_data(Anu::default());
+  siv.set_user_data(Anu::new());
   let current_data = siv
     .with_user_data(|controller_data: &mut Anu| controller_data.clone())
     .unwrap();
@@ -84,16 +85,15 @@ fn main() {
   siv.add_global_callback(Event::Char(' '), move |s| {
     s.call_on_name(
       config::canvas_editor_section_view,
-      |c: &mut Canvas<CanvasEditor>| {
-        let is_playing = c.state_mut().marker_mut().is_playing;
-        c.state_mut().set_playing(!is_playing)
+      |c: &mut Canvas<CanvasEditor>| match c.state_mut().set_playing() {
+        true => m_tx.send(metronome::Message::Start).unwrap(),
+        false => m_tx.send(metronome::Message::Pause).unwrap(),
       },
     )
     .unwrap();
   });
 
   thread::spawn(move || {
-    let metronome = metronome::Metronome::new();
     metronome.run(cb_sink);
   });
 
