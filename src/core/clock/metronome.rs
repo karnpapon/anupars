@@ -1,6 +1,12 @@
 use std::sync::mpsc::{channel, Receiver, Sender};
 
-use crate::core::anu::{self, Anu};
+use cursive::views::TextView;
+use num::ToPrimitive;
+
+use crate::core::{
+  anu::{self, Anu},
+  config, utils,
+};
 
 use super::clock;
 // use super::thread;
@@ -28,8 +34,8 @@ impl Metronome {
     Self { tx, rx }
   }
 
-  pub fn run(self) {
-    let terminal_tx = anu::Anu::start(self.tx.clone());
+  pub fn run(self, cb_sink: cursive::CbSink) {
+    // let terminal_tx = anu::Anu::start(self.tx.clone());
     let clock_tx = clock::Clock::start(self.tx.clone());
 
     for control_message in self.rx {
@@ -58,9 +64,20 @@ impl Metronome {
           clock_tx.send(clock::Message::Tempo(tempo)).unwrap();
           // terminal_tx.send(thread::Message::Tempo(tempo)).unwrap();
         }
-        // sent by clock
         Message::Time(time) => {
-          terminal_tx.send(anu::Message::Time(time)).unwrap();
+          cb_sink
+            .send(Box::new(move |s| {
+              let num = 1;
+              let denom = 8;
+              let tick = time.beats_since_bar();
+              let mut tick_str = String::from("-").repeat(denom);
+              utils::replace_nth_char_ascii(&mut tick_str, tick.to_usize().unwrap(), '|');
+              s.call_on_name(config::ratio_status_unit_view, |c: &mut TextView| {
+                c.set_content(utils::build_ratio_status_str((num, denom), &tick_str))
+              })
+              .unwrap();
+            }))
+            .unwrap();
         }
       }
     }

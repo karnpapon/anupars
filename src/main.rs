@@ -2,7 +2,9 @@ mod core;
 mod view;
 
 use core::anu::Anu;
+use core::clock::metronome;
 use core::{config, utils};
+use std::thread;
 use view::canvas_editor::CanvasEditor;
 use view::menubar::Menubar;
 
@@ -42,12 +44,8 @@ fn main() {
   let menu_app = Menubar::build_menu_app();
   let menu_help = Menubar::build_menu_help();
   let mut anu: Anu = Anu::new();
-  // let mut menubar = Menubar::new();
-  // let mut doc_view = Menubar::build_doc_view();
-  // let mut file_explorer_view = Menubar::build_file_explorer_view();
 
-  // doc_view.get_mut().hide();
-  // file_explorer_view.get_mut().hide();
+  let cb_sink = siv.cb_sink().clone();
 
   siv.set_autohide_menu(false);
   siv.set_autorefresh(true);
@@ -69,24 +67,7 @@ fn main() {
     .add_leaf("Quit", |s| s.quit());
 
   siv.add_layer(main_views);
-  // siv.add_layer(doc_view);
-  // siv.add_layer(file_explorer_view);
 
-  // siv.add_global_callback(Event::Char('h'), move |s| {
-  //   menubar::Menubar::show_doc_view(s, menubar.toggle_show_doc())
-  // });
-  // siv.add_global_callback(Event::CtrlChar('o'), move |s| {
-  //   menubar::Menubar::show_file_explorer_view(s, menubar.toggle_show_file_explorer())
-  // });
-  // siv.add_global_callback(Key::F2, move |s| {
-  //   if let Some(mut res) = s.find_name::<LinearLayout>("main_view") {
-  //     match res.set_focus_index(2) {
-  //       Ok(res) => println!("ok"),
-  //       Err(e) => println!("error {:?}", e),
-  //     }
-  //     // res.process(s);
-  //   };
-  // });
   siv.add_global_callback(Key::Esc, move |s| {
     if !current_data.show_regex_display {
       let mut regex_display_unit_view = s
@@ -97,17 +78,10 @@ fn main() {
         .set_content(utils::build_doc_string(&config::APP_WELCOME_MSG));
     }
 
-    // TODO: handle s.pop_layer() eg. when dismiss btn is clicked.
-    // menubar::Menubar::show_doc_view(s, false);
-    // menubar::Menubar::show_file_explorer_view(s, false);
-
-    // menubar.reset_toggle();
-
     s.select_menubar();
   });
 
   siv.add_global_callback(Event::Char(' '), move |s| {
-    // s.select_menubar();
     s.call_on_name(
       config::canvas_editor_section_view,
       |c: &mut Canvas<CanvasEditor>| {
@@ -118,6 +92,10 @@ fn main() {
     .unwrap();
   });
 
-  // anu.run_clock();
+  thread::spawn(move || {
+    let metronome = metronome::Metronome::new();
+    metronome.run(cb_sink);
+  });
+
   siv.run();
 }

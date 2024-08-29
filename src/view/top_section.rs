@@ -13,7 +13,7 @@ use crate::core::{anu::Anu, config, utils};
 #[derive(Clone)]
 pub struct TopSection {
   bpm: usize,
-  ratio: (usize, usize),
+  ratio: (i64, usize),
   pos: Vec2,
   len: (usize, usize),
 }
@@ -91,7 +91,7 @@ impl TopSection {
       )
       .child(
         "RTO: ",
-        TextView::new(utils::build_ratio_status_str(app.top_section.ratio))
+        TextView::new(utils::build_ratio_status_str(app.top_section.ratio, ""))
           .with_name(config::ratio_status_unit_view),
       )
       .child(
