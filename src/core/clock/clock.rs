@@ -1,5 +1,5 @@
 use super::metronome;
-use crossbeam_utils::sync::{Parker, Unparker};
+// use crossbeam_utils::sync::{Parker, Unparker};
 use num::integer::Integer;
 use num::rational::Ratio;
 use std::sync::mpsc::{channel, Sender, TryRecvError};

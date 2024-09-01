@@ -1,10 +1,13 @@
 use std::sync::mpsc::{channel, Receiver, Sender};
 
-use crossbeam_utils::sync::{Parker, Unparker};
-use cursive::views::TextView;
+// use crossbeam_utils::sync::{Parker, Unparker};
+use cursive::views::{Canvas, TextView};
 use num::ToPrimitive;
 
-use crate::core::{config, utils};
+use crate::{
+  core::{config, utils},
+  view::canvas_editor::CanvasEditor,
+};
 
 use super::clock;
 // use super::thread;
@@ -68,12 +71,24 @@ impl Metronome {
             .send(Box::new(move |s| {
               let num = 1;
               let denom = 8;
-              let tick = time.beats_since_bar();
+              let beats_since_bar = time.beats_since_bar();
+              let tick = time.ticks().to_usize().unwrap();
               let mut tick_str = String::from("-").repeat(denom);
-              utils::replace_nth_char_ascii(&mut tick_str, tick.to_usize().unwrap(), '|');
+              utils::replace_nth_char_ascii(
+                &mut tick_str,
+                beats_since_bar.to_usize().unwrap(),
+                '|',
+              );
               s.call_on_name(config::ratio_status_unit_view, |c: &mut TextView| {
                 c.set_content(utils::build_ratio_status_str((num, denom), &tick_str))
               })
+              .unwrap();
+              s.call_on_name(
+                config::canvas_editor_section_view,
+                |c: &mut Canvas<CanvasEditor>| {
+                  c.state_mut().marker_mut().set_actived_pos(tick);
+                },
+              )
               .unwrap();
             }))
             .unwrap();

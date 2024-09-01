@@ -1,4 +1,4 @@
-use std::{time::Instant, usize};
+use std::{thread, time::Instant, usize};
 
 use cursive::{
   event::{Callback, Event, EventResult, Key, MouseButton, MouseEvent},
@@ -6,7 +6,7 @@ use cursive::{
   utils::span::SpannedString,
   view::{CannotFocus, Nameable, Resizable},
   views::{Canvas, NamedView, ResizedView, TextView},
-  Printer, Rect, Vec2, XY,
+  Cursive, Printer, Rect, Vec2, XY,
 };
 
 use crate::core::{
@@ -30,7 +30,8 @@ pub struct Marker {
   area: Rect,
   drag_start_x: usize,
   drag_start_y: usize,
-  pub is_playing: bool,
+  is_playing: bool,
+  actived_pos: Vec2,
 }
 
 enum Direction {
@@ -59,18 +60,40 @@ impl Marker {
       for y in 0..self.area.height() {
         let offset_x = self.pos.x + x;
         let offset_y = self.pos.y + y;
+
+        if self.is_head((offset_x, offset_y).into()) {
+          printer.print_styled(
+            (offset_x, offset_y),
+            &SpannedString::styled('>', Style::highlight()),
+          );
+          continue;
+        }
+
+        let (displayed_style, displayed_char) =
+          if self.is_actived_position((offset_x, offset_y).into()) {
+            (Style::none(), '*')
+          } else {
+            (
+              Style::highlight(),
+              editor
+                .get(offset_x, offset_y)
+                .display_char((offset_x, offset_y).into()),
+            )
+          };
+
         printer.print_styled(
           (offset_x, offset_y),
-          &SpannedString::styled(
-            editor
-              .get(offset_x, offset_y)
-              .display_char((offset_x, offset_y).into())
-              .to_string(),
-            Style::highlight(),
-          ),
+          &SpannedString::styled(displayed_char, displayed_style),
         );
       }
     }
+  }
+
+  fn is_head(&self, curr_pos: Vec2) -> bool {
+    self.pos.eq(&curr_pos)
+  }
+  fn is_actived_position(&self, curr_pos: Vec2) -> bool {
+    self.pos.saturating_add(self.actived_pos).eq(&curr_pos)
   }
 
   fn set_move(&mut self, direction: Direction, canvas_size: Vec2) -> EventResult {
@@ -120,6 +143,21 @@ impl Marker {
     self.drag_start_x = new_x;
     self.drag_start_y = new_y;
   }
+
+  pub fn set_actived_pos(&mut self, pos: usize) {
+    let prev_x = self.actived_pos.x;
+    self.actived_pos.x = pos % self.area.width();
+
+    if prev_x != 0 && self.actived_pos.x == 0 {
+      self.actived_pos.y += 1;
+      self.actived_pos.y %= self.area.height();
+    }
+    // crossbeam::scope(|scope| {
+    //   scope.spawn(|_| {
+    //   });
+    // })
+    // .unwrap();
+  }
 }
 
 impl CanvasEditor {
@@ -132,6 +170,7 @@ impl CanvasEditor {
         drag_start_y: 0,
         drag_start_x: 0,
         is_playing: false,
+        actived_pos: Vec2::zero(),
       },
       grid: Matrix::new(0, 0, '\0'),
       text_contents: None,
@@ -183,14 +222,24 @@ impl CanvasEditor {
   }
 
   pub fn get(&self, x: usize, y: usize) -> char {
-    if self.marker.pos.eq(&(x, y)) && self.marker.is_playing {
-      return '>';
+    if self.marker.is_playing
+      && self
+        .marker
+        .pos
+        .saturating_add(self.marker.actived_pos)
+        .eq(&(x, y))
+    {
+      return '*';
     }
     *self.grid.get(x, y).unwrap_or(&'.')
   }
 
   pub fn marker_mut(&mut self) -> &mut Marker {
     &mut self.marker
+  }
+
+  pub fn marker_area(&self) -> &Rect {
+    &self.marker.area
   }
 
   pub fn set_playing(&mut self) -> bool {
@@ -266,6 +315,16 @@ fn on_event(canvas: &mut CanvasEditor, event: Event) -> EventResult {
         });
       })))
     }
+    // Event::Mouse {
+    //   offset,
+    //   position,
+    //   event: MouseEvent::Release(_),
+    // } => {
+    //   let pos_x = position.x.abs_diff(1);
+    //   let pos_y = position.y.abs_diff(offset.y);
+    //   canvas.marker.set_grid_area((pos_x, pos_y).into());
+    //   EventResult::consumed()
+    // }
     _ => EventResult::Ignored,
   }
 }

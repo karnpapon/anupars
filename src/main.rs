@@ -4,7 +4,7 @@ mod view;
 use core::anu::Anu;
 use core::clock::metronome::{self, Metronome};
 use core::{config, utils};
-use crossbeam_utils::sync::Parker;
+// use crossbeam_utils::sync::Parker;
 use std::borrow::Borrow;
 use std::time::{Duration, Instant};
 // use crossbeam_utils::thread;
