@@ -131,7 +131,7 @@ impl CanvasEditor {
         area: Rect::from_point(Vec2::zero()),
         drag_start_y: 0,
         drag_start_x: 0,
-        is_playing: true,
+        is_playing: false,
       },
       grid: Matrix::new(0, 0, '\0'),
       text_contents: None,

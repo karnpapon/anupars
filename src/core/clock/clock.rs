@@ -236,8 +236,8 @@ pub enum Message {
   Tempo(Tempo),
   NudgeTempo(NudgeTempo),
   Reset,
-  Pause,
-  Start,
+  // Pause,
+  StartStop,
   Signature(Signature),
   Tap,
 }
@@ -258,55 +258,49 @@ impl Clock {
     }
   }
 
-  pub fn start(metronome_tx: Sender<metronome::Message>) -> Sender<Message> {
-    let mut clock = Self::new();
-
+  pub fn start(mut self, metronome_tx: Sender<metronome::Message>) -> Sender<Message> {
     let (tx, rx) = channel();
-
-    let p: Parker = Parker::new();
-    let u: Unparker = p.unparker().clone();
 
     metronome_tx
       .send(metronome::Message::Signature(Signature::default()))
       .unwrap();
     metronome_tx
-      .send(metronome::Message::Tempo(clock.tempo))
+      .send(metronome::Message::Tempo(self.tempo))
       .unwrap();
 
-    // p.park();
     thread::spawn(move || {
       loop {
         // wait a tick
         #[allow(unused_variables)]
-        let diff = clock.tick();
+        let diff = self.tick();
 
         // handle any incoming messages
         let mut is_empty = false;
         while !is_empty {
           let message_result = rx.try_recv();
           match message_result {
-            Ok(Message::Reset) => clock.reset(),
-            Ok(Message::Start) => u.unpark(),
-            Ok(Message::Pause) => p.park(),
+            Ok(Message::Reset) => self.reset(),
+            // Ok(Message::Start) => {}
+            Ok(Message::StartStop) => {}
             Ok(Message::Signature(signature)) => {
-              clock.set_signature(signature);
+              self.set_signature(signature);
             }
             Ok(Message::Tap) => {
-              if let Some(new_tempo) = clock.tap() {
+              if let Some(new_tempo) = self.tap() {
                 metronome_tx
                   .send(metronome::Message::Tempo(new_tempo))
                   .unwrap();
               }
             }
             Ok(Message::NudgeTempo(nudge)) => {
-              let old_tempo = clock.tempo;
+              let old_tempo = self.tempo;
               let new_tempo = old_tempo + nudge;
               metronome_tx
                 .send(metronome::Message::Tempo(new_tempo))
                 .unwrap();
             }
             Ok(Message::Tempo(tempo)) => {
-              clock.tempo = tempo;
+              self.tempo = tempo;
             }
             Err(TryRecvError::Empty) => {
               is_empty = true;
@@ -319,7 +313,7 @@ impl Clock {
 
         // send clock time
         metronome_tx
-          .send(metronome::Message::Time(clock.time()))
+          .send(metronome::Message::Time(self.time()))
           .unwrap();
       }
     });
@@ -327,7 +321,31 @@ impl Clock {
     tx
   }
 
-  pub fn pause(&mut self) {}
+  // fn restart_task(&mut self, metronome_tx: Sender<metronome::Message>) {
+  //   let (tx, rx) = channel();
+
+  //   metronome_tx
+  //     .send(metronome::Message::Signature(Signature::default()))
+  //     .unwrap();
+  //   metronome_tx
+  //     .send(metronome::Message::Tempo(self.tempo))
+  //     .unwrap();
+
+  //   // Cancel the current task and instantiate a new task with a fresh cancellation token
+  //   self.current_token.cancel();
+  //   self.current_token = CancellationToken::new();
+
+  //   // Clone the current state post previous user input from which to construct the new task.
+  //   let cloned_token = self.current_token.clone();
+
+  //   std::thread::sleep(Duration::from_millis(150));
+  //   let _ = tokio::spawn(async move {
+  //     tokio::select! {
+  //         _ = cloned_token.cancelled() => {}
+  //         _ =  Clock::start(tempo, db, ts)  => {}
+  //     }
+  //   });
+  // }
 
   pub fn reset(&mut self) {
     self.time = Time::new(self.signature);

@@ -1,24 +1,22 @@
 use std::sync::mpsc::{channel, Receiver, Sender};
 
+use crossbeam_utils::sync::{Parker, Unparker};
 use cursive::views::TextView;
 use num::ToPrimitive;
 
-use crate::core::{
-  anu::{self, Anu},
-  config, utils,
-};
+use crate::core::{config, utils};
 
 use super::clock;
 // use super::thread;
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub enum Message {
   Time(clock::Time),
   Signature(clock::Signature),
   Tempo(clock::Tempo),
   Reset,
-  Start,
-  Pause,
+  // Start,
+  StartStop,
   NudgeTempo(clock::NudgeTempo),
   Tap,
 }
@@ -37,25 +35,19 @@ impl Metronome {
   }
 
   pub fn run(self, cb_sink: cursive::CbSink) {
-    let clock_tx = clock::Clock::start(self.tx.clone());
+    let clock = clock::Clock::new();
+    let clock_tx = clock.start(self.tx.clone());
 
     for control_message in self.rx {
       match control_message {
-        // sent by interface
         Message::Reset => {
           clock_tx.send(clock::Message::Reset).unwrap();
         }
-        Message::Start => {
-          clock_tx.send(clock::Message::Start).unwrap();
-        }
-        Message::Pause => {
-          clock_tx.send(clock::Message::Pause).unwrap();
-        }
-        // sent by interface
+        // Message::Start => clock_tx.send(clock::Message::Start).unwrap(),
+        Message::StartStop => clock_tx.send(clock::Message::StartStop).unwrap(),
         Message::NudgeTempo(nudge) => {
           clock_tx.send(clock::Message::NudgeTempo(nudge)).unwrap();
         }
-        // sent by interface
         Message::Tap => {
           clock_tx.send(clock::Message::Tap).unwrap();
         }

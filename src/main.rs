@@ -2,8 +2,20 @@ mod core;
 mod view;
 
 use core::anu::Anu;
-use core::clock::metronome;
+use core::clock::metronome::{self, Metronome};
 use core::{config, utils};
+use crossbeam_utils::sync::Parker;
+use std::borrow::Borrow;
+use std::time::{Duration, Instant};
+// use crossbeam_utils::thread;
+use std::{
+  convert::Infallible,
+  sync::mpsc::{self, channel, Receiver, Sender, TryRecvError},
+  thread::JoinHandle,
+};
+
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use std::sync::{Arc, Condvar, Mutex};
 use std::thread;
 use view::canvas_editor::CanvasEditor;
 use view::menubar::Menubar;
@@ -12,6 +24,52 @@ use cursive::event::{Event, Key};
 use cursive::theme::{BorderStyle, Palette};
 use cursive::views::{Canvas, TextView};
 use cursive::{Cursive, CursiveExt, With};
+
+pub struct WorkerThread {
+  thread_active: Arc<AtomicU32>,
+}
+const PAUSED: u32 = 0;
+const ACTIVE: u32 = 1;
+impl WorkerThread {
+  pub fn toggle_thread(&self, should_be_active: bool) {
+    let is_currently_active =
+      self.thread_active.load(std::sync::atomic::Ordering::SeqCst) == ACTIVE;
+
+    if should_be_active && !is_currently_active {
+      self.thread_active.store(ACTIVE, Ordering::SeqCst);
+      atomic_wait::wake_all(&(*self.thread_active));
+    } else if !should_be_active && is_currently_active {
+      self.thread_active.store(PAUSED, Ordering::SeqCst);
+    }
+  }
+
+  pub fn spawn(cb_sink: cursive::CbSink) -> WorkerThread {
+    let thread_active_flag = Arc::new(AtomicU32::new(PAUSED));
+
+    {
+      let thread_active_flag = thread_active_flag.clone();
+      std::thread::spawn(move || {
+        // loop {
+        atomic_wait::wait(&thread_active_flag, PAUSED); // waits while the value is PAUSED (0)
+                                                        // println!("thread_active_flag:{:?}", thread_active_flag);
+
+        do_work(cb_sink.clone());
+
+        std::thread::sleep(std::time::Duration::from_secs(10));
+        // }
+      });
+    }
+
+    WorkerThread {
+      thread_active: thread_active_flag,
+    }
+  }
+}
+
+fn do_work(cb_sink: cursive::CbSink) {
+  let metronome = metronome::Metronome::new();
+  metronome.run(cb_sink);
+}
 
 pub fn init_default_style(siv: &mut Cursive) {
   siv.set_theme(cursive::theme::Theme {
@@ -44,9 +102,17 @@ fn main() {
   let menu_app = Menubar::build_menu_app();
   let menu_help = Menubar::build_menu_help();
   let mut anu: Anu = Anu::new();
-  let metronome = metronome::Metronome::new();
-  let m_tx = metronome.tx.clone();
+  // let metronome = metronome::Metronome::new();
   let cb_sink = siv.cb_sink().clone();
+  // let m_tx = metronome.tx.clone();
+
+  // let state = Arc::new((Mutex::new(false), Condvar::new()));
+  // let metronome_state = Arc::clone(&state);
+  // let is_playing = Arc::new(Mutex::new(false));
+  // let metronome_state = Arc::clone(&is_playing);
+
+  // let parker = Parker::new();
+  // let unparker = parker.unparker().clone();
 
   siv.set_autohide_menu(false);
   siv.set_autorefresh(true);
@@ -82,20 +148,65 @@ fn main() {
     s.select_menubar();
   });
 
+  // thread::spawn(move || {
+  //   loop {
+  //     let (lock, cvar) = &*metronome_state;
+  //     let mut playing = lock.lock().unwrap();
+
+  //     // Wait until the metronome is playing
+  //     while !*playing {
+  //       playing = cvar.wait(playing).unwrap();
+  //     }
+
+  //     drop(playing); // Unlock before sleeping
+
+  //     let tick_duration = Duration::from_millis(500);
+  //     let start: Instant = Instant::now();
+
+  //     // Simulate the metronome tick
+  //     println!("Tick!");
+
+  //     // Loop to check for pause during the sleep period
+  //     while start.elapsed() < tick_duration {
+  //       thread::sleep(Duration::from_millis(10)); // Short sleep to prevent busy-waiting
+
+  //       // Check if the metronome should be paused
+  //       let (lock, cvar) = &*metronome_state;
+  //       let playing = lock.lock().unwrap();
+  //       if !*playing {
+  //         break; // Exit the loop if paused
+  //       }
+  //     }
+  //   }
+  // });
+
+  // let input_state = Arc::clone(&state);
+  // siv.add_global_callback(Event::Char(' '), move |_| {
+  //   let (lock, cvar) = &*input_state;
+  //   let mut playing = lock.lock().unwrap();
+  //   *playing = !*playing;
+
+  //   if *playing {
+  //     println!("Metronome Started");
+  //     cvar.notify_one(); // Wake up the metronome thread
+  //   } else {
+  //     println!("Metronome Paused");
+  //     // The metronome thread will park itself on the next iteration
+  //   }
+  // });
+  let worker = WorkerThread::spawn(cb_sink);
+
   siv.add_global_callback(Event::Char(' '), move |s| {
     s.call_on_name(
       config::canvas_editor_section_view,
-      |c: &mut Canvas<CanvasEditor>| match c.state_mut().set_playing() {
-        true => m_tx.send(metronome::Message::Start).unwrap(),
-        false => m_tx.send(metronome::Message::Pause).unwrap(),
-      },
+      |c: &mut Canvas<CanvasEditor>| worker.toggle_thread(c.state_mut().set_playing()),
     )
     .unwrap();
   });
 
-  thread::spawn(move || {
-    metronome.run(cb_sink);
-  });
+  // thread::spawn(move || {
+  //   metronome.run(cb_sink);
+  // });
 
   siv.run();
 }

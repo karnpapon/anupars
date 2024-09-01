@@ -18,6 +18,7 @@ unicode-width = "0.1.13"
 rand = "0.8"
 num = "0.4.3"
 crossbeam-utils = "0.8"
+atomic-wait = "1.1.0"
 
 [profile.release]
 panic = "abort"   # Strip expensive panic clean-up logic
