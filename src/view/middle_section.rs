@@ -1,13 +1,16 @@
+use crate::core::{config, utils};
 use cursive::{
   event::{Event, EventResult},
   theme::Style,
   utils::span::SpannedString,
-  view::{Nameable, Resizable},
-  views::{Dialog, DummyView, FocusTracker, LinearLayout, NamedView, TextView},
+  view::{Nameable, Resizable, ViewWrapper},
+  views::{
+    Dialog, DummyView, EditView, FocusTracker, LinearLayout, ListView, NamedView, PaddedView,
+    ResizedView, TextArea, TextView,
+  },
   Printer, View,
 };
-
-use crate::core::{config, utils};
+use cursive_tabs::{Align, TabPanel};
 
 pub struct MiddleSection {}
 
@@ -30,32 +33,133 @@ impl MiddleSection {
     MiddleSection {}
   }
 
-  pub fn build() -> FocusTracker<NamedView<Dialog>> {
-    FocusTracker::new(
-      Dialog::around(
-        LinearLayout::vertical()
-          .child(DummyView::new().fixed_width(1))
-          .child(
-            TextView::new(utils::build_doc_string(&config::APP_WELCOME_MSG))
-              .center()
-              .with_name(config::regex_display_unit_view)
-              .fixed_height(5),
-          ),
-      )
-      .button("", |s| {})
-      .title_position(cursive::align::HAlign::Right)
-      .with_name(config::interactive_display_section_view),
+  fn build_welcome_msg() -> NamedView<TextView> {
+    TextView::new(utils::build_doc_string(&config::APP_WELCOME_MSG))
+      .center()
+      .with_name(config::regex_display_unit_view)
+  }
+
+  fn build_osc_input() -> NamedView<PaddedView<LinearLayout>> {
+    PaddedView::lrtb(
+      10,
+      10,
+      1,
+      1,
+      LinearLayout::vertical()
+        .child(DummyView::new().full_height())
+        .child(
+          LinearLayout::horizontal()
+            .child(
+              ListView::new()
+                .child(
+                  "   PATH:",
+                  EditView::new()
+                    .content("")
+                    .style(Style::highlight_inactive())
+                    // .on_edit(input_edit)
+                    // .on_submit(input_submit)
+                    .with_name("osc_path"),
+                )
+                .full_width(),
+            )
+            .child(
+              ListView::new()
+                .child(
+                  "   MSG:",
+                  EditView::new()
+                    .content("")
+                    .style(Style::highlight_inactive())
+                    .with_name("osc_msg"),
+                )
+                .full_width(),
+            ),
+        )
+        .child(DummyView::new().full_height()),
     )
-    .on_focus(|this| {
-      this.get_mut().set_title(SpannedString::styled(
-        format!(" {} ", config::interactive_display_section_view),
-        Style::highlight(),
-      ));
-      EventResult::consumed()
-    })
-    .on_focus_lost(|this| {
-      this.get_mut().set_title("");
-      EventResult::consumed()
-    })
+    .with_name("osc_input")
+  }
+
+  fn build_midi_input() -> NamedView<PaddedView<LinearLayout>> {
+    PaddedView::lrtb(
+      10,
+      10,
+      1,
+      1,
+      LinearLayout::vertical()
+        .child(DummyView::new().full_height())
+        .child(
+          LinearLayout::horizontal()
+            .child(
+              ListView::new()
+                .child(
+                  "   NOTE:",
+                  EditView::new()
+                    .content("")
+                    .style(Style::highlight_inactive())
+                    // .on_edit(input_edit)
+                    // .on_submit(input_submit)
+                    .with_name("midi_note"),
+                )
+                .full_width(),
+            )
+            .child(
+              ListView::new()
+                .child(
+                  "   LENGTH:",
+                  EditView::new()
+                    .content("")
+                    .style(Style::highlight_inactive())
+                    .with_name("midi_len"),
+                )
+                .full_width(),
+            )
+            .child(
+              ListView::new()
+                .child(
+                  "   VELOCITY:",
+                  EditView::new()
+                    .content("")
+                    .style(Style::highlight_inactive())
+                    .with_name("midi_vel"),
+                )
+                .full_width(),
+            )
+            .child(
+              ListView::new()
+                .child(
+                  "   CHANNEL:",
+                  EditView::new()
+                    .content("")
+                    .style(Style::highlight_inactive())
+                    .with_name("midi_chan"),
+                )
+                .full_width(),
+            )
+            .child(DummyView::new().full_height()),
+        )
+        .child(DummyView::new().full_height()),
+    )
+    .with_name("midi_input")
+  }
+
+  pub fn build_tab() -> NamedView<TabPanel> {
+    let mut tab = TabPanel::new()
+      .with_tab(Self::build_welcome_msg())
+      .with_tab(Self::build_midi_input())
+      .with_tab(Self::build_osc_input())
+      .with_bar_alignment(Align::End)
+      .with_name(config::interactive_display_section_view);
+
+    tab
+      .get_mut()
+      .set_active_tab(config::regex_display_unit_view)
+      .expect("View not found");
+
+    tab
+  }
+
+  pub fn build() -> ResizedView<FocusTracker<NamedView<TabPanel>>> {
+    let tab = Self::build_tab();
+    FocusTracker::new(tab).fixed_height(8)
   }
 }

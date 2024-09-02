@@ -23,6 +23,7 @@ dependencies = [
  "cfonts",
  "crossbeam",
  "cursive",
+ "cursive-tabs",
  "dirs",
  "lazy_static",
  "num",
@@ -211,6 +212,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ac7ac0eb0cede3dfdfebf4d5f22354e05a730b79c25fd03481fc69fcfba0a73e"
 dependencies = [
  "proc-macro2",
+]
+
+[[package]]
+name = "cursive-tabs"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "192333eafe9ed1a1416e7be2c4f596378f90fe97c37d6b87e8c77e25250c4059"
+dependencies = [
+ "crossbeam",
+ "cursive_core",
+ "log",
+ "num",
 ]
 
 [[package]]
