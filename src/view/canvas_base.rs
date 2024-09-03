@@ -53,16 +53,22 @@ impl CanvasBase {
     let rows: usize = self.grid.width;
     let cols: usize = self.grid.height;
 
+    let mut newline_pos_offset = 0;
+
     for row in 0..rows {
       for col in 0..cols {
-        if let Some(char) = self
-          .text_contents
-          .as_ref()
-          .unwrap()
-          .chars()
-          .nth(col + (row * cols))
-        {
-          self.grid.set(col, row, char);
+        let char_pos = col + (row * cols);
+        let placeholder_chars = rows - (char_pos % rows);
+
+        if let Some(char) = self.text_contents.as_ref().unwrap().chars().nth(char_pos) {
+          if char == 0xA as char {
+            for c in 0..placeholder_chars {
+              self.grid.set(col + c, row, '█');
+            }
+            newline_pos_offset += (placeholder_chars - 1);
+          } else {
+            self.grid.set(col + newline_pos_offset, row, char);
+          }
         }
       }
     }
