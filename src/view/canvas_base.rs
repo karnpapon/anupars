@@ -45,6 +45,10 @@ impl CanvasBase {
     self.text_contents = Some(String::from(contents));
   }
 
+  pub fn clear(&mut self) {
+    self.grid = Matrix::new(self.size.x, self.size.y, '\0');
+  }
+
   pub fn update_grid_src(&mut self) {
     if self.text_contents.as_ref().is_none() {
       return;
@@ -55,6 +59,12 @@ impl CanvasBase {
 
     let mut newline_pos_offset = 0;
     let mut prev_char_pos = 0;
+    let splitted_text_contents = self
+      .text_contents
+      .as_ref()
+      .unwrap()
+      .split('\n')
+      .collect::<Vec<&str>>();
 
     for row in 0..rows {
       for col in 0..cols {
@@ -63,10 +73,10 @@ impl CanvasBase {
         let placeholder_chars = rows - line_pos;
         if let Some(char) = self.text_contents.as_ref().unwrap().chars().nth(char_pos) {
           if char == '\n' || char == '\r' {
-            for c in 1..placeholder_chars {
+            for c in 0..placeholder_chars {
               self
                 .grid
-                .set(col + newline_pos_offset + c - prev_char_pos, row, '.');
+                .set(col + newline_pos_offset + c - prev_char_pos, row, '█');
             }
 
             newline_pos_offset += line_pos + placeholder_chars;

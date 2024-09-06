@@ -174,6 +174,7 @@ fn set_selected_contents(siv: &mut Cursive, file: &PathBuf) {
         config::canvas_base_section_view,
         |c: &mut Canvas<CanvasBase>| {
           c.state_mut().update_text_contents(&contents);
+          c.state_mut().clear();
           c.state_mut().update_grid_src();
         },
       )
