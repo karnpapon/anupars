@@ -20,6 +20,7 @@ rand = "0.8"
 num = "0.4.3"
 crossbeam = "0.8.4"
 atomic-wait = "1.1.0"
+midir = "0.9.1"
 
 [profile.release]
 panic = "abort"   # Strip expensive panic clean-up logic
