@@ -8,7 +8,7 @@ use cursive::{
   Cursive, Printer, Vec2, View, With,
 };
 
-use crate::core::{anu::Anu, config, utils};
+use crate::core::{anu::Anu, config, regex, utils};
 
 #[derive(Clone)]
 pub struct TopSection {
@@ -44,12 +44,11 @@ impl TopSection {
       .fixed_width(25);
 
     let flag_view = LinearLayout::horizontal()
-      .child(app.flag_state.button(true, "g"))
-      .child(app.flag_state.button(false, "i"))
+      .child(app.flag_state.button(true, "i"))
       .child(app.flag_state.button(false, "m"))
-      .child(app.flag_state.button(false, "u"))
       .child(app.flag_state.button(false, "s"))
-      .child(app.flag_state.button(false, "y"))
+      .child(app.flag_state.button(false, "x"))
+      .child(app.flag_state.button(false, "U"))
       .with(|layout| {
         if app.boolean {
           layout.set_focus_index(1).unwrap();
@@ -61,7 +60,7 @@ impl TopSection {
       .child(
         app
           .mode_state
-          .button(true, "True")
+          .button(true, "Lazy")
           .with_if(app.boolean, |button| {
             button.select();
           }),
@@ -150,6 +149,7 @@ fn input_submit(siv: &mut Cursive, texts: &str) {
     .find_name::<TextView>(config::input_status_unit_view)
     .unwrap();
   input_status_unit_view.set_content(texts);
+  regex::solve();
 }
 
 fn input_edit(siv: &mut Cursive, texts: &str, _cursor: usize) {

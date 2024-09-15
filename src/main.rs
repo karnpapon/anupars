@@ -3,6 +3,7 @@ mod view;
 
 use core::anu::Anu;
 use core::clock::metronome::{self, Metronome};
+use core::regex;
 use core::{config, utils};
 // use crossbeam_utils::sync::Parker;
 use std::borrow::Borrow;
@@ -207,6 +208,8 @@ fn main() {
   // thread::spawn(move || {
   //   metronome.run(cb_sink);
   // });
+
+  regex::solve();
 
   siv.run();
 }

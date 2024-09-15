@@ -15,12 +15,14 @@ cursive-tabs = "^0"
 lazy_static = "1.5.0"
 dirs = "5.0.1"
 cfonts = "1.2.0"
-unicode-width = "0.1.13"
+# unicode-width = "0.1.13"
 rand = "0.8"
 num = "0.4.3"
 crossbeam = "0.8.4"
 atomic-wait = "1.1.0"
 midir = "0.9.1"
+regex = "1.10.6"
+serde = "1.0.210"
 
 [profile.release]
 panic = "abort"   # Strip expensive panic clean-up logic
