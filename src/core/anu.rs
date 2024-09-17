@@ -10,7 +10,7 @@ use std::{
 
 use super::{
   clock::{clock, metronome},
-  config,
+  config, regex,
 };
 use crate::view::{
   canvas_section::CanvasSection, middle_section::MiddleSection, top_section::TopSection,
@@ -47,8 +47,8 @@ impl Anu {
     }
   }
 
-  pub fn build(&mut self) -> NamedView<LinearLayout> {
-    let top_section = TopSection::build(self);
+  pub fn build(&mut self, regex_tx: Sender<regex::Message>) -> NamedView<LinearLayout> {
+    let top_section = TopSection::build(self, regex_tx);
     let middle_section = MiddleSection::build();
     let canvas_section = CanvasSection::build();
     let padding_section = DummyView::new().fixed_width(1);

@@ -1,8 +1,11 @@
 use std::sync::mpsc::{channel, Receiver, Sender};
 
+use cursive::views::TextView;
 use regex::Regex;
 
 use serde::{Deserialize, Serialize};
+
+use super::{config, utils};
 
 #[derive(Debug, Serialize, Deserialize)]
 struct RegexError {
@@ -37,73 +40,9 @@ struct RegExpResp {
   group: Vec<usize>,
 }
 
-enum Message {
-  Resolve((Option<RegExpErrorResp>, Vec<RegExpResp>)),
-}
-
-struct RegExpHandler {
-  pub tx: Sender<Message>,
-  pub rx: Receiver<Message>,
-}
-
-impl RegExpHandler {
-  fn new() -> Self {
-    let (tx, rx) = channel();
-    Self { tx, rx }
-  }
-}
-
-fn process_event(data: &EventData) -> Result<Vec<Match>, Option<RegexError>> {
-  let text = &data.text;
-  let regex = Regex::new(&data.pattern.to_string()).unwrap();
-  let mut matches = Vec::new();
-  // let mut index = 0;
-  // let mut error: Option<RegexError> = None;
-
-  // let mut last_index = 0;
-  for cap in regex.captures_iter(text) {
-    // if last_index == regex.capture_locations().end(0).unwrap_or(0) {
-    //   error = Some(RegexError {
-    //     id: "infinite".to_string(),
-    //     warning: true,
-    //     name: "SyntaxError".to_string(),
-    //     message: "infinite loop occurrence".to_string(),
-    //   });
-    //   break;
-    // }
-
-    // last_index = cap.get(0).map_or(0, |m| m.end());
-
-    let groups: Vec<MatchGroup> = cap
-      .iter()
-      .enumerate()
-      .filter_map(|(i, s)| {
-        if i == 0 {
-          None
-        } else {
-          Some(MatchGroup {
-            s: s?.as_str().to_string(),
-          })
-        }
-      })
-      .collect();
-
-    matches.push(Match {
-      i: cap.get(0).unwrap().start(),
-      l: cap.get(0).unwrap().as_str().len(),
-      groups,
-    });
-
-    // if !data.flags.contains('g') {
-    //   break;
-    // } // Exit if not global regex
-  }
-
-  // if let Some(err) = error {
-  //   return Err(Some(err));
-  // }
-
-  Ok(matches)
+pub enum Message {
+  Solve,
+  SetPattern(String),
 }
 
 #[derive(Debug)]
@@ -113,16 +52,82 @@ struct EventData {
   flags: String,
 }
 
-pub fn solve() {
-  let data = EventData {
-    text: "some text to match".to_string(),
-    pattern: "[e-t]".to_string(),
-    flags: "g".to_string(),
-  };
+pub struct RegExpHandler {
+  pub tx: Sender<Message>,
+  pub rx: Receiver<Message>,
+}
 
-  match process_event(&data) {
-    Ok(matches) => println!("Matches: {:?}", matches),
-    Err(Some(err)) => println!("Error: {:?}", err),
-    Err(None) => println!("Unknown error."),
+impl RegExpHandler {
+  pub fn new() -> Self {
+    let (tx, rx) = channel();
+    Self { tx, rx }
+  }
+  fn process_event(data: &EventData) -> Result<Vec<Match>, RegexError> {
+    match Regex::new(&data.pattern.to_string()) {
+      Ok(regex) => {
+        let text = &data.text;
+
+        let mut matches = Vec::new();
+
+        for cap in regex.captures_iter(text) {
+          let groups: Vec<MatchGroup> = cap
+            .iter()
+            .enumerate()
+            .filter_map(|(i, s)| {
+              if i == 0 {
+                None
+              } else {
+                Some(MatchGroup {
+                  s: s?.as_str().to_string(),
+                })
+              }
+            })
+            .collect();
+
+          matches.push(Match {
+            i: cap.get(0).unwrap().start(),
+            l: cap.get(0).unwrap().as_str().len(),
+            groups,
+          });
+        }
+
+        Ok(matches)
+      }
+      Err(e) => Err(RegexError {
+        id: "regex_error".to_string(),
+        warning: true,
+        name: "SyntaxError".to_string(),
+        message: format!("{}", e),
+      }),
+    }
+  }
+
+  pub fn run(self, cb_sink: cursive::CbSink) {
+    for control_message in self.rx {
+      match control_message {
+        Message::Solve => {
+          cb_sink
+            .send(Box::new(move |s| {
+              let data = EventData {
+                text: "some text to match".to_string(),
+                pattern: "[".to_string(),
+                flags: "g".to_string(),
+              };
+
+              let res = match Self::process_event(&data) {
+                Ok(matches) => "".to_string(),
+                Err(err) => format!("{:?}", err.message),
+              };
+
+              s.call_on_name(config::input_status_unit_view, |c: &mut TextView| {
+                c.set_content(res)
+              })
+              .unwrap();
+            }))
+            .unwrap();
+        }
+        Message::SetPattern(pat) => {}
+      }
+    }
   }
 }

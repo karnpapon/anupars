@@ -3,7 +3,7 @@ mod view;
 
 use core::anu::Anu;
 use core::clock::metronome::{self, Metronome};
-use core::regex;
+use core::regex::RegExpHandler;
 use core::{config, utils};
 // use crossbeam_utils::sync::Parker;
 use std::borrow::Borrow;
@@ -54,7 +54,7 @@ impl WorkerThread {
         atomic_wait::wait(&thread_active_flag, PAUSED); // waits while the value is PAUSED (0)
                                                         // println!("thread_active_flag:{:?}", thread_active_flag);
 
-        do_work(cb_sink.clone());
+        do_work(cb_sink);
 
         std::thread::sleep(std::time::Duration::from_secs(10));
         // }
@@ -102,9 +102,10 @@ fn main() {
   let mut siv: Cursive = Cursive::new();
   let menu_app = Menubar::build_menu_app();
   let menu_help = Menubar::build_menu_help();
+  let regex = RegExpHandler::new();
   let mut anu: Anu = Anu::new();
-  // let metronome = metronome::Metronome::new();
   let cb_sink = siv.cb_sink().clone();
+  // let metronome = metronome::Metronome::new();
   // let m_tx = metronome.tx.clone();
 
   // let state = Arc::new((Mutex::new(false), Condvar::new()));
@@ -125,7 +126,7 @@ fn main() {
 
   init_default_style(&mut siv);
 
-  let main_views = anu.build();
+  let main_views = anu.build(regex.tx.clone());
 
   siv
     .menubar()
@@ -195,7 +196,7 @@ fn main() {
   //     // The metronome thread will park itself on the next iteration
   //   }
   // });
-  let worker = WorkerThread::spawn(cb_sink);
+  let worker = WorkerThread::spawn(cb_sink.clone());
 
   siv.add_global_callback(Event::Char(' '), move |s| {
     s.call_on_name(
@@ -205,11 +206,9 @@ fn main() {
     .unwrap();
   });
 
-  // thread::spawn(move || {
-  //   metronome.run(cb_sink);
-  // });
-
-  regex::solve();
+  thread::spawn(move || {
+    regex.run(cb_sink);
+  });
 
   siv.run();
 }

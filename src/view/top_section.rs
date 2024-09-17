@@ -1,11 +1,13 @@
+use std::sync::mpsc::Sender;
+
 use cfonts::{render, Fonts, Options};
 use cursive::{
-  event::{Event, EventResult},
+  event::EventResult,
   theme::Style,
   utils::span::SpannedString,
   view::{Nameable, Resizable},
   views::{Dialog, EditView, FocusTracker, LinearLayout, ListView, NamedView, TextView},
-  Cursive, Printer, Vec2, View, With,
+  Cursive, Vec2, With,
 };
 
 use crate::core::{anu::Anu, config, regex, utils};
@@ -34,21 +36,21 @@ impl TopSection {
     }
   }
 
-  pub fn build(app: &mut Anu) -> FocusTracker<NamedView<Dialog>> {
+  pub fn build(app: &mut Anu, regex_tx: Sender<regex::Message>) -> FocusTracker<NamedView<Dialog>> {
     let regex_input_unit_view = EditView::new()
       .content(app.input_regex.clone())
       .style(Style::highlight_inactive())
       .on_edit(input_edit)
-      .on_submit(input_submit)
+      .on_submit(move |siv: &mut Cursive, texts: &str| input_submit(siv, texts, regex_tx.clone()))
       .with_name(config::regex_input_unit_view)
       .fixed_width(25);
 
     let flag_view = LinearLayout::horizontal()
-      .child(app.flag_state.button(true, "i"))
-      .child(app.flag_state.button(false, "m"))
-      .child(app.flag_state.button(false, "s"))
-      .child(app.flag_state.button(false, "x"))
-      .child(app.flag_state.button(false, "U"))
+      .child(app.flag_state.button(true, "i")) // Case-insensitive matching
+      .child(app.flag_state.button(false, "m")) // Multi-line mode (^ and $ match start/end of line)
+      .child(app.flag_state.button(false, "s")) // Dot matches newline (. matches any character)
+      .child(app.flag_state.button(false, "x")) // Ignore whitespace and allow comments in pattern
+      .child(app.flag_state.button(false, "U")) // Swap greedy for lazy matching
       .with(|layout| {
         if app.boolean {
           layout.set_focus_index(1).unwrap();
@@ -144,12 +146,12 @@ impl TopSection {
   }
 }
 
-fn input_submit(siv: &mut Cursive, texts: &str) {
+fn input_submit(siv: &mut Cursive, texts: &str, regex_tx: Sender<regex::Message>) {
   let mut input_status_unit_view = siv
     .find_name::<TextView>(config::input_status_unit_view)
     .unwrap();
   input_status_unit_view.set_content(texts);
-  regex::solve();
+  regex_tx.send(regex::Message::Solve).unwrap()
 }
 
 fn input_edit(siv: &mut Cursive, texts: &str, _cursor: usize) {
