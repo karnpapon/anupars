@@ -151,7 +151,13 @@ fn input_submit(siv: &mut Cursive, texts: &str, regex_tx: Sender<regex::Message>
     .find_name::<TextView>(config::input_status_unit_view)
     .unwrap();
   input_status_unit_view.set_content(texts);
-  regex_tx.send(regex::Message::Solve).unwrap()
+  let input_regex = regex::EventData {
+    text: String::new(),
+    pattern: texts.to_string(),
+    flags: String::new(),
+  };
+
+  regex_tx.send(regex::Message::Solve(input_regex)).unwrap()
 }
 
 fn input_edit(siv: &mut Cursive, texts: &str, _cursor: usize) {

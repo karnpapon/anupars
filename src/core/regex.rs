@@ -27,29 +27,16 @@ struct Match {
   groups: Vec<MatchGroup>,
 }
 
-struct RegExpErrorResp {
-  id: String,
-  warning: bool,
-  name: String,
-  message: String,
-}
-
-struct RegExpResp {
-  idx: usize,
-  len: usize,
-  group: Vec<usize>,
-}
-
+#[derive(Debug, Clone)]
 pub enum Message {
-  Solve,
-  SetPattern(String),
+  Solve(EventData),
 }
 
-#[derive(Debug)]
-struct EventData {
-  text: String,
-  pattern: String,
-  flags: String,
+#[derive(Debug, Default, Clone)]
+pub struct EventData {
+  pub text: String,
+  pub pattern: String,
+  pub flags: String,
 }
 
 pub struct RegExpHandler {
@@ -97,36 +84,33 @@ impl RegExpHandler {
         id: "regex_error".to_string(),
         warning: true,
         name: "SyntaxError".to_string(),
-        message: format!("{}", e),
+        message: e.to_string(),
       }),
     }
   }
 
-  pub fn run(self, cb_sink: cursive::CbSink) {
-    for control_message in self.rx {
+  pub fn run(&mut self, cb_sink: cursive::CbSink) {
+    for control_message in &self.rx {
       match control_message {
-        Message::Solve => {
+        Message::Solve(data) => {
           cb_sink
             .send(Box::new(move |s| {
-              let data = EventData {
-                text: "some text to match".to_string(),
-                pattern: "[".to_string(),
-                flags: "g".to_string(),
-              };
-
               let res = match Self::process_event(&data) {
                 Ok(matches) => "".to_string(),
-                Err(err) => format!("{:?}", err.message),
+                Err(err) => err.message,
               };
 
-              s.call_on_name(config::input_status_unit_view, |c: &mut TextView| {
-                c.set_content(res)
-              })
-              .unwrap();
+              if !res.is_empty() {
+                s.call_on_name(config::regex_display_unit_view, |c: &mut TextView| {
+                  c.set_content(res)
+                })
+                .unwrap();
+              }
             }))
             .unwrap();
-        }
-        Message::SetPattern(pat) => {}
+        } // Message::SetPattern(pat) => {
+          //   self.set_data_pattern(pat);
+          // }
       }
     }
   }

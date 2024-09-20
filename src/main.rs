@@ -102,7 +102,7 @@ fn main() {
   let mut siv: Cursive = Cursive::new();
   let menu_app = Menubar::build_menu_app();
   let menu_help = Menubar::build_menu_help();
-  let regex = RegExpHandler::new();
+  let mut regex = RegExpHandler::new();
   let mut anu: Anu = Anu::new();
   let cb_sink = siv.cb_sink().clone();
   // let metronome = metronome::Metronome::new();
