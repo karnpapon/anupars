@@ -143,7 +143,7 @@ impl MiddleSection {
     let mut tab = TabPanel::new()
       .with_tab(Self::build_welcome_msg())
       .with_tab(Self::build_midi_input())
-      .with_tab(Self::build_osc_input())
+      // .with_tab(Self::build_osc_input())
       .with_bar_alignment(Align::End)
       .with_name(config::interactive_display_section_view);
 

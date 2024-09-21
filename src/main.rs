@@ -15,6 +15,7 @@ use std::{
   thread::JoinHandle,
 };
 
+use cursive_tabs::TabPanel;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
 use std::thread;
@@ -23,7 +24,7 @@ use view::menubar::Menubar;
 
 use cursive::event::{Event, Key};
 use cursive::theme::{BorderStyle, Palette};
-use cursive::views::{Canvas, TextView};
+use cursive::views::{Canvas, LinearLayout, TextView};
 use cursive::{Cursive, CursiveExt, With};
 
 pub struct WorkerThread {
@@ -146,6 +147,20 @@ fn main() {
     }
 
     s.select_menubar();
+  });
+
+  // DRY?
+  siv.add_global_callback(Key::F1, move |s| {
+    let mut interactive_display_section_view = s
+      .find_name::<LinearLayout>(config::main_section_view)
+      .unwrap();
+    let _ = interactive_display_section_view.set_focus_index(0);
+  });
+  siv.add_global_callback(Key::F2, move |s| {
+    let mut interactive_display_section_view = s
+      .find_name::<LinearLayout>(config::main_section_view)
+      .unwrap();
+    let _ = interactive_display_section_view.set_focus_index(1);
   });
 
   // thread::spawn(move || {
