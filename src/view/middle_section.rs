@@ -1,14 +1,11 @@
 use crate::core::{config, utils};
 use cursive::{
-  event::{Event, EventResult},
   theme::Style,
-  utils::span::SpannedString,
-  view::{Nameable, Resizable, ViewWrapper},
+  view::{Nameable, Resizable},
   views::{
-    Dialog, DummyView, EditView, FocusTracker, LinearLayout, ListView, NamedView, PaddedView,
-    ResizedView, TextArea, TextView,
+    DummyView, EditView, FocusTracker, LinearLayout, ListView, NamedView, PaddedView, ResizedView,
+    TextView,
   },
-  Printer, View,
 };
 use cursive_tabs::{Align, TabPanel};
 

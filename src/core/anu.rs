@@ -13,7 +13,9 @@ use super::{
   config, regex,
 };
 use crate::view::{
-  canvas_section::CanvasSection, middle_section::MiddleSection, top_section::TopSection,
+  canvas_section::CanvasSection,
+  middle_section::MiddleSection,
+  top_section::{RegexFlag, RegexMode, TopSection},
 };
 
 #[derive(Clone, Copy, Debug)]
@@ -28,8 +30,8 @@ pub enum Message {
 #[derive(Clone)]
 pub struct Anu {
   pub boolean: bool,
-  pub mode_state: RadioGroup<bool>,
-  pub flag_state: RadioGroup<bool>,
+  pub mode_state: RadioGroup<RegexMode>,
+  pub flag_state: RadioGroup<RegexFlag>,
   pub input_regex: String,
   pub show_regex_display: bool,
   pub top_section: TopSection,

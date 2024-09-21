@@ -142,9 +142,7 @@ fn main() {
       let mut regex_display_unit_view = s
         .find_name::<TextView>(config::regex_display_unit_view)
         .unwrap();
-      regex_display_unit_view
-        .get_shared_content()
-        .set_content(utils::build_doc_string(&config::APP_WELCOME_MSG));
+      regex_display_unit_view.set_content(utils::build_doc_string(&config::APP_WELCOME_MSG));
     }
 
     s.select_menubar();

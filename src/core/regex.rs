@@ -5,7 +5,7 @@ use regex::Regex;
 
 use serde::{Deserialize, Serialize};
 
-use super::{config, utils};
+use super::config;
 
 #[derive(Debug, Serialize, Deserialize)]
 struct RegexError {
@@ -108,9 +108,7 @@ impl RegExpHandler {
               }
             }))
             .unwrap();
-        } // Message::SetPattern(pat) => {
-          //   self.set_data_pattern(pat);
-          // }
+        }
       }
     }
   }

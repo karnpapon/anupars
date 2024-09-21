@@ -12,6 +12,19 @@ use cursive::{
 
 use crate::core::{anu::Anu, config, regex, utils};
 
+pub enum RegexFlag {
+  CaseSensitive,
+  Multiline,
+  Newline,
+  IgnoreWhiteSpace,
+  Lazy,
+}
+
+pub enum RegexMode {
+  Realtime,
+  Lazy,
+}
+
 #[derive(Clone)]
 pub struct TopSection {
   bpm: usize,
@@ -46,32 +59,38 @@ impl TopSection {
       .fixed_width(25);
 
     let flag_view = LinearLayout::horizontal()
-      .child(app.flag_state.button(true, "i")) // Case-insensitive matching
-      .child(app.flag_state.button(false, "m")) // Multi-line mode (^ and $ match start/end of line)
-      .child(app.flag_state.button(false, "s")) // Dot matches newline (. matches any character)
-      .child(app.flag_state.button(false, "x")) // Ignore whitespace and allow comments in pattern
-      .child(app.flag_state.button(false, "U")) // Swap greedy for lazy matching
-      .with(|layout| {
-        if app.boolean {
-          layout.set_focus_index(1).unwrap();
-        }
-      });
+      .child(
+        app
+          .flag_state
+          .button(RegexFlag::CaseSensitive, "i ")
+          .selected(),
+      )
+      .child(app.flag_state.button(RegexFlag::Multiline, "m "))
+      .child(app.flag_state.button(RegexFlag::Newline, "s "))
+      .child(app.flag_state.button(RegexFlag::IgnoreWhiteSpace, "x "))
+      .child(app.flag_state.button(RegexFlag::Lazy, "U "));
+    // .with(|layout| {
+    //   if app.boolean {
+    //     layout.set_focus_index(1).unwrap();
+    //   }
+    // });
 
     let mode_view = LinearLayout::horizontal()
-      .child(app.mode_state.button(false, "Realtime"))
+      .child(app.mode_state.button(RegexMode::Realtime, "Realtime "))
       .child(
         app
           .mode_state
-          .button(true, "Lazy")
+          .button(RegexMode::Lazy, "Lazy ")
+          .selected()
           .with_if(app.boolean, |button| {
             button.select();
           }),
-      )
-      .with(|layout| {
-        if app.boolean {
-          layout.set_focus_index(1).unwrap();
-        }
-      });
+      );
+    // .with(|layout| {
+    //   if app.boolean {
+    //     layout.set_focus_index(1).unwrap();
+    //   }
+    // });
 
     let input_status_unit_view = TextView::new("-")
       .with_name(config::input_status_unit_view)
@@ -147,10 +166,10 @@ impl TopSection {
 }
 
 fn input_submit(siv: &mut Cursive, texts: &str, regex_tx: Sender<regex::Message>) {
-  let mut input_status_unit_view = siv
-    .find_name::<TextView>(config::input_status_unit_view)
-    .unwrap();
-  input_status_unit_view.set_content(texts);
+  // let mut input_status_unit_view = siv
+  //   .find_name::<TextView>(config::input_status_unit_view)
+  //   .unwrap();
+  // input_status_unit_view.set_content(texts);
   let input_regex = regex::EventData {
     text: String::new(),
     pattern: texts.to_string(),
@@ -161,15 +180,20 @@ fn input_submit(siv: &mut Cursive, texts: &str, regex_tx: Sender<regex::Message>
 }
 
 fn input_edit(siv: &mut Cursive, texts: &str, _cursor: usize) {
+  let mut regex_display_unit_view = siv
+    .find_name::<TextView>(config::regex_display_unit_view)
+    .unwrap();
+
+  if texts.is_empty() {
+    regex_display_unit_view.set_content(utils::build_doc_string(&config::APP_WELCOME_MSG));
+    return;
+  }
+
   let output = render(Options {
     text: String::from(texts),
     font: Fonts::FontTiny,
     ..Options::default()
   });
-
-  let mut regex_display_unit_view = siv
-    .find_name::<TextView>(config::regex_display_unit_view)
-    .unwrap();
 
   regex_display_unit_view.set_content(output.text);
 }
