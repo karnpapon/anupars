@@ -55,8 +55,10 @@ impl TopSection {
     let regex_input_unit_view = EditView::new()
       .content(app.input_regex.clone())
       .style(Style::highlight_inactive())
-      .on_edit(input_edit)
-      .on_submit(move |siv: &mut Cursive, texts: &str| input_submit(siv, texts, regex_tx.clone()))
+      .on_edit(move |siv: &mut Cursive, texts: &str, pos: usize| {
+        input_edit(siv, texts, pos, regex_tx.clone())
+      })
+      // .on_submit(move |siv: &mut Cursive, texts: &str| input_submit(siv, texts, regex_tx.clone()))
       .with_name(config::regex_input_unit_view)
       .fixed_width(25);
 
@@ -78,15 +80,13 @@ impl TopSection {
     // });
 
     let mode_view = LinearLayout::horizontal()
-      .child(app.mode_state.button(RegexMode::Realtime, "Realtime "))
       .child(
         app
           .mode_state
-          .button(RegexMode::OnEval, "On-Eval ")
-          .selected(), // .with_if(app.boolean, |button| {
-                       //   button.select();
-                       // }),
-      );
+          .button(RegexMode::Realtime, "Realtime ")
+          .selected(),
+      )
+      .child(app.mode_state.button(RegexMode::OnEval, "On-Eval "));
     // .with(|layout| {
     //   if app.boolean {
     //     layout.set_focus_index(1).unwrap();
@@ -166,7 +166,7 @@ impl TopSection {
   }
 }
 
-fn input_submit(siv: &mut Cursive, texts: &str, regex_tx: Sender<regex::Message>) {
+fn solve_regex(siv: &mut Cursive, texts: &str, regex_tx: Sender<regex::Message>) {
   let mut canvas_base_section_view = siv
     .find_name::<Canvas<CanvasBase>>(config::canvas_base_section_view)
     .unwrap();
@@ -180,13 +180,18 @@ fn input_submit(siv: &mut Cursive, texts: &str, regex_tx: Sender<regex::Message>
   regex_tx.send(regex::Message::Solve(input_regex)).unwrap()
 }
 
-fn input_edit(siv: &mut Cursive, texts: &str, _cursor: usize) {
+fn input_submit(siv: &mut Cursive, texts: &str, regex_tx: Sender<regex::Message>) {
+  solve_regex(siv, texts, regex_tx);
+}
+
+fn input_edit(siv: &mut Cursive, texts: &str, _cursor: usize, regex_tx: Sender<regex::Message>) {
   let mut regex_display_unit_view = siv
     .find_name::<TextView>(config::regex_display_unit_view)
     .unwrap();
 
   if texts.is_empty() {
     regex_display_unit_view.set_content(utils::build_doc_string(&config::APP_WELCOME_MSG));
+    regex_tx.send(regex::Message::Clear).unwrap();
     return;
   }
 
@@ -197,4 +202,6 @@ fn input_edit(siv: &mut Cursive, texts: &str, _cursor: usize) {
   });
 
   regex_display_unit_view.set_content(output.text);
+
+  solve_regex(siv, texts, regex_tx);
 }

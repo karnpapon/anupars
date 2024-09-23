@@ -35,6 +35,7 @@ pub struct Match {
 #[derive(Debug, Clone)]
 pub enum Message {
   Solve(EventData),
+  Clear,
 }
 
 #[derive(Debug, Default, Clone)]
@@ -100,6 +101,15 @@ impl RegExpHandler {
   pub fn run(&mut self, cb_sink: cursive::CbSink) {
     for control_message in &self.rx {
       match control_message {
+        Message::Clear => {
+          let _ = cb_sink.send(Box::new(move |s| {
+            s.call_on_name(
+              config::canvas_base_section_view,
+              |c: &mut Canvas<CanvasBase>| c.state_mut().set_text_matcher(None),
+            )
+            .unwrap();
+          }));
+        }
         Message::Solve(data) => {
           cb_sink
             .send(Box::new(move |s| {
