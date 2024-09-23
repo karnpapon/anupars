@@ -139,7 +139,7 @@ impl Marker {
       false => self.pos.y,
     };
 
-    self.area = Rect::from_size((new_x, new_y), (new_w, new_h));
+    self.area = Rect::from_size((new_x, new_y), (new_w + 1, new_h + 1)); //offseting drag area
     self.drag_start_x = new_x;
     self.drag_start_y = new_y;
   }
@@ -341,16 +341,6 @@ fn on_event(canvas: &mut CanvasEditor, event: Event) -> EventResult {
         });
       })))
     }
-    // Event::Mouse {
-    //   offset,
-    //   position,
-    //   event: MouseEvent::Release(_),
-    // } => {
-    //   let pos_x = position.x.abs_diff(1);
-    //   let pos_y = position.y.abs_diff(offset.y);
-    //   canvas.marker.set_grid_area((pos_x, pos_y).into());
-    //   EventResult::consumed()
-    // }
     _ => EventResult::Ignored,
   }
 }

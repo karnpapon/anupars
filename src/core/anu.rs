@@ -29,7 +29,6 @@ pub enum Message {
 
 #[derive(Clone)]
 pub struct Anu {
-  pub boolean: bool,
   pub mode_state: RadioGroup<RegexMode>,
   pub flag_state: RadioGroup<RegexFlag>,
   pub input_regex: String,
@@ -40,7 +39,6 @@ pub struct Anu {
 impl Anu {
   pub fn new() -> Self {
     Anu {
-      boolean: false,
       mode_state: RadioGroup::new(),
       flag_state: RadioGroup::new(),
       input_regex: String::new(),

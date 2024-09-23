@@ -5,10 +5,11 @@ use cursive::{
   views::{Canvas, NamedView, ResizedView},
   Printer, Vec2,
 };
-use std::usize;
+use std::{collections::HashMap, usize};
 
 use crate::core::{
   config,
+  regex::Match,
   traits::{Matrix, Printable},
 };
 
@@ -17,6 +18,7 @@ pub struct CanvasBase {
   size: Vec2,
   grid: Matrix<char>,
   text_contents: Option<String>,
+  text_matcher: Option<HashMap<usize, Match>>,
 }
 
 impl CanvasBase {
@@ -25,6 +27,7 @@ impl CanvasBase {
       size: Vec2::zero(),
       grid: Matrix::new(0, 0, '\0'),
       text_contents: None,
+      text_matcher: None,
     }
   }
 
@@ -42,6 +45,18 @@ impl CanvasBase {
   pub fn resize(&mut self, size: Vec2) {
     self.grid = Matrix::new(size.x, size.y, '\0');
     self.size = size;
+  }
+
+  pub fn set_text_matcher(&mut self, text_matcher: Option<HashMap<usize, Match>>) {
+    self.text_matcher = text_matcher
+  }
+
+  pub fn text_contents(&self) -> String {
+    self
+      .text_contents
+      .as_ref()
+      .unwrap_or(&"".to_string())
+      .to_string()
   }
 
   pub fn update_text_contents(&mut self, contents: &str) {
@@ -104,7 +119,7 @@ impl CanvasBase {
 
 fn draw(canvas: &CanvasBase, printer: &Printer) {
   if canvas.size > Vec2::ZERO {
-    canvas.grid.print(printer);
+    canvas.grid.print(printer, &canvas.text_matcher);
   }
 }
 

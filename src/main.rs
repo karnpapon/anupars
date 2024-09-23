@@ -117,7 +117,7 @@ fn main() {
   // let parker = Parker::new();
   // let unparker = parker.unparker().clone();
 
-  siv.set_autohide_menu(false);
+  siv.set_autohide_menu(true);
   siv.set_autorefresh(true);
   siv.set_user_data(Menubar::default());
   siv.set_user_data(Anu::new());

@@ -95,6 +95,7 @@ pub static control_section_view: &str = "control_section_view";
 pub static interactive_display_section_view: &str = "interactive_display_section_view";
 
 pub static canvas_base_section_view: &str = "canvas_base_section_view";
+pub static canvas_highlight_section_view: &str = "canvas_highlight_section_view";
 pub static canvas_editor_section_view: &str = "canvas_editor_section_view";
 
 pub static doc_unit_view: &str = "doc_unit_view";

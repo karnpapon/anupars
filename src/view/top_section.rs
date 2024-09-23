@@ -6,11 +6,13 @@ use cursive::{
   theme::Style,
   utils::span::SpannedString,
   view::{Nameable, Resizable},
-  views::{Dialog, EditView, FocusTracker, LinearLayout, ListView, NamedView, TextView},
+  views::{Canvas, Dialog, EditView, FocusTracker, LinearLayout, ListView, NamedView, TextView},
   Cursive, Vec2, With,
 };
 
 use crate::core::{anu::Anu, config, regex, utils};
+
+use super::canvas_base::CanvasBase;
 
 pub enum RegexFlag {
   CaseSensitive,
@@ -22,7 +24,7 @@ pub enum RegexFlag {
 
 pub enum RegexMode {
   Realtime,
-  Lazy,
+  OnEval,
 }
 
 #[derive(Clone)]
@@ -80,11 +82,10 @@ impl TopSection {
       .child(
         app
           .mode_state
-          .button(RegexMode::Lazy, "Lazy ")
-          .selected()
-          .with_if(app.boolean, |button| {
-            button.select();
-          }),
+          .button(RegexMode::OnEval, "On-Eval ")
+          .selected(), // .with_if(app.boolean, |button| {
+                       //   button.select();
+                       // }),
       );
     // .with(|layout| {
     //   if app.boolean {
@@ -166,12 +167,12 @@ impl TopSection {
 }
 
 fn input_submit(siv: &mut Cursive, texts: &str, regex_tx: Sender<regex::Message>) {
-  // let mut input_status_unit_view = siv
-  //   .find_name::<TextView>(config::input_status_unit_view)
-  //   .unwrap();
-  // input_status_unit_view.set_content(texts);
+  let mut canvas_base_section_view = siv
+    .find_name::<Canvas<CanvasBase>>(config::canvas_base_section_view)
+    .unwrap();
+  let text = canvas_base_section_view.state_mut().text_contents();
   let input_regex = regex::EventData {
-    text: String::new(),
+    text,
     pattern: texts.to_string(),
     flags: String::new(),
   };

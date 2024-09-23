@@ -1,9 +1,14 @@
-use std::sync::mpsc::{channel, Receiver, Sender};
+use std::{
+  collections::HashMap,
+  sync::mpsc::{channel, Receiver, Sender},
+};
 
-use cursive::views::TextView;
+use cursive::views::{Canvas, TextView};
 use regex::Regex;
 
 use serde::{Deserialize, Serialize};
+
+use crate::view::canvas_base::CanvasBase;
 
 use super::config;
 
@@ -15,13 +20,13 @@ struct RegexError {
   message: String,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct MatchGroup {
   s: String,
 }
 
-#[derive(Debug)]
-struct Match {
+#[derive(Debug, Clone)]
+pub struct Match {
   i: usize,
   l: usize,
   groups: Vec<MatchGroup>,
@@ -49,12 +54,12 @@ impl RegExpHandler {
     let (tx, rx) = channel();
     Self { tx, rx }
   }
-  fn process_event(data: &EventData) -> Result<Vec<Match>, RegexError> {
+  fn process_event(data: &EventData) -> Result<HashMap<usize, Match>, RegexError> {
     match Regex::new(&data.pattern.to_string()) {
       Ok(regex) => {
         let text = &data.text;
 
-        let mut matches = Vec::new();
+        let mut matches = HashMap::new();
 
         for cap in regex.captures_iter(text) {
           let groups: Vec<MatchGroup> = cap
@@ -71,11 +76,14 @@ impl RegExpHandler {
             })
             .collect();
 
-          matches.push(Match {
-            i: cap.get(0).unwrap().start(),
-            l: cap.get(0).unwrap().as_str().len(),
-            groups,
-          });
+          matches.insert(
+            cap.get(0).unwrap().start(),
+            Match {
+              i: cap.get(0).unwrap().start(),
+              l: cap.get(0).unwrap().as_str().len(),
+              groups,
+            },
+          );
         }
 
         Ok(matches)
@@ -96,7 +104,21 @@ impl RegExpHandler {
           cb_sink
             .send(Box::new(move |s| {
               let res = match Self::process_event(&data) {
-                Ok(matches) => "".to_string(),
+                Ok(matches) => {
+                  let mm = if matches.is_empty() {
+                    None
+                  } else {
+                    Some(matches)
+                  };
+
+                  s.call_on_name(
+                    config::canvas_base_section_view,
+                    |c: &mut Canvas<CanvasBase>| c.state_mut().set_text_matcher(mm),
+                  )
+                  .unwrap();
+
+                  "".to_string()
+                }
                 Err(err) => err.message,
               };
 

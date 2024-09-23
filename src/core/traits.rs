@@ -1,16 +1,19 @@
+use std::collections::HashMap;
+
 use cursive::{
   theme::{ColorStyle, ColorType, Style},
   utils::span::SpannedString,
   Printer,
 };
 
-use super::config;
+use super::{config, regex::Match};
 
 #[derive(Clone, Default, Debug)]
 pub struct Matrix<T> {
   pub data: Vec<T>,
   pub width: usize,
   pub height: usize,
+  // pub
 }
 
 impl<T: Copy> Matrix<T> {
@@ -67,9 +70,20 @@ impl Printable for char {
 }
 
 impl<T: Printable + Copy> Matrix<T> {
-  pub fn print(&self, printer: &Printer) {
+  pub fn print(&self, printer: &Printer, highlighter: &Option<HashMap<usize, Match>>) {
     for y in 0..self.width {
       for x in 0..self.height {
+        let style = if highlighter.is_some() {
+          let hl = highlighter.as_ref().unwrap();
+          if hl.get(&(y + x * self.width)).is_some() {
+            Style::highlight()
+          } else {
+            Style::from_color_style(ColorStyle::front(ColorType::rgb(100, 100, 100)))
+          }
+        } else {
+          Style::from_color_style(ColorStyle::front(ColorType::rgb(100, 100, 100)))
+        };
+
         printer.print_styled(
           (y, x),
           &SpannedString::styled(
@@ -78,7 +92,7 @@ impl<T: Printable + Copy> Matrix<T> {
               .unwrap()
               .display_char((x, y).into())
               .to_string(),
-            Style::from_color_style(ColorStyle::front(ColorType::rgb(100, 100, 100))),
+            style,
           ),
         );
       }
