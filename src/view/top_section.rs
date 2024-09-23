@@ -7,7 +7,7 @@ use cursive::{
   utils::span::SpannedString,
   view::{Nameable, Resizable},
   views::{Canvas, Dialog, EditView, FocusTracker, LinearLayout, ListView, NamedView, TextView},
-  Cursive, Vec2, With,
+  Cursive, Vec2,
 };
 
 use crate::core::{anu::Anu, config, regex, utils};
@@ -52,13 +52,17 @@ impl TopSection {
   }
 
   pub fn build(app: &mut Anu, regex_tx: Sender<regex::Message>) -> FocusTracker<NamedView<Dialog>> {
+    let regex_tx_on_edit = regex_tx.clone();
+    let regex_tx_on_submit = regex_tx.clone();
     let regex_input_unit_view = EditView::new()
       .content(app.input_regex.clone())
       .style(Style::highlight_inactive())
       .on_edit(move |siv: &mut Cursive, texts: &str, pos: usize| {
-        input_edit(siv, texts, pos, regex_tx.clone())
+        input_edit(siv, texts, pos, regex_tx_on_edit.clone())
       })
-      // .on_submit(move |siv: &mut Cursive, texts: &str| input_submit(siv, texts, regex_tx.clone()))
+      .on_submit(move |siv: &mut Cursive, texts: &str| {
+        input_submit(siv, texts, regex_tx_on_submit.clone())
+      })
       .with_name(config::regex_input_unit_view)
       .fixed_width(25);
 
@@ -87,11 +91,6 @@ impl TopSection {
           .selected(),
       )
       .child(app.mode_state.button(RegexMode::OnEval, "On-Eval "));
-    // .with(|layout| {
-    //   if app.boolean {
-    //     layout.set_focus_index(1).unwrap();
-    //   }
-    // });
 
     let input_status_unit_view = TextView::new("-")
       .with_name(config::input_status_unit_view)
