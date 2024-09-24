@@ -139,7 +139,7 @@ impl Marker {
       false => self.pos.y,
     };
 
-    self.area = Rect::from_size((new_x, new_y), (new_w + 1, new_h + 1)); //offseting drag area
+    self.area = Rect::from_size((new_x, new_y), (new_w, new_h));
     self.drag_start_x = new_x;
     self.drag_start_y = new_y;
   }
@@ -201,46 +201,69 @@ impl CanvasEditor {
     let rows: usize = self.grid.width;
     let cols: usize = self.grid.height;
 
-    let mut newline_idx_offset = 0;
-    let mut prev_char_idx = 0;
-    let mut mod_idx_offset = 0;
-    let mut mod_idx_counter = 0;
-
-    // TODO: clean up the mess. mostly, handling newline char logic.
     for row in 0..rows {
       for col in 0..cols {
-        let char_idx = col + (row * cols);
-        if let Some(char) = self.text_contents.as_ref().unwrap().chars().nth(char_idx) {
-          if char == '\n' || char == '\r' {
-            let line_pos = (char_idx - prev_char_idx) % rows;
-            let placeholder_chars = rows - line_pos;
-            for c in 0..placeholder_chars {
-              self.grid.set(
-                col + c + newline_idx_offset - prev_char_idx - mod_idx_offset,
-                row,
-                '\0'.display_char((char_idx + c + mod_idx_counter % rows, mod_idx_counter).into()),
-              );
-            }
-
-            newline_idx_offset += line_pos + placeholder_chars;
-            prev_char_idx = (char_idx + 1) % rows;
-            mod_idx_counter += 1;
-            if char_idx / rows > 0 {
-              mod_idx_offset += rows;
-            } else {
-              mod_idx_offset = 0;
-            }
-          } else {
-            self.grid.set(
-              col + newline_idx_offset - prev_char_idx - mod_idx_offset,
-              row,
-              char,
-            );
-          }
+        if let Some(char) = self
+          .text_contents
+          .as_ref()
+          .unwrap()
+          .chars()
+          .nth(col + (row * cols))
+        {
+          self.grid.set(col, row, char);
         }
       }
     }
   }
+
+  // pub fn update_grid_src(&mut self) {
+  //   if self.text_contents.as_ref().is_none() {
+  //     return;
+  //   };
+
+  //   let rows: usize = self.grid.width;
+  //   let cols: usize = self.grid.height;
+
+  //   let mut newline_idx_offset = 0;
+  //   let mut prev_char_idx = 0;
+  //   let mut mod_idx_offset = 0;
+  //   let mut mod_idx_counter = 0;
+
+  //   // TODO: clean up the mess. mostly, handling newline char logic.
+  //   for row in 0..rows {
+  //     for col in 0..cols {
+  //       let char_idx = col + (row * cols);
+  //       if let Some(char) = self.text_contents.as_ref().unwrap().chars().nth(char_idx) {
+  //         if char == '\n' || char == '\r' {
+  //           let line_pos = (char_idx - prev_char_idx) % rows;
+  //           let placeholder_chars = rows - line_pos;
+  //           for c in 0..placeholder_chars {
+  //             self.grid.set(
+  //               col + c + newline_idx_offset - prev_char_idx - mod_idx_offset,
+  //               row,
+  //               '\0'.display_char((char_idx + c + mod_idx_counter % rows, mod_idx_counter).into()),
+  //             );
+  //           }
+
+  //           newline_idx_offset += line_pos + placeholder_chars;
+  //           prev_char_idx = (char_idx + 1) % rows;
+  //           mod_idx_counter += 1;
+  //           if char_idx / rows > 0 {
+  //             mod_idx_offset += rows;
+  //           } else {
+  //             mod_idx_offset = 0;
+  //           }
+  //         } else {
+  //           self.grid.set(
+  //             col + newline_idx_offset - prev_char_idx - mod_idx_offset,
+  //             row,
+  //             char,
+  //           );
+  //         }
+  //       }
+  //     }
+  //   }
+  // }
 
   pub fn resize(&mut self, size: Vec2) {
     self.grid = Matrix::new(size.x, size.y, '\0');
