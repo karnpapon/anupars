@@ -15,6 +15,7 @@ use std::{
   thread::JoinHandle,
 };
 
+use cursive::direction::Direction;
 use cursive_tabs::TabPanel;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
@@ -24,8 +25,8 @@ use view::menubar::Menubar;
 
 use cursive::event::{Event, Key};
 use cursive::theme::{BorderStyle, Palette};
-use cursive::views::{Canvas, LinearLayout, TextView};
-use cursive::{Cursive, CursiveExt, With};
+use cursive::views::{Canvas, Dialog, EditView, LinearLayout, ListView, TextView};
+use cursive::{Cursive, CursiveExt, View, With};
 
 pub struct WorkerThread {
   thread_active: Arc<AtomicU32>,
@@ -139,13 +140,28 @@ fn main() {
   siv.add_layer(main_views);
 
   siv.add_global_callback(Key::Esc, move |s| {
-    if !current_data.show_regex_display {
-      let mut regex_display_unit_view = s
-        .find_name::<TextView>(config::regex_display_unit_view)
+    // if !current_data.show_regex_display {
+    // let mut regex_display_unit_view = s
+    //   .find_name::<TextView>(config::regex_display_unit_view)
+    //   .unwrap();
+    // regex_display_unit_view.set_content(utils::build_doc_string(&config::APP_WELCOME_MSG));
+    // }
+    if anu.show_regex_display {
+      let mut interactive_display_section_view = s
+        .find_name::<LinearLayout>(config::main_section_view)
         .unwrap();
-      regex_display_unit_view.set_content(utils::build_doc_string(&config::APP_WELCOME_MSG));
+      let _ = interactive_display_section_view.set_focus_index(0);
+    } else {
+      let mut interactive_display_section_view = s
+        .find_name::<LinearLayout>(config::main_section_view)
+        .unwrap();
+      let _ = interactive_display_section_view.set_focus_index(3);
     }
 
+    anu.show_regex_display = !anu.show_regex_display;
+  });
+
+  siv.add_global_callback(Event::CtrlChar('h'), move |s| {
     s.select_menubar();
   });
 

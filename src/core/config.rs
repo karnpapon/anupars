@@ -39,10 +39,8 @@ lazy_static! {
   ]);
   pub static ref APP_WELCOME_MSG: StaticStrStr = Vec::from([
     ("", ""),
-    ("(CmdOrCtrl-i)", "toggle input"),
-    ("(CmdOrCtrl-g)", "toggle Regex input"),
-    ("(Return)", "eval input(target input must = ON)"),
-    ("(h)", "show helps window"),
+    ("(Return)", "eval input"),
+    ("(Ctrl-h)", "show menubar"),
   ]);
 }
 
