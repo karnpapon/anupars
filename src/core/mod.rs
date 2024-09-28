@@ -1,5 +1,8 @@
 pub mod anu;
+pub mod application;
 pub mod clock;
+pub mod command;
+pub mod commands;
 pub mod config;
 pub mod midi;
 pub mod regex;

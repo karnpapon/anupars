@@ -57,6 +57,7 @@ dependencies = [
  "cursive-tabs",
  "dirs",
  "lazy_static",
+ "log",
  "midir",
  "num",
  "rand",

@@ -107,6 +107,7 @@ fn main() {
   let mut regex = RegExpHandler::new();
   let mut anu: Anu = Anu::new();
   let cb_sink = siv.cb_sink().clone();
+  let worker = WorkerThread::spawn(cb_sink.clone());
   // let metronome = metronome::Metronome::new();
   // let m_tx = metronome.tx.clone();
 
@@ -122,9 +123,6 @@ fn main() {
   siv.set_autorefresh(true);
   siv.set_user_data(Menubar::default());
   siv.set_user_data(Anu::new());
-  let current_data = siv
-    .with_user_data(|controller_data: &mut Anu| controller_data.clone())
-    .unwrap();
 
   init_default_style(&mut siv);
 
@@ -139,14 +137,17 @@ fn main() {
 
   siv.add_layer(main_views);
 
+  // ESC
   siv.add_global_callback(Key::Esc, move |s| {
-    // if !current_data.show_regex_display {
-    // let mut regex_display_unit_view = s
-    //   .find_name::<TextView>(config::regex_display_unit_view)
-    //   .unwrap();
-    // regex_display_unit_view.set_content(utils::build_doc_string(&config::APP_WELCOME_MSG));
-    // }
-    if anu.show_regex_display {
+    anu.toggle_regex_input = !anu.toggle_regex_input;
+
+    if !anu.toggle_regex_input {
+      let mut regex_display_unit_view = s
+        .find_name::<TextView>(config::regex_display_unit_view)
+        .unwrap();
+      regex_display_unit_view.set_content(utils::build_doc_string(&config::APP_WELCOME_MSG));
+    }
+    if anu.toggle_regex_input {
       let mut interactive_display_section_view = s
         .find_name::<LinearLayout>(config::main_section_view)
         .unwrap();
@@ -157,26 +158,37 @@ fn main() {
         .unwrap();
       let _ = interactive_display_section_view.set_focus_index(3);
     }
-
-    anu.show_regex_display = !anu.show_regex_display;
   });
 
+  // Ctrl-h
   siv.add_global_callback(Event::CtrlChar('h'), move |s| {
     s.select_menubar();
   });
 
   // DRY?
+  // F1
   siv.add_global_callback(Key::F1, move |s| {
     let mut interactive_display_section_view = s
       .find_name::<LinearLayout>(config::main_section_view)
       .unwrap();
     let _ = interactive_display_section_view.set_focus_index(0);
   });
+
+  // F2
   siv.add_global_callback(Key::F2, move |s| {
     let mut interactive_display_section_view = s
       .find_name::<LinearLayout>(config::main_section_view)
       .unwrap();
     let _ = interactive_display_section_view.set_focus_index(1);
+  });
+
+  // Spacebar
+  siv.add_global_callback(Event::Char(' '), move |s| {
+    s.call_on_name(
+      config::canvas_editor_section_view,
+      |c: &mut Canvas<CanvasEditor>| worker.toggle_thread(c.state_mut().set_playing()),
+    )
+    .unwrap();
   });
 
   // thread::spawn(move || {
@@ -225,15 +237,6 @@ fn main() {
   //     // The metronome thread will park itself on the next iteration
   //   }
   // });
-  let worker = WorkerThread::spawn(cb_sink.clone());
-
-  siv.add_global_callback(Event::Char(' '), move |s| {
-    s.call_on_name(
-      config::canvas_editor_section_view,
-      |c: &mut Canvas<CanvasEditor>| worker.toggle_thread(c.state_mut().set_playing()),
-    )
-    .unwrap();
-  });
 
   thread::spawn(move || {
     regex.run(cb_sink);

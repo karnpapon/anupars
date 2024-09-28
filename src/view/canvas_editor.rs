@@ -1,4 +1,4 @@
-use std::{thread, time::Instant, usize};
+use std::usize;
 
 use cursive::{
   event::{Callback, Event, EventResult, Key, MouseButton, MouseEvent},
@@ -6,7 +6,7 @@ use cursive::{
   utils::span::SpannedString,
   view::{CannotFocus, Nameable, Resizable},
   views::{Canvas, NamedView, ResizedView, TextView},
-  Cursive, Printer, Rect, Vec2, XY,
+  Printer, Rect, Vec2, XY,
 };
 
 use crate::core::{
