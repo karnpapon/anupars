@@ -230,13 +230,13 @@ pub struct Clock {
   signature: Signature,
   tempo: Tempo,
   tap: Option<Instant>,
+  playing: bool,
 }
 
 pub enum Message {
   Tempo(Tempo),
   NudgeTempo(NudgeTempo),
   Reset,
-  // Pause,
   StartStop,
   Signature(Signature),
   Tap,
@@ -255,6 +255,7 @@ impl Clock {
       signature,
       tempo,
       tap: None,
+      playing: false,
     }
   }
 
@@ -270,18 +271,13 @@ impl Clock {
 
     thread::spawn(move || {
       loop {
-        // wait a tick
-        #[allow(unused_variables)]
-        let diff = self.tick();
-
         // handle any incoming messages
         let mut is_empty = false;
         while !is_empty {
           let message_result = rx.try_recv();
           match message_result {
             Ok(Message::Reset) => self.reset(),
-            // Ok(Message::Start) => {}
-            Ok(Message::StartStop) => {}
+            Ok(Message::StartStop) => self.playing = !self.playing,
             Ok(Message::Signature(signature)) => {
               self.set_signature(signature);
             }
@@ -311,10 +307,14 @@ impl Clock {
           }
         }
 
-        // send clock time
-        metronome_tx
-          .send(metronome::Message::Time(self.time()))
-          .unwrap();
+        if self.playing {
+          #[allow(unused_variables)]
+          let diff = self.tick();
+          // send clock time
+          metronome_tx
+            .send(metronome::Message::Time(self.time()))
+            .unwrap();
+        }
       }
     });
 

@@ -30,7 +30,7 @@ pub struct Marker {
   area: Rect,
   drag_start_x: usize,
   drag_start_y: usize,
-  is_playing: bool,
+  // is_playing: bool,
   actived_pos: Vec2,
 }
 
@@ -169,7 +169,7 @@ impl CanvasEditor {
         area: Rect::from_point(Vec2::zero()),
         drag_start_y: 0,
         drag_start_x: 0,
-        is_playing: false,
+        // is_playing: false,
         actived_pos: Vec2::zero(),
       },
       grid: Matrix::new(0, 0, '\0'),
@@ -271,12 +271,11 @@ impl CanvasEditor {
   }
 
   pub fn get(&self, x: usize, y: usize) -> char {
-    if self.marker.is_playing
-      && self
-        .marker
-        .pos
-        .saturating_add(self.marker.actived_pos)
-        .eq(&(x, y))
+    if self
+      .marker
+      .pos
+      .saturating_add(self.marker.actived_pos)
+      .eq(&(x, y))
     {
       return '*';
     }
@@ -291,10 +290,10 @@ impl CanvasEditor {
     &self.marker.area
   }
 
-  pub fn set_playing(&mut self) -> bool {
-    self.marker.is_playing = !self.marker.is_playing;
-    self.marker.is_playing
-  }
+  // pub fn set_playing(&mut self) -> bool {
+  //   self.marker.is_playing = !self.marker.is_playing;
+  //   self.marker.is_playing
+  // }
 }
 
 fn draw(canvas: &CanvasEditor, printer: &Printer) {

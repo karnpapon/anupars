@@ -2,7 +2,7 @@ mod core;
 mod view;
 
 use core::anu::Anu;
-use core::clock::metronome::{self, Metronome};
+use core::clock::metronome::{self, Message, Metronome};
 use core::regex::RegExpHandler;
 use core::{config, utils};
 // use crossbeam_utils::sync::Parker;
@@ -107,9 +107,10 @@ fn main() {
   let mut regex = RegExpHandler::new();
   let mut anu: Anu = Anu::new();
   let cb_sink = siv.cb_sink().clone();
-  let worker = WorkerThread::spawn(cb_sink.clone());
-  // let metronome = metronome::Metronome::new();
-  // let m_tx = metronome.tx.clone();
+  let cb_sink_met = siv.cb_sink().clone();
+  // let worker = WorkerThread::spawn(cb_sink.clone());
+  let metronome = metronome::Metronome::new();
+  let m_tx = metronome.tx.clone();
 
   // let state = Arc::new((Mutex::new(false), Condvar::new()));
   // let metronome_state = Arc::clone(&state);
@@ -183,12 +184,8 @@ fn main() {
   });
 
   // Spacebar
-  siv.add_global_callback(Event::Char(' '), move |s| {
-    s.call_on_name(
-      config::canvas_editor_section_view,
-      |c: &mut Canvas<CanvasEditor>| worker.toggle_thread(c.state_mut().set_playing()),
-    )
-    .unwrap();
+  siv.add_global_callback(Event::Char(' '), move |_| {
+    let _ = m_tx.send(Message::StartStop);
   });
 
   // thread::spawn(move || {
@@ -240,6 +237,10 @@ fn main() {
 
   thread::spawn(move || {
     regex.run(cb_sink);
+  });
+
+  thread::spawn(move || {
+    metronome.run(cb_sink_met);
   });
 
   siv.run();
