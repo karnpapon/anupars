@@ -69,20 +69,20 @@ impl Metronome {
         Message::Time(time) => {
           cb_sink
             .send(Box::new(move |s| {
-              let num = 1;
-              let denom = 8;
-              let beats_since_bar = time.beats_since_bar();
+              // let num = 1;
+              // let denom = 8;
+              // let beats_since_bar = time.beats_since_bar();
               let tick = time.ticks().to_usize().unwrap();
-              let mut tick_str = String::from("-").repeat(denom);
-              utils::replace_nth_char_ascii(
-                &mut tick_str,
-                beats_since_bar.to_usize().unwrap(),
-                '|',
-              );
-              s.call_on_name(config::ratio_status_unit_view, |c: &mut TextView| {
-                c.set_content(utils::build_ratio_status_str((num, denom), &tick_str))
-              })
-              .unwrap();
+              // let mut tick_str = String::from("-").repeat(denom);
+              // utils::replace_nth_char_ascii(
+              //   &mut tick_str,
+              //   beats_since_bar.to_usize().unwrap(),
+              //   '|',
+              // );
+              // s.call_on_name(config::ratio_status_unit_view, |c: &mut TextView| {
+              //   c.set_content(utils::build_ratio_status_str((num, denom), &tick_str))
+              // })
+              // .unwrap();
               s.call_on_name(
                 config::canvas_editor_section_view,
                 |c: &mut Canvas<CanvasEditor>| {

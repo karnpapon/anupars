@@ -8,7 +8,7 @@ use regex::Regex;
 
 use serde::{Deserialize, Serialize};
 
-use crate::view::canvas_base::CanvasBase;
+use crate::view::{canvas_base::CanvasBase, canvas_editor::CanvasEditor};
 
 use super::config;
 
@@ -108,6 +108,12 @@ impl RegExpHandler {
               |c: &mut Canvas<CanvasBase>| c.state_mut().set_text_matcher(None),
             )
             .unwrap();
+
+            s.call_on_name(
+              config::canvas_editor_section_view,
+              |c: &mut Canvas<CanvasEditor>| c.state_mut().set_text_matcher(None),
+            )
+            .unwrap();
           }));
         }
         Message::Solve(data) => {
@@ -123,7 +129,13 @@ impl RegExpHandler {
 
                   s.call_on_name(
                     config::canvas_base_section_view,
-                    |c: &mut Canvas<CanvasBase>| c.state_mut().set_text_matcher(mm),
+                    |c: &mut Canvas<CanvasBase>| c.state_mut().set_text_matcher(mm.clone()),
+                  )
+                  .unwrap();
+
+                  s.call_on_name(
+                    config::canvas_editor_section_view,
+                    |c: &mut Canvas<CanvasEditor>| c.state_mut().set_text_matcher(mm),
                   )
                   .unwrap();
 

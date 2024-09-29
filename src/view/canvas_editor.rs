@@ -1,8 +1,8 @@
-use std::usize;
+use std::{collections::HashMap, usize};
 
 use cursive::{
   event::{Callback, Event, EventResult, Key, MouseButton, MouseEvent},
-  theme::Style,
+  theme::{ColorStyle, ColorType, Style},
   utils::span::SpannedString,
   view::{CannotFocus, Nameable, Resizable},
   views::{Canvas, NamedView, ResizedView, TextView},
@@ -11,6 +11,7 @@ use cursive::{
 
 use crate::core::{
   config,
+  regex::Match,
   traits::{Matrix, Printable},
   utils,
 };
@@ -21,6 +22,7 @@ pub struct CanvasEditor {
   marker: Marker,
   grid: Matrix<char>,
   text_contents: Option<String>,
+  text_matcher: Option<HashMap<usize, Match>>,
   clock: u64,
 }
 
@@ -71,13 +73,22 @@ impl Marker {
 
         let (displayed_style, displayed_char) =
           if self.is_actived_position((offset_x, offset_y).into()) {
-            (Style::none(), '*')
+            (Style::none(), '>')
           } else {
+            let ch = if editor.text_matcher.is_some() {
+              let hl = editor.text_matcher.as_ref().unwrap();
+              if hl.get(&(offset_x + offset_y * editor.grid.width)).is_some() {
+                '*'
+              } else {
+                editor.get(offset_x, offset_y)
+              }
+            } else {
+              editor.get(offset_x, offset_y)
+            };
+
             (
               Style::highlight(),
-              editor
-                .get(offset_x, offset_y)
-                .display_char((offset_x, offset_y).into()),
+              ch.display_char((offset_x, offset_y).into()),
             )
           };
 
@@ -174,6 +185,7 @@ impl CanvasEditor {
       },
       grid: Matrix::new(0, 0, '\0'),
       text_contents: None,
+      text_matcher: None,
       clock: 0,
     }
   }
@@ -271,14 +283,14 @@ impl CanvasEditor {
   }
 
   pub fn get(&self, x: usize, y: usize) -> char {
-    if self
-      .marker
-      .pos
-      .saturating_add(self.marker.actived_pos)
-      .eq(&(x, y))
-    {
-      return '*';
-    }
+    // if self
+    //   .marker
+    //   .pos
+    //   .saturating_add(self.marker.actived_pos)
+    //   .eq(&(x, y))
+    // {
+    //   return '*';
+    // }
     *self.grid.get(x, y).unwrap_or(&'.')
   }
 
@@ -288,6 +300,10 @@ impl CanvasEditor {
 
   pub fn marker_area(&self) -> &Rect {
     &self.marker.area
+  }
+
+  pub fn set_text_matcher(&mut self, text_matcher: Option<HashMap<usize, Match>>) {
+    self.text_matcher = text_matcher
   }
 
   // pub fn set_playing(&mut self) -> bool {
