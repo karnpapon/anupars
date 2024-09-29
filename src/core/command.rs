@@ -124,13 +124,16 @@ pub enum InsertSource {
 #[derive(Clone, Serialize, Deserialize, Debug)]
 pub enum Command {
   Quit,
+  TogglePlay,
+  ShowMenubar,
+  ToggleInputRegexAndCanvas,
 }
 
 impl fmt::Display for Command {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     let mut repr_tokens = vec![self.basename().to_owned()];
     let mut extras_args = match self {
-      Self::Quit => vec![],
+      Self::Quit | Self::ToggleInputRegexAndCanvas | Self::ShowMenubar | Self::TogglePlay => vec![],
     };
     repr_tokens.append(&mut extras_args);
     write!(f, "{}", repr_tokens.join(" "))
@@ -141,6 +144,9 @@ impl Command {
   pub fn basename(&self) -> &str {
     match self {
       Self::Quit => "quit",
+      Self::TogglePlay => "playpause",
+      Self::ShowMenubar => "showmenubar",
+      Self::ToggleInputRegexAndCanvas => "toggleinputregexandcanvas",
     }
   }
 }
@@ -255,7 +261,7 @@ pub fn parse(input: &str) -> Result<Vec<Command>, CommandParseError> {
   for command_input in command_inputs {
     let components: Vec<_> = command_input.split_whitespace().collect();
 
-    if let Some((command, args)) = components.split_first() {
+    if let Some((command, _args)) = components.split_first() {
       let command = handle_aliases(command);
       use CommandParseError as E;
       let command = match command {

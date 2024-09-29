@@ -2,7 +2,7 @@ use std::{collections::HashMap, usize};
 
 use cursive::{
   event::{Callback, Event, EventResult, Key, MouseButton, MouseEvent},
-  theme::{ColorStyle, ColorType, Style},
+  theme::{Style},
   utils::span::SpannedString,
   view::{CannotFocus, Nameable, Resizable},
   views::{Canvas, NamedView, ResizedView, TextView},

@@ -1,86 +1,52 @@
+use std::borrow::BorrowMut;
 use std::collections::HashMap;
+use std::sync::mpsc::Sender;
+use std::sync::Arc;
 
+use super::anu::Anu;
 use super::application::UserData;
-use super::command::{parse, Command};
+use super::clock::metronome::Message;
+use super::command::Command;
+use super::{config, utils};
 
 use cursive::event::{Event, Key};
-use cursive::traits::View;
-// use cursive::views::Dialog;
+// use cursive::traits::View;
+use cursive::views::{LinearLayout, TextView};
 use cursive::Cursive;
-use log::{debug, error, info};
-// use ncspot::CONFIGURATION_FILE_NAME;
+use log::error;
 use std::cell::RefCell;
 
-pub struct Config {
-  /// The configuration file path.
-  filename: String,
-  // / Configuration set by the user, read only.
-  // values: RwLock<ConfigValues>,
-  // / Runtime state which can't be edited by the user, read/write.
-  // state: RwLock<UserState>,
-}
+// pub struct Config {
+//   filename: String,
+// }
 
-pub enum CommandResult {
-  Consumed(Option<String>),
-  // View(Box<dyn ViewExt>),
-  Modal(Box<dyn View>),
-  Ignored,
-}
+// pub enum CommandResult {
+//   Consumed(Option<String>),
+//   // View(Box<dyn ViewExt>),
+//   Modal(Box<dyn View>),
+//   Ignored,
+// }
 
 pub struct CommandManager {
   aliases: HashMap<String, String>,
   bindings: RefCell<HashMap<String, Vec<Command>>>,
-  // spotify: Spotify,
-  // queue: Arc<Queue>,
-  // library: Arc<Library>,
-  // config: Arc<Config>,
-  // events: EventManager,
+  anu: Arc<Anu>,
+  metronome_sender: Sender<Message>,
 }
 
 impl CommandManager {
-  pub fn new(// spotify: Spotify,
-    // queue: Arc<Queue>,
-    // library: Arc<Library>,
-    // config: Arc<Config>,
-    // events: EventManager,
-  ) -> Self {
+  pub fn new(anu: Anu, m_tx: Sender<Message>) -> Self {
     let bindings = RefCell::new(Self::get_bindings());
     Self {
       aliases: HashMap::new(),
       bindings,
-      // spotify,
-      // queue,
-      // library,
-      // config,
-      // events,
+      anu: Arc::new(anu),
+      metronome_sender: m_tx,
     }
   }
 
   pub fn get_bindings() -> HashMap<String, Vec<Command>> {
-    // let config = config.values();
-    // let mut kb = if config.default_keybindings.unwrap_or(true) {
-    let mut kb = Self::default_keybindings();
-    // } else {
-    //   HashMap::new()
-    // };
-    // let custom_bindings: Option<HashMap<String, String>> = config.keybindings.clone();
-
-    // for (key, commands) in custom_bindings.unwrap_or_default() {
-    // match parse(&commands) {
-    //   Ok(cmds) => {
-    //     info!("Custom keybinding: {} -> {:?}", key, cmds);
-    //     kb.insert(key, cmds);
-    //   }
-    //   Err(err) => {
-    //     error!(
-    //       "Invalid command(s) for key {}-\"{}\": {}",
-    //       key, commands, err
-    //     );
-    //   }
-    // }
-    // }
-
-    kb
+    Self::default_keybindings()
   }
 
   pub fn register_aliases<S: Into<String>>(&mut self, name: S, aliases: Vec<S>) {
@@ -93,7 +59,7 @@ impl CommandManager {
   pub fn register_all(&mut self) {
     self.register_aliases("quit", vec!["q", "x"]);
     self.register_aliases("playpause", vec!["pause", "toggleplay", "toggleplayback"]);
-    self.register_aliases("repeat", vec!["loop"]);
+    self.register_aliases("showmenubar", vec!["showmenubar"]);
   }
 
   fn handle_default_commands(
@@ -103,49 +69,52 @@ impl CommandManager {
   ) -> Result<Option<String>, String> {
     match cmd {
       Command::Quit => Ok(None),
+      Command::TogglePlay => {
+        let _ = self.metronome_sender.send(Message::StartStop);
+        Ok(None)
+      }
+      Command::ShowMenubar => {
+        s.select_menubar();
+        Ok(None)
+      }
+      Command::ToggleInputRegexAndCanvas => {
+        self.anu.set_toggle_regex_input();
+
+        if !self.anu.toggle_regex_input() {
+          let mut regex_display_unit_view = s
+            .find_name::<TextView>(config::regex_display_unit_view)
+            .unwrap();
+          regex_display_unit_view.set_content(utils::build_doc_string(&config::APP_WELCOME_MSG));
+
+          let mut interactive_display_section_view = s
+            .find_name::<LinearLayout>(config::main_section_view)
+            .unwrap();
+          let _ = interactive_display_section_view.set_focus_index(3);
+        } else {
+          let mut interactive_display_section_view = s
+            .find_name::<LinearLayout>(config::main_section_view)
+            .unwrap();
+          let _ = interactive_display_section_view.set_focus_index(0);
+        }
+
+        Ok(None)
+      }
     }
   }
 
-  // fn handle_callbacks(&self, s: &mut Cursive, cmd: &Command) -> Result<Option<String>, String> {
-  //   let local = if let Some(mut contextmenu) = s.find_name::<ContextMenu>("contextmenu") {
-  //     contextmenu.on_command(s, cmd)?
-  //   } else if let Some(mut add_track_menu) = s.find_name::<AddToPlaylistMenu>("addtrackmenu") {
-  //     add_track_menu.on_command(s, cmd)?
-  //   } else if let Some(mut select_artist) = s.find_name::<SelectArtistMenu>("selectartist") {
-  //     select_artist.on_command(s, cmd)?
-  //   } else if let Some(mut select_artist_action) =
-  //     s.find_name::<SelectArtistActionMenu>("selectartistaction")
-  //   {
-  //     select_artist_action.on_command(s, cmd)?
-  //   } else {
-  //     s.on_layout(|siv, mut l| l.on_command(siv, cmd))?
-  //   };
+  fn handle_callbacks(&self, s: &mut Cursive, cmd: &Command) -> Result<Option<String>, String> {
+    self.handle_default_commands(s, cmd)
+  }
 
-  //   if let CommandResult::Consumed(output) = local {
-  //     Ok(output)
-  //   } else if let CommandResult::Modal(modal) = local {
-  //     s.add_layer(modal);
-  //     Ok(None)
-  //   } else if let CommandResult::View(view) = local {
-  //     s.call_on_name("main", move |v: &mut Layout| {
-  //       v.push_view(view);
-  //     });
+  pub fn handle(&self, siv: &mut Cursive, cmd: Command) {
+    let _result = self.handle_callbacks(siv, &cmd);
 
-  //     Ok(None)
-  //   } else {
-  //     self.handle_default_commands(s, cmd)
-  //   }
-  // }
+    // s.call_on_name("main", |v: &mut Layout| {
+    //   v.set_result(result);
+    // });
 
-  // pub fn handle(&self, s: &mut Cursive, cmd: Command) {
-  //   let result = self.handle_callbacks(s, &cmd);
-
-  //   s.call_on_name("main", |v: &mut Layout| {
-  //     v.set_result(result);
-  //   });
-
-  //   s.on_event(Event::Refresh);
-  // }
+    siv.on_event(Event::Refresh);
+  }
 
   pub fn register_keybinding<E: Into<cursive::event::Event>>(
     &self,
@@ -156,7 +125,7 @@ impl CommandManager {
     cursive.add_global_callback(event, move |s| {
       if let Some(data) = s.user_data::<UserData>().cloned() {
         for command in commands.clone().into_iter() {
-          // data.cmd.handle(s, command);
+          data.cmd.handle(s, command);
         }
       }
     });
@@ -188,6 +157,9 @@ impl CommandManager {
     let mut kb = HashMap::new();
 
     kb.insert("q".into(), vec![Command::Quit]);
+    kb.insert("Space".into(), vec![Command::TogglePlay]);
+    kb.insert("Ctrl+h".into(), vec![Command::ShowMenubar]);
+    kb.insert("Esc".into(), vec![Command::ToggleInputRegexAndCanvas]);
 
     kb
   }

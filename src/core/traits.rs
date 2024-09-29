@@ -48,7 +48,7 @@ impl<T: Copy> Matrix<T> {
 
 pub trait Printable {
   fn display_char(&self, pos: cursive::XY<usize>) -> char;
-  fn should_rest(&self, pos: cursive::XY<usize>) -> bool {
+  fn should_rest(&self, _pos: cursive::XY<usize>) -> bool {
     false
   }
 }

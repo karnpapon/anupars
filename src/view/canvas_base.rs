@@ -10,7 +10,7 @@ use std::{collections::HashMap, usize};
 use crate::core::{
   config,
   regex::Match,
-  traits::{Matrix, Printable},
+  traits::{Matrix},
 };
 
 #[derive(Clone)]

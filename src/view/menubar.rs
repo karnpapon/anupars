@@ -15,7 +15,7 @@ use cursive::{
     Canvas, Dialog, DummyView, HideableView, LinearLayout, NamedView, OnEventView, ResizedView,
     SelectView, TextView,
   },
-  Cursive, Printer, View, With,
+  Cursive, View, With,
 };
 
 use super::{canvas_base::CanvasBase, canvas_editor::CanvasEditor};

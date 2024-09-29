@@ -61,8 +61,8 @@ impl Signature {
     let minutes_per_beat = Ratio::from_integer(1) / beats_per_minute;
     let seconds_per_beat = minutes_per_beat * Ratio::from_integer(SECONDS_PER_MINUTE);
     let nanos_per_beat = seconds_per_beat * Ratio::from_integer(NANOS_PER_SECOND);
-    let nanos_per_tick = nanos_per_beat / self.ticks_per_beat;
-    nanos_per_tick
+    
+    nanos_per_beat / self.ticks_per_beat
   }
 
   pub fn nanos_per_beat(&self, beats_per_minute: Tick) -> Tick {
@@ -84,8 +84,8 @@ impl Signature {
     let nanos_per_beat = nanos_per_tick * self.ticks_per_beat;
     let beats_per_nano = Ratio::from_integer(1) / nanos_per_beat;
     let beats_per_second = beats_per_nano * Ratio::from_integer(NANOS_PER_SECOND);
-    let beats_per_minute = beats_per_second * Ratio::from_integer(SECONDS_PER_MINUTE);
-    beats_per_minute
+    
+    beats_per_second * Ratio::from_integer(SECONDS_PER_MINUTE)
   }
 }
 

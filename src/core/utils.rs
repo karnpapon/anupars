@@ -1,4 +1,4 @@
-use cursive::{Vec2, XY};
+use cursive::{XY};
 
 use super::config;
 

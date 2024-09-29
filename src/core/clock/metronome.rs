@@ -1,11 +1,11 @@
 use std::sync::mpsc::{channel, Receiver, Sender};
 
 // use crossbeam_utils::sync::{Parker, Unparker};
-use cursive::views::{Canvas, TextView};
+use cursive::views::{Canvas};
 use num::ToPrimitive;
 
 use crate::{
-  core::{config, utils},
+  core::{config},
   view::canvas_editor::CanvasEditor,
 };
 

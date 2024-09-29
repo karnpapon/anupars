@@ -1,19 +1,13 @@
 use cursive::{
-  event::EventResult,
-  view::{Nameable, Resizable, ViewWrapper},
+  view::{Nameable, Resizable},
   views::{DummyView, LinearLayout, NamedView, RadioGroup},
-  wrap_impl, Printer, View,
 };
-// use std::sync::mpsc::{channel, Receiver, Sender};
 use std::{
-  sync::mpsc::{channel, Receiver, Sender},
-  thread,
+  borrow::Borrow,
+  sync::{mpsc::Sender, Arc, RwLock},
 };
 
-use super::{
-  clock::{clock, metronome},
-  config, regex,
-};
+use super::{clock::clock, config, regex};
 use crate::view::{
   canvas_section::CanvasSection,
   middle_section::MiddleSection,
@@ -34,13 +28,9 @@ pub struct Anu {
   pub mode_state: RadioGroup<RegexMode>,
   pub flag_state: RadioGroup<RegexFlag>,
   pub input_regex: String,
-  pub toggle_regex_input: bool,
+  pub toggle_regex_input: Arc<RwLock<bool>>,
   pub top_section: TopSection,
 }
-
-// impl ViewWrapper for Anu {
-//   wrap_impl!(self.toggle_regex_input: bool);
-// }
 
 impl Anu {
   pub fn new() -> Self {
@@ -48,7 +38,7 @@ impl Anu {
       mode_state: RadioGroup::new(),
       flag_state: RadioGroup::new(),
       input_regex: String::new(),
-      toggle_regex_input: false,
+      toggle_regex_input: Arc::new(RwLock::new(false)),
       top_section: TopSection::new(),
     }
   }
@@ -58,13 +48,6 @@ impl Anu {
     let middle_section = MiddleSection::build();
     let padding_section = DummyView::new().fixed_width(1);
     let canvas_section = CanvasSection::build();
-    // let canvas_section = CanvasSection::build().on_focus(|_| {
-    //   cursive::event::EventResult::with_cb(|s| {
-    //     s.call_on_name(config::main_section_view, |v: &mut Anu| {
-    //       v.toggle_regex_input = false;
-    //     });
-    //   })
-    // });
 
     LinearLayout::vertical()
       .child(top_section)
@@ -72,5 +55,14 @@ impl Anu {
       .child(padding_section)
       .child(canvas_section)
       .with_name(config::main_section_view)
+  }
+
+  pub fn set_toggle_regex_input(&self) {
+    let mut toggle_regex_input = self.toggle_regex_input.write().unwrap();
+    *toggle_regex_input = !*toggle_regex_input;
+  }
+
+  pub fn toggle_regex_input(&self) -> bool {
+    *self.toggle_regex_input.read().unwrap()
   }
 }
