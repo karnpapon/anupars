@@ -1,31 +1,20 @@
-use std::borrow::BorrowMut;
 use std::collections::HashMap;
 use std::sync::mpsc::Sender;
 use std::sync::Arc;
 
+use crate::view::canvas_editor::CanvasEditor;
+
 use super::anu::Anu;
 use super::application::UserData;
 use super::clock::metronome::Message;
-use super::command::Command;
+use super::command::{Command, MoveDirection};
 use super::{config, utils};
 
 use cursive::event::{Event, Key};
-// use cursive::traits::View;
-use cursive::views::{LinearLayout, TextView};
+use cursive::views::{Canvas, LinearLayout, TextView};
 use cursive::Cursive;
 use log::error;
 use std::cell::RefCell;
-
-// pub struct Config {
-//   filename: String,
-// }
-
-// pub enum CommandResult {
-//   Consumed(Option<String>),
-//   // View(Box<dyn ViewExt>),
-//   Modal(Box<dyn View>),
-//   Ignored,
-// }
 
 pub struct CommandManager {
   aliases: HashMap<String, String>,
@@ -99,6 +88,21 @@ impl CommandManager {
 
         Ok(None)
       }
+      Command::AdjustMarker(direction) => {
+        let dir = match direction {
+          MoveDirection::Down => (0, -1),
+          MoveDirection::Left => (-1, 0),
+          MoveDirection::Right => (1, 0),
+          MoveDirection::Up => (0, 1),
+        };
+
+        let mut canvas_editor_section_view = s
+          .find_name::<Canvas<CanvasEditor>>(config::canvas_editor_section_view)
+          .unwrap();
+
+        canvas_editor_section_view.state_mut().marker.scale(dir);
+        Ok(None)
+      }
     }
   }
 
@@ -160,6 +164,22 @@ impl CommandManager {
     kb.insert("Space".into(), vec![Command::TogglePlay]);
     kb.insert("Ctrl+h".into(), vec![Command::ShowMenubar]);
     kb.insert("Esc".into(), vec![Command::ToggleInputRegexAndCanvas]);
+    kb.insert(
+      "Shift+Right".into(),
+      vec![Command::AdjustMarker(MoveDirection::Right)],
+    );
+    kb.insert(
+      "Shift+Left".into(),
+      vec![Command::AdjustMarker(MoveDirection::Left)],
+    );
+    kb.insert(
+      "Shift+Up".into(),
+      vec![Command::AdjustMarker(MoveDirection::Up)],
+    );
+    kb.insert(
+      "Shift+Down".into(),
+      vec![Command::AdjustMarker(MoveDirection::Down)],
+    );
 
     kb
   }

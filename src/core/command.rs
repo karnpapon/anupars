@@ -7,108 +7,107 @@ use std::sync::OnceLock;
 use serde::{Deserialize, Serialize};
 // use strum_macros::Display;
 
-#[derive(Clone, Serialize, Deserialize, Debug)]
-pub enum SeekInterval {
-  Forward,
-  Backwards,
-  Custom(usize),
-}
+// #[derive(Clone, Serialize, Deserialize, Debug)]
+// pub enum SeekInterval {
+//   Forward,
+//   Backwards,
+//   Custom(usize),
+// }
+
+// #[derive(Clone, Serialize, Deserialize, Debug)]
+// // #[strum(serialize_all = "lowercase")]
+// pub enum TargetMode {
+//   Current,
+//   Selected,
+// }
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
 // #[strum(serialize_all = "lowercase")]
-pub enum TargetMode {
-  Current,
-  Selected,
-}
-
-#[derive(Clone, Serialize, Deserialize, Debug)]
-// #[strum(serialize_all = "lowercase")]
-pub enum MoveMode {
+pub enum MoveDirection {
   Up,
   Down,
   Left,
   Right,
-  Playing,
 }
 
-#[derive(Clone, Serialize, Deserialize, Debug)]
-// #[strum(serialize_all = "lowercase")]
-pub enum MoveAmount {
-  Integer(i32),
-  Float(f32),
-  Extreme,
-}
+// #[derive(Clone, Serialize, Deserialize, Debug)]
+// // #[strum(serialize_all = "lowercase")]
+// pub enum MoveAmount {
+//   Integer(i32),
+//   Float(f32),
+//   Extreme,
+// }
 
-impl Default for MoveAmount {
-  fn default() -> Self {
-    Self::Integer(1)
-  }
-}
+// impl Default for MoveAmount {
+//   fn default() -> Self {
+//     Self::Integer(1)
+//   }
+// }
 
-/// Keys that can be used to sort songs on.
-#[derive(Clone, Serialize, Deserialize, Debug)]
-// #[strum(serialize_all = "lowercase")]
-pub enum SortKey {
-  Title,
-  Duration,
-  Artist,
-  Album,
-  Added,
-}
+// /// Keys that can be used to sort songs on.
+// #[derive(Clone, Serialize, Deserialize, Debug)]
+// // #[strum(serialize_all = "lowercase")]
+// pub enum SortKey {
+//   Title,
+//   Duration,
+//   Artist,
+//   Album,
+//   Added,
+// }
 
-#[derive(Clone, Serialize, Deserialize, Debug)]
-// #[strum(serialize_all = "lowercase")]
-pub enum SortDirection {
-  Ascending,
-  Descending,
-}
+// #[derive(Clone, Serialize, Deserialize, Debug)]
+// // #[strum(serialize_all = "lowercase")]
+// pub enum SortDirection {
+//   Ascending,
+//   Descending,
+// }
 
-#[derive(Clone, Serialize, Deserialize, Debug)]
-// #[strum(serialize_all = "lowercase")]
-pub enum JumpMode {
-  Previous,
-  Next,
-  Query(String),
-}
+// #[derive(Clone, Serialize, Deserialize, Debug)]
+// // #[strum(serialize_all = "lowercase")]
+// pub enum JumpMode {
+//   Previous,
+//   Next,
+//   Query(String),
+// }
 
-#[derive(Clone, Serialize, Deserialize, Debug)]
-// #[strum(serialize_all = "lowercase")]
-pub enum ShiftMode {
-  Up,
-  Down,
-}
+// #[derive(Clone, Serialize, Deserialize, Debug)]
+// // #[strum(serialize_all = "lowercase")]
+// pub enum ShiftMode {
+//   Up,
+//   Down,
+// }
 
-#[derive(Clone, Serialize, Deserialize, Debug)]
-// #[strum(serialize_all = "lowercase")]
-pub enum GotoMode {
-  Album,
-  Artist,
-}
+// #[derive(Clone, Serialize, Deserialize, Debug)]
+// // #[strum(serialize_all = "lowercase")]
+// pub enum GotoMode {
+//   Album,
+//   Artist,
+// }
 
-#[derive(Clone, Serialize, Deserialize, Debug)]
-pub enum SeekDirection {
-  Relative(i32),
-  Absolute(u32),
-}
+// #[derive(Clone, Serialize, Deserialize, Debug)]
+// pub enum SeekDirection {
+//   Relative(i32),
+//   Absolute(u32),
+// }
 
-impl fmt::Display for SeekDirection {
-  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-    let repr = match self {
-      Self::Absolute(pos) => format!("{pos}"),
-      Self::Relative(delta) => {
-        format!("{}{}", if delta > &0 { "+" } else { "" }, delta)
-      }
-    };
-    write!(f, "{repr}")
-  }
-}
+// impl fmt::Display for SeekDirection {
+//   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+//     let repr = match self {
+//       Self::Absolute(pos) => format!("{pos}"),
+//       Self::Relative(delta) => {
+//         format!("{}{}", if delta > &0 { "+" } else { "" }, delta)
+//       }
+//     };
+//     write!(f, "{repr}")
+//   }
+// }
 
-#[derive(Clone, Serialize, Deserialize, Debug)]
-pub enum InsertSource {
-  #[cfg(feature = "share_clipboard")]
-  Clipboard,
-  // Input(SpotifyUrl),
-}
+// #[derive(Clone, Serialize, Deserialize, Debug)]
+// pub enum InsertSource {
+//   #[cfg(feature = "share_clipboard")]
+//   Clipboard,
+//   // Input(SpotifyUrl),
+// }
 
 // impl fmt::Display for InsertSource {
 //   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -127,13 +126,18 @@ pub enum Command {
   TogglePlay,
   ShowMenubar,
   ToggleInputRegexAndCanvas,
+  AdjustMarker(MoveDirection),
 }
 
 impl fmt::Display for Command {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     let mut repr_tokens = vec![self.basename().to_owned()];
     let mut extras_args = match self {
-      Self::Quit | Self::ToggleInputRegexAndCanvas | Self::ShowMenubar | Self::TogglePlay => vec![],
+      Self::Quit
+      | Self::ToggleInputRegexAndCanvas
+      | Self::ShowMenubar
+      | Self::TogglePlay
+      | Self::AdjustMarker(_) => vec![],
     };
     repr_tokens.append(&mut extras_args);
     write!(f, "{}", repr_tokens.join(" "))
@@ -147,6 +151,7 @@ impl Command {
       Self::TogglePlay => "playpause",
       Self::ShowMenubar => "showmenubar",
       Self::ToggleInputRegexAndCanvas => "toggleinputregexandcanvas",
+      Self::AdjustMarker(_) => "adjustmarker",
     }
   }
 }

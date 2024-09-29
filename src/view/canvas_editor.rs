@@ -2,7 +2,7 @@ use std::{collections::HashMap, usize};
 
 use cursive::{
   event::{Callback, Event, EventResult, Key, MouseButton, MouseEvent},
-  theme::{Style},
+  theme::Style,
   utils::span::SpannedString,
   view::{CannotFocus, Nameable, Resizable},
   views::{Canvas, NamedView, ResizedView, TextView},
@@ -19,11 +19,10 @@ use crate::core::{
 #[derive(Clone)]
 pub struct CanvasEditor {
   size: Vec2,
-  marker: Marker,
+  pub marker: Marker,
   grid: Matrix<char>,
   text_contents: Option<String>,
   text_matcher: Option<HashMap<usize, Match>>,
-  clock: u64,
 }
 
 #[derive(Clone)]
@@ -32,7 +31,6 @@ pub struct Marker {
   area: Rect,
   drag_start_x: usize,
   drag_start_y: usize,
-  // is_playing: bool,
   actived_pos: Vec2,
 }
 
@@ -163,11 +161,16 @@ impl Marker {
       self.actived_pos.y += 1;
       self.actived_pos.y %= self.area.height();
     }
-    // crossbeam::scope(|scope| {
-    //   scope.spawn(|_| {
-    //   });
-    // })
-    // .unwrap();
+  }
+
+  pub fn scale(&mut self, (w, h): (i32, i32)) {
+    self.area = Rect::from_size(
+      self.pos,
+      (
+        (self.area.width() as i32) + w,
+        (self.area.height() as i32) - h,
+      ),
+    );
   }
 }
 
@@ -186,7 +189,6 @@ impl CanvasEditor {
       grid: Matrix::new(0, 0, '\0'),
       text_contents: None,
       text_matcher: None,
-      clock: 0,
     }
   }
 
