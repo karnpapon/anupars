@@ -71,7 +71,17 @@ impl Marker {
 
         let (displayed_style, displayed_char) =
           if self.is_actived_position((offset_x, offset_y).into()) {
-            (Style::none(), '>')
+            if editor.text_matcher.is_some() {
+              let hl = editor.text_matcher.as_ref().unwrap();
+              if hl.get(&(offset_x + offset_y * editor.grid.width)).is_some() {
+                // SEND MIDI OUT HERE
+                (Style::none(), '@')
+              } else {
+                (Style::none(), '>')
+              }
+            } else {
+              (Style::none(), '>')
+            }
           } else {
             let ch = if editor.text_matcher.is_some() {
               let hl = editor.text_matcher.as_ref().unwrap();
@@ -307,11 +317,6 @@ impl CanvasEditor {
   pub fn set_text_matcher(&mut self, text_matcher: Option<HashMap<usize, Match>>) {
     self.text_matcher = text_matcher
   }
-
-  // pub fn set_playing(&mut self) -> bool {
-  //   self.marker.is_playing = !self.marker.is_playing;
-  //   self.marker.is_playing
-  // }
 }
 
 fn draw(canvas: &CanvasEditor, printer: &Printer) {
