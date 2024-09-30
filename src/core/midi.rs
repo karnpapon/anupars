@@ -1,22 +1,15 @@
-use midir::{MidiOutput, MidiOutputConnection};
+use midir::{MidiIO, MidiOutput, MidiOutputConnection, MidiOutputPort};
 use std::collections::HashMap;
+use std::error::Error;
 use std::sync::Mutex;
-// use tauri::{
-//   plugin::{Builder, TauriPlugin},
-//   AppHandle, Manager, Runtime,
-// };
 
-// use crate::AnuApp;
-
-// use super::conf::AppConf;
-
-pub struct MidiPlugin {
+pub struct Midi {
   pub midi: Mutex<Option<MidiOutput>>,
   pub devices: Mutex<HashMap<String, String>>,
   pub out_device: Mutex<Option<MidiOutputConnection>>,
 }
 
-impl Default for MidiPlugin {
+impl Default for Midi {
   fn default() -> Self {
     let Ok(midi_out) = MidiOutput::new("client-midi-output") else {
       return Self {
@@ -25,7 +18,7 @@ impl Default for MidiPlugin {
         out_device: None.into(),
       };
     };
-    MidiPlugin {
+    Midi {
       midi: Some(midi_out).into(),
       devices: HashMap::new().into(),
       out_device: None.into(),
@@ -33,122 +26,59 @@ impl Default for MidiPlugin {
   }
 }
 
-// pub fn list_midi_connections(app: tauri::State<'_, AnuApp>) -> HashMap<String, String> {
-//   match app.midi_states.midi.lock() {
-//     Ok(m) => {
-//       let mut midi_connections = HashMap::new();
-//       let _midi = m.as_ref().unwrap();
-//       for (i, p) in _midi.ports().iter().enumerate() {
-//         let port_name = _midi.port_name(p);
-//         match port_name {
-//           Ok(port_name) => {
-//             midi_connections.insert(format!("io-midi-{}", i), port_name);
-//           }
-//           Err(e) => {
-//             println!("Error getting port name: {}", e);
-//           }
-//         }
-//       }
-//       midi_connections
-//     }
-//     Err(_) => HashMap::new(),
-//   }
-// }
+impl Midi {
+  pub fn init(&mut self) -> Result<(), Box<dyn Error>> {
+    let midi_out = MidiOutput::new("My Test Output")?;
 
-// pub fn setup_midi_connection_list<R: Runtime>(
-//   app_state: tauri::State<'_, AnuApp>,
-//   app_handle: AppHandle<R>,
-// ) -> Result<(), &'static str> {
-//   let app_conf = AppConf::read();
-//   let io_midi = match app_conf.io_midi {
-//     Some(_io_midi) => _io_midi,
-//     None => "".to_string(),
-//   };
-//   match app_state.midi_states.devices.lock() {
-//     Ok(mut midi_devices) => {
-//       let state = app_state.clone();
-//       *midi_devices = list_midi_connections(state.clone());
-//       let midi_devices_conn = list_midi_connections(state);
+    let out_ports = midi_out.ports();
+    let out_port: &MidiOutputPort = match out_ports.len() {
+      0 => return Err("no output port found".into()),
+      1 => {
+        println!(
+          "Choosing the only available output port: {}",
+          midi_out.port_name(&out_ports[0]).unwrap()
+        );
+        &out_ports[0]
+      }
+      _ => {
+        println!("\nAvailable output ports:");
+        for (i, p) in out_ports.iter().enumerate() {
+          println!("{}: {}", i, midi_out.port_name(p).unwrap());
+        }
+        print!("Please select output port: ");
+        // stdout().flush()?;
+        let mut input = String::from("0");
+        // stdin().read_line(&mut input)?;
+        out_ports
+          .get(input.trim().parse::<usize>()?)
+          .ok_or("invalid output port selected")?
+      }
+    };
 
-//       // inject midi devices to menubar.
-//       std::thread::spawn(move || {
-//         let window = app_handle.get_window("core").unwrap().menu_handle();
-//         for (key, val) in midi_devices_conn.iter() {
-//           let ww = window.get_item(key);
-//           ww.set_title(val).unwrap();
-//           ww.set_selected(key == &io_midi).unwrap();
-//           ww.set_enabled(true).unwrap();
-//         }
-//       });
+    // println!("\nOpening connection");
+    let mut conn_out = midi_out.connect(out_port, "midir-test")?;
+    self.out_device = Mutex::new(Some(conn_out));
+    // println!("Connection open. Listen!");
+    // {
+    //   // Define a new scope in which the closure `play_note` borrows conn_out, so it can be called easily
+    //   let mut play_note = |note: u8, duration: u64| {
+    //     const NOTE_ON_MSG: u8 = 0x90;
+    //     const NOTE_OFF_MSG: u8 = 0x80;
+    //     const VELOCITY: u8 = 0x64;
+    //     let _ = conn_out.send(&[NOTE_ON_MSG, note, VELOCITY]);
+    //   };
 
-//       Ok(())
-//     }
-//     Err(_) => Err("setup_midi_connection_list::error"),
-//   }
-// }
-
-// pub fn setup_midi_out(app: tauri::State<'_, AnuApp>) -> Result<String, &'static str> {
-//   let mut port = None;
-//   let app_conf = AppConf::read();
-//   let io_midi = match app_conf.io_midi {
-//     Some(_io_midi) => _io_midi,
-//     None => "".to_string(),
-//   };
-
-//   if io_midi == *"" {
-//     return Ok("--".to_string());
-//   }
-
-//   match (
-//     app.midi_states.devices.lock(),
-//     app.midi_states.midi.lock(),
-//     app.midi_states.out_device.lock(),
-//   ) {
-//     (Ok(devices), Ok(midi), Ok(mut out)) => {
-//       let _midi = midi.as_ref().unwrap();
-//       let target_device = devices.get(&io_midi).expect("cannot get devices value");
-//       for (_, p) in _midi.ports().iter().enumerate() {
-//         let port_name = _midi.port_name(p).unwrap();
-//         if &port_name == target_device {
-//           port = Some(p.clone());
-//         }
-//       }
-
-//       let midi_out = MidiOutput::new("midi-output").unwrap();
-//       if let Some(p) = port {
-//         let conn_out = midi_out.connect(&p, "midi-out-device").unwrap();
-//         *out = Some(conn_out);
-//         println!("Connection open. Listen!");
-//       }
-
-//       Ok(target_device.to_string())
-//     }
-//     _ => Err("setup_midi_out::error"),
-//   }
-// }
-
-// pub fn send_midi_out(app: tauri::State<'_, AnuApp>, msg: Vec<u8>) -> Result<(), &'static str> {
-//   match app.midi_states.out_device.lock() {
-//     Ok(mut conn_out) => {
-//       let connection_out: &mut MidiOutputConnection = conn_out.as_mut().unwrap();
-//       connection_out.send(&msg).unwrap();
-//       Ok(())
-//     }
-//     _ => Err("send_midi_note_out::error"),
-//   }
-// }
-
-// pub fn init<R: Runtime>() -> TauriPlugin<R> {
-//   Builder::new("midi")
-//     .invoke_handler(tauri::generate_handler![
-//       send_midi_out,
-//       setup_midi_out,
-//       setup_midi_connection_list,
-//       list_midi_connections
-//     ])
-//     .setup(|app| {
-//       app.manage(MidiPlugin::default());
-//       Ok(())
-//     })
-//     .build()
-// }
+    //   play_note(66, 4);
+    //   play_note(65, 3);
+    //   play_note(63, 1);
+    //   play_note(61, 6);
+    //   play_note(59, 2);
+    //   play_note(58, 4);
+    //   play_note(56, 4);
+    //   play_note(54, 4);
+    // }
+    // // This is optional, the connection would automatically be closed as soon as it goes out of scope
+    // conn_out.close();
+    Ok(())
+  }
+}

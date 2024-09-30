@@ -1,4 +1,4 @@
-use std::{collections::HashMap, usize};
+use std::{collections::HashMap, thread::sleep, time::Duration, usize};
 
 use cursive::{
   event::{Callback, Event, EventResult, Key, MouseButton, MouseEvent},
@@ -11,18 +11,19 @@ use cursive::{
 
 use crate::core::{
   config,
+  midi::Midi,
   regex::Match,
   traits::{Matrix, Printable},
   utils,
 };
 
-#[derive(Clone)]
 pub struct CanvasEditor {
   size: Vec2,
   pub marker: Marker,
   grid: Matrix<char>,
   text_contents: Option<String>,
   text_matcher: Option<HashMap<usize, Match>>,
+  pub midi: Midi,
 }
 
 #[derive(Clone)]
@@ -75,6 +76,26 @@ impl Marker {
               let hl = editor.text_matcher.as_ref().unwrap();
               if hl.get(&(offset_x + offset_y * editor.grid.width)).is_some() {
                 // SEND MIDI OUT HERE
+                let mut play_note = |note: u8, duration: u64| {
+                  const NOTE_ON_MSG: u8 = 0x90;
+                  const NOTE_OFF_MSG: u8 = 0x80;
+                  const VELOCITY: u8 = 0x64;
+                  match editor.midi.out_device.lock() {
+                    Ok(mut conn_out) => {
+                      let connection_out = conn_out.as_mut().unwrap();
+                      connection_out.send(&[NOTE_ON_MSG, note, VELOCITY]).unwrap();
+                      // sleep(Duration::from_millis(duration * 150));
+                      // connection_out
+                      //   .send(&[NOTE_OFF_MSG, note, VELOCITY])
+                      //   .unwrap();
+                      Ok(())
+                    }
+                    _ => Err("send_midi_note_out::error"),
+                  }
+                };
+
+                play_note(66, 4).unwrap();
+
                 (Style::none(), '@')
               } else {
                 (Style::none(), '>')
@@ -190,6 +211,9 @@ impl Marker {
 
 impl CanvasEditor {
   pub fn new() -> CanvasEditor {
+    let mut midi = Midi::default();
+    midi.init().unwrap();
+
     CanvasEditor {
       size: Vec2::zero(),
       marker: Marker {
@@ -203,6 +227,7 @@ impl CanvasEditor {
       grid: Matrix::new(0, 0, '\0'),
       text_contents: None,
       text_matcher: None,
+      midi,
     }
   }
 

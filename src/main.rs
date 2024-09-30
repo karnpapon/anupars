@@ -5,6 +5,7 @@ use core::anu::Anu;
 use core::application::UserDataInner;
 use core::clock::metronome::{self, Metronome};
 use core::commands::CommandManager;
+use core::midi::Midi;
 use core::regex::RegExpHandler;
 
 use cursive::theme::{BorderStyle, Palette};
@@ -43,10 +44,12 @@ fn main() {
   let mut siv: Cursive = Cursive::new();
   let menu_app = Menubar::build_menu_app();
   let menu_help = Menubar::build_menu_help();
+  // let mut midi = Midi::default();
   let regex = RegExpHandler::new(siv.cb_sink().clone());
   let mut anu: Anu = Anu::new();
   let metronome = Metronome::new(siv.cb_sink().clone());
   let m_tx = metronome.tx.clone();
+  // midi.init().unwrap();
 
   let mut cmd_manager = CommandManager::new(anu.clone(), m_tx);
 
