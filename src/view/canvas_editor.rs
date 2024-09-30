@@ -182,6 +182,10 @@ impl Marker {
       ),
     );
   }
+
+  pub fn get_area_size(&self) -> (usize, usize) {
+    (self.area.width(), self.area.height())
+  }
 }
 
 impl CanvasEditor {
