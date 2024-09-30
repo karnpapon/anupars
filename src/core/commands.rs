@@ -7,7 +7,7 @@ use crate::view::canvas_editor::CanvasEditor;
 use super::anu::Anu;
 use super::application::UserData;
 use super::clock::metronome::Message;
-use super::command::{Command, MoveDirection};
+use super::command::{Adjustment, Command, MoveDirection};
 use super::{config, utils};
 
 use cursive::event::{Event, Key};
@@ -113,6 +113,18 @@ impl CommandManager {
 
         Ok(None)
       }
+      Command::AdjustBPM(direction) => {
+        let nudge = match direction {
+          Adjustment::Increase => 1,
+          Adjustment::Decrease => -1,
+        };
+
+        let _ = self
+          .metronome_sender
+          .send(Message::NudgeTempo(nudge.into()));
+
+        Ok(None)
+      }
     }
   }
 
@@ -190,6 +202,8 @@ impl CommandManager {
       "Shift+Down".into(),
       vec![Command::AdjustMarker(MoveDirection::Down)],
     );
+    kb.insert(">".into(), vec![Command::AdjustBPM(Adjustment::Increase)]);
+    kb.insert("<".into(), vec![Command::AdjustBPM(Adjustment::Decrease)]);
 
     kb
   }

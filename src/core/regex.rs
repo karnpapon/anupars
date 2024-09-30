@@ -48,12 +48,13 @@ pub struct EventData {
 pub struct RegExpHandler {
   pub tx: Sender<Message>,
   pub rx: Receiver<Message>,
+  cb_sink: cursive::CbSink,
 }
 
 impl RegExpHandler {
-  pub fn new() -> Self {
+  pub fn new(cb_sink: cursive::CbSink) -> Self {
     let (tx, rx) = channel();
-    Self { tx, rx }
+    Self { tx, rx, cb_sink }
   }
   fn process_event(data: &EventData) -> Result<HashMap<usize, Match>, RegexError> {
     match Regex::new(&data.pattern.to_string()) {
@@ -98,11 +99,11 @@ impl RegExpHandler {
     }
   }
 
-  pub fn run(&mut self, cb_sink: cursive::CbSink) {
+  pub fn run(self) {
     for control_message in &self.rx {
       match control_message {
         Message::Clear => {
-          let _ = cb_sink.send(Box::new(move |s| {
+          let _ = self.cb_sink.send(Box::new(move |s| {
             s.call_on_name(
               config::canvas_base_section_view,
               |c: &mut Canvas<CanvasBase>| c.state_mut().set_text_matcher(None),
@@ -117,7 +118,8 @@ impl RegExpHandler {
           }));
         }
         Message::Solve(data) => {
-          cb_sink
+          self
+            .cb_sink
             .send(Box::new(move |s| {
               let res = match Self::process_event(&data) {
                 Ok(matches) => {

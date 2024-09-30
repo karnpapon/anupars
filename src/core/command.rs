@@ -30,6 +30,12 @@ pub enum MoveDirection {
   Right,
 }
 
+#[derive(Clone, Serialize, Deserialize, Debug)]
+pub enum Adjustment {
+  Increase,
+  Decrease,
+}
+
 // #[derive(Clone, Serialize, Deserialize, Debug)]
 // // #[strum(serialize_all = "lowercase")]
 // pub enum MoveAmount {
@@ -127,6 +133,7 @@ pub enum Command {
   ShowMenubar,
   ToggleInputRegexAndCanvas,
   AdjustMarker(MoveDirection),
+  AdjustBPM(Adjustment),
 }
 
 impl fmt::Display for Command {
@@ -137,6 +144,7 @@ impl fmt::Display for Command {
       | Self::ToggleInputRegexAndCanvas
       | Self::ShowMenubar
       | Self::TogglePlay
+      | Self::AdjustBPM(_)
       | Self::AdjustMarker(_) => vec![],
     };
     repr_tokens.append(&mut extras_args);
@@ -152,6 +160,7 @@ impl Command {
       Self::ShowMenubar => "showmenubar",
       Self::ToggleInputRegexAndCanvas => "toggleinputregexandcanvas",
       Self::AdjustMarker(_) => "adjustmarker",
+      Self::AdjustBPM(_) => "adjustbpm",
     }
   }
 }

@@ -1,11 +1,11 @@
 use std::sync::mpsc::{channel, Receiver, Sender};
 
 // use crossbeam_utils::sync::{Parker, Unparker};
-use cursive::views::{Canvas};
+use cursive::views::{Canvas, TextView};
 use num::ToPrimitive;
 
 use crate::{
-  core::{config},
+  core::{config, utils},
   view::canvas_editor::CanvasEditor,
 };
 
@@ -28,16 +28,17 @@ pub enum Message {
 pub struct Metronome {
   pub tx: Sender<Message>,
   pub rx: Receiver<Message>,
+  cb_sink: cursive::CbSink,
 }
 
 impl Metronome {
-  pub fn new() -> Self {
+  pub fn new(cb_sink: cursive::CbSink) -> Self {
     let (tx, rx) = channel();
 
-    Self { tx, rx }
+    Self { tx, rx, cb_sink }
   }
 
-  pub fn run(self, cb_sink: cursive::CbSink) {
+  pub fn run(self) {
     let clock = clock::Clock::new();
     let clock_tx = clock.start(self.tx.clone());
 
@@ -57,32 +58,25 @@ impl Metronome {
         // sent by clock
         Message::Signature(signature) => {
           clock_tx.send(clock::Message::Signature(signature)).unwrap();
-          // terminal_tx
-          //   .send(thread::Message::Signature(signature))
-          //   .unwrap();
         }
         // sent by clock
         Message::Tempo(tempo) => {
           clock_tx.send(clock::Message::Tempo(tempo)).unwrap();
-          // terminal_tx.send(thread::Message::Tempo(tempo)).unwrap();
+          self
+            .cb_sink
+            .send(Box::new(move |s| {
+              s.call_on_name(config::bpm_status_unit_view, |view: &mut TextView| {
+                view.set_content(utils::build_bpm_status_str(tempo.to_usize().unwrap()));
+              })
+              .unwrap();
+            }))
+            .unwrap();
         }
         Message::Time(time) => {
-          cb_sink
+          self
+            .cb_sink
             .send(Box::new(move |s| {
-              // let num = 1;
-              // let denom = 8;
-              // let beats_since_bar = time.beats_since_bar();
               let tick = time.ticks().to_usize().unwrap();
-              // let mut tick_str = String::from("-").repeat(denom);
-              // utils::replace_nth_char_ascii(
-              //   &mut tick_str,
-              //   beats_since_bar.to_usize().unwrap(),
-              //   '|',
-              // );
-              // s.call_on_name(config::ratio_status_unit_view, |c: &mut TextView| {
-              //   c.set_content(utils::build_ratio_status_str((num, denom), &tick_str))
-              // })
-              // .unwrap();
               s.call_on_name(
                 config::canvas_editor_section_view,
                 |c: &mut Canvas<CanvasEditor>| {

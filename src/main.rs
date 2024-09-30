@@ -3,7 +3,7 @@ mod view;
 
 use core::anu::Anu;
 use core::application::UserDataInner;
-use core::clock::metronome::{self};
+use core::clock::metronome::{self, Metronome};
 use core::commands::CommandManager;
 use core::regex::RegExpHandler;
 
@@ -43,11 +43,9 @@ fn main() {
   let mut siv: Cursive = Cursive::new();
   let menu_app = Menubar::build_menu_app();
   let menu_help = Menubar::build_menu_help();
-  let mut regex = RegExpHandler::new();
+  let regex = RegExpHandler::new(siv.cb_sink().clone());
   let mut anu: Anu = Anu::new();
-  let cb_sink = siv.cb_sink().clone();
-  let cb_sink_met = siv.cb_sink().clone();
-  let metronome = metronome::Metronome::new();
+  let metronome = Metronome::new(siv.cb_sink().clone());
   let m_tx = metronome.tx.clone();
 
   let mut cmd_manager = CommandManager::new(anu.clone(), m_tx);
@@ -73,11 +71,10 @@ fn main() {
   siv.add_layer(main_views);
 
   thread::spawn(move || {
-    regex.run(cb_sink);
+    regex.run();
   });
-
   thread::spawn(move || {
-    metronome.run(cb_sink_met);
+    metronome.run();
   });
 
   siv.run();
