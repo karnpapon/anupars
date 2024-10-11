@@ -14,7 +14,7 @@ use crate::view::{
   top_section::{RegexFlag, RegexMode, TopSection},
 };
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub enum Message {
   Time(clock::Time),
   Signature(clock::Signature),

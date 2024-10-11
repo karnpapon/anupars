@@ -75,27 +75,7 @@ impl Marker {
             if editor.text_matcher.is_some() {
               let hl = editor.text_matcher.as_ref().unwrap();
               if hl.get(&(offset_x + offset_y * editor.grid.width)).is_some() {
-                // SEND MIDI OUT HERE
-                let mut play_note = |note: u8, duration: u64| {
-                  const NOTE_ON_MSG: u8 = 0x90;
-                  const NOTE_OFF_MSG: u8 = 0x80;
-                  const VELOCITY: u8 = 0x64;
-                  match editor.midi.out_device.lock() {
-                    Ok(mut conn_out) => {
-                      let connection_out = conn_out.as_mut().unwrap();
-                      connection_out.send(&[NOTE_ON_MSG, note, VELOCITY]).unwrap();
-                      // sleep(Duration::from_millis(duration * 150));
-                      // connection_out
-                      //   .send(&[NOTE_OFF_MSG, note, VELOCITY])
-                      //   .unwrap();
-                      Ok(())
-                    }
-                    _ => Err("send_midi_note_out::error"),
-                  }
-                };
-
-                play_note(66, 4).unwrap();
-
+                editor.midi.send_midi_on();
                 (Style::none(), '@')
               } else {
                 (Style::none(), '>')
@@ -240,6 +220,10 @@ impl CanvasEditor {
       .with_name(config::canvas_editor_section_view)
       .full_height()
       .full_width()
+  }
+
+  pub fn run(&mut self) {
+    //
   }
 
   pub fn update_text_contents(&mut self, contents: &str) {

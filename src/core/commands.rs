@@ -1,6 +1,8 @@
 use std::collections::HashMap;
 use std::sync::mpsc::Sender;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
+use std::thread;
+use std::time::Instant;
 
 use crate::view::canvas_editor::CanvasEditor;
 
@@ -21,16 +23,28 @@ pub struct CommandManager {
   bindings: RefCell<HashMap<String, Vec<Command>>>,
   anu: Arc<Anu>,
   metronome_sender: Sender<Message>,
+  cb_sink: cursive::CbSink,
+  temp_tempo: Arc<Mutex<i64>>,
+  last_key_time: Arc<Mutex<Option<Instant>>>,
 }
 
 impl CommandManager {
-  pub fn new(anu: Anu, m_tx: Sender<Message>) -> Self {
+  pub fn new(
+    anu: Anu,
+    m_tx: Sender<Message>,
+    cb_sink: cursive::CbSink,
+    temp_tempo: Arc<Mutex<i64>>,
+    last_key_time: Arc<Mutex<Option<Instant>>>,
+  ) -> Self {
     let bindings = RefCell::new(Self::get_bindings());
     Self {
       aliases: HashMap::new(),
       bindings,
       anu: Arc::new(anu),
       metronome_sender: m_tx,
+      cb_sink,
+      temp_tempo,
+      last_key_time,
     }
   }
 
@@ -119,9 +133,26 @@ impl CommandManager {
           Adjustment::Decrease => -1,
         };
 
-        let _ = self
-          .metronome_sender
-          .send(Message::NudgeTempo(nudge.into()));
+        let mut last_press = self.last_key_time.lock().unwrap();
+        *last_press = Some(Instant::now());
+
+        // let _ = self
+        //   .metronome_sender
+        //   .send(Message::NudgeTempo(nudge.into()));
+
+        let mut tempo = self.temp_tempo.lock().unwrap();
+        *tempo += nudge;
+        let temp = *tempo as usize;
+
+        self
+          .cb_sink
+          .send(Box::new(move |s| {
+            s.call_on_name(config::bpm_status_unit_view, |view: &mut TextView| {
+              view.set_content(utils::build_bpm_status_str(temp));
+            })
+            .unwrap();
+          }))
+          .unwrap();
 
         Ok(None)
       }
@@ -149,11 +180,17 @@ impl CommandManager {
     commands: Vec<Command>,
   ) {
     cursive.add_global_callback(event, move |s| {
-      if let Some(data) = s.user_data::<UserData>().cloned() {
-        for command in commands.clone().into_iter() {
-          data.cmd.handle(s, command);
-        }
-      }
+      let cb_sink = s.cb_sink().clone();
+      let cmd_cloned = commands.clone();
+      cb_sink
+        .send(Box::new(move |inner_s: &mut Cursive| {
+          if let Some(data) = inner_s.user_data::<UserData>().cloned() {
+            for command in cmd_cloned.into_iter() {
+              data.cmd.handle(inner_s, command);
+            }
+          };
+        }))
+        .unwrap();
     });
   }
 

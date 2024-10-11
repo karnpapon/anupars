@@ -21,7 +21,7 @@ use serde::{Deserialize, Serialize};
 //   Selected,
 // }
 
-#[derive(Clone, Serialize, Deserialize, Debug)]
+#[derive(Clone, Serialize, Deserialize, Debug, Copy)]
 // #[strum(serialize_all = "lowercase")]
 pub enum MoveDirection {
   Up,
@@ -30,7 +30,7 @@ pub enum MoveDirection {
   Right,
 }
 
-#[derive(Clone, Serialize, Deserialize, Debug)]
+#[derive(Clone, Serialize, Deserialize, Debug, Copy)]
 pub enum Adjustment {
   Increase,
   Decrease,
@@ -126,7 +126,7 @@ pub enum Adjustment {
 //   }
 // }
 
-#[derive(Clone, Serialize, Deserialize, Debug)]
+#[derive(Clone, Serialize, Deserialize, Debug, Copy)]
 pub enum Command {
   Quit,
   TogglePlay,

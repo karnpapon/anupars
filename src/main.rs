@@ -3,13 +3,19 @@ mod view;
 
 use core::anu::Anu;
 use core::application::UserDataInner;
-use core::clock::metronome::{self, Metronome};
+use core::clock::metronome::{Message, Metronome};
 use core::commands::CommandManager;
-use core::midi::Midi;
+use core::config;
 use core::regex::RegExpHandler;
+use std::str::FromStr;
+use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use cursive::theme::{BorderStyle, Palette};
+use cursive::views::TextView;
 use cursive::{Cursive, CursiveExt, With};
+use num::rational::Ratio;
+use num::FromPrimitive;
 use std::rc::Rc;
 use std::thread;
 use view::menubar::Menubar;
@@ -49,9 +55,20 @@ fn main() {
   let mut anu: Anu = Anu::new();
   let metronome = Metronome::new(siv.cb_sink().clone());
   let m_tx = metronome.tx.clone();
+  let m_tx_2 = metronome.tx.clone();
   // midi.init().unwrap();
-
-  let mut cmd_manager = CommandManager::new(anu.clone(), m_tx);
+  let key_released_sink = siv.cb_sink().clone();
+  let last_key_time = Arc::new(Mutex::new(None));
+  let last_key_time_clone = Arc::clone(&last_key_time);
+  let temp_tempo = Arc::new(Mutex::new(120));
+  let temp_tempo_cloned = Arc::clone(&temp_tempo);
+  let mut cmd_manager = CommandManager::new(
+    anu.clone(),
+    m_tx,
+    siv.cb_sink().clone(),
+    temp_tempo_cloned,
+    last_key_time.clone(),
+  );
 
   cmd_manager.register_all();
   cmd_manager.register_keybindings(&mut siv);
@@ -73,6 +90,17 @@ fn main() {
 
   siv.add_layer(main_views);
 
+  thread::spawn(move || loop {
+    thread::sleep(Duration::from_millis(100));
+    let mut last_press = last_key_time_clone.lock().unwrap();
+    if let Some(last_time) = *last_press {
+      if last_time.elapsed() > Duration::from_millis(500) {
+        *last_press = None;
+        let tempo = *temp_tempo.lock().unwrap();
+        let _ = m_tx_2.send(Message::Tempo(Ratio::from_i64(tempo).unwrap()));
+      }
+    }
+  });
   thread::spawn(move || {
     regex.run();
   });

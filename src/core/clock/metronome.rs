@@ -61,22 +61,22 @@ impl Metronome {
         }
         // sent by clock
         Message::Tempo(tempo) => {
+          // self
+          //   .cb_sink
+          //   .send(Box::new(move |s| {
+          //     s.call_on_name(config::bpm_status_unit_view, |view: &mut TextView| {
+          //       view.set_content(utils::build_bpm_status_str(tempo.to_usize().unwrap()));
+          //     })
+          //     .unwrap();
+          //   }))
+          //   .unwrap();
           clock_tx.send(clock::Message::Tempo(tempo)).unwrap();
-          self
-            .cb_sink
-            .send(Box::new(move |s| {
-              s.call_on_name(config::bpm_status_unit_view, |view: &mut TextView| {
-                view.set_content(utils::build_bpm_status_str(tempo.to_usize().unwrap()));
-              })
-              .unwrap();
-            }))
-            .unwrap();
         }
         Message::Time(time) => {
+          let tick = time.ticks().to_usize().unwrap();
           self
             .cb_sink
             .send(Box::new(move |s| {
-              let tick = time.ticks().to_usize().unwrap();
               s.call_on_name(
                 config::canvas_editor_section_view,
                 |c: &mut Canvas<CanvasEditor>| {
