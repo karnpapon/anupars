@@ -44,6 +44,7 @@ pub struct Midi {
   pub midi: Mutex<Option<MidiOutput>>,
   pub devices: Mutex<HashMap<String, String>>,
   pub out_device: Mutex<Option<MidiOutputConnection>>,
+  pub out_device_name: Mutex<Option<String>>,
   pub stack: Arc<Mutex<Vec<MidiMsg>>>,
   pub tx: Sender<Message>,
   pub rx: Receiver<Message>,
@@ -58,6 +59,7 @@ impl Default for Midi {
         midi: None.into(),
         devices: HashMap::new().into(),
         out_device: None.into(),
+        out_device_name: None.into(),
         stack: Arc::new(Mutex::new(vec![])),
         tx,
         rx,
@@ -67,6 +69,7 @@ impl Default for Midi {
       midi: Some(midi_out).into(),
       devices: HashMap::new().into(),
       out_device: None.into(),
+      out_device_name: None.into(),
       stack: Arc::new(Mutex::new(vec![])),
       tx,
       rx,
@@ -103,8 +106,10 @@ impl Midi {
       }
     };
 
+    let conn_out_name = &midi_out.port_name(out_port).unwrap();
     let conn_out = midi_out.connect(out_port, "midir-test")?;
     self.out_device = Mutex::new(Some(conn_out));
+    self.out_device_name = Mutex::new(Some(conn_out_name.to_string()));
     Ok(())
   }
 
@@ -116,6 +121,11 @@ impl Midi {
         } // Message::Press => self.send_midi_on(),
       }
     }
+  }
+
+  pub fn out_device_name(&self) -> String {
+    let out_device_name = self.out_device_name.lock().unwrap();
+    out_device_name.clone().unwrap()
   }
 
   pub fn push(&self, midi_msg: MidiMsg) {

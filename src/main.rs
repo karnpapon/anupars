@@ -5,12 +5,14 @@ use core::anu::Anu;
 use core::application::UserDataInner;
 use core::clock::metronome::{Message, Metronome};
 use core::commands::CommandManager;
+use core::config;
 use core::midi::Midi;
 use core::regex::RegExpHandler;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use cursive::theme::{BorderStyle, Palette};
+use cursive::views::TextView;
 use cursive::{Cursive, CursiveExt, With};
 use num::rational::Ratio;
 use num::FromPrimitive;
@@ -87,6 +89,12 @@ fn main() {
     .add_leaf("Quit", |s| s.quit());
 
   siv.add_layer(main_views);
+
+  siv
+    .call_on_name(config::midi_status_unit_view, |c: &mut TextView| {
+      c.set_content(midi.out_device_name());
+    })
+    .unwrap();
 
   thread::spawn(move || loop {
     thread::sleep(Duration::from_millis(100));
