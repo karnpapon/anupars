@@ -5,14 +5,12 @@ use core::anu::Anu;
 use core::application::UserDataInner;
 use core::clock::metronome::{Message, Metronome};
 use core::commands::CommandManager;
-use core::config;
+use core::midi::Midi;
 use core::regex::RegExpHandler;
-use std::str::FromStr;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use cursive::theme::{BorderStyle, Palette};
-use cursive::views::TextView;
 use cursive::{Cursive, CursiveExt, With};
 use num::rational::Ratio;
 use num::FromPrimitive;
@@ -48,16 +46,18 @@ pub fn init_default_style(siv: &mut Cursive) {
 
 fn main() {
   let mut siv: Cursive = Cursive::new();
+  init_default_style(&mut siv);
+
   let menu_app = Menubar::build_menu_app();
   let menu_help = Menubar::build_menu_help();
-  // let mut midi = Midi::default();
+  let mut midi = Midi::default();
+  midi.init().unwrap();
+  let midi_tx = midi.tx.clone();
   let regex = RegExpHandler::new(siv.cb_sink().clone());
   let mut anu: Anu = Anu::new();
   let metronome = Metronome::new(siv.cb_sink().clone());
   let m_tx = metronome.tx.clone();
   let m_tx_2 = metronome.tx.clone();
-  // midi.init().unwrap();
-  let key_released_sink = siv.cb_sink().clone();
   let last_key_time = Arc::new(Mutex::new(None));
   let last_key_time_clone = Arc::clone(&last_key_time);
   let temp_tempo = Arc::new(Mutex::new(120));
@@ -74,12 +74,10 @@ fn main() {
   cmd_manager.register_keybindings(&mut siv);
 
   siv.set_autohide_menu(true);
-  siv.set_autorefresh(true);
+  siv.set_autorefresh(false); // "false" to prevent unintended events (eg. midi keep pushing into stack, etc.)
   siv.set_user_data(Rc::new(UserDataInner { cmd: cmd_manager }));
 
-  init_default_style(&mut siv);
-
-  let main_views = anu.build(regex.tx.clone());
+  let main_views = anu.build(regex.tx.clone(), midi_tx);
 
   siv
     .menubar()
@@ -106,6 +104,9 @@ fn main() {
   });
   thread::spawn(move || {
     metronome.run();
+  });
+  thread::spawn(move || {
+    midi.run();
   });
 
   siv.run();

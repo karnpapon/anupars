@@ -7,7 +7,7 @@ use std::{
   sync::{mpsc::Sender, Arc, RwLock},
 };
 
-use super::{clock::clock, config, regex};
+use super::{clock::clock, config, midi, regex};
 use crate::view::{
   canvas_section::CanvasSection,
   middle_section::MiddleSection,
@@ -43,11 +43,15 @@ impl Anu {
     }
   }
 
-  pub fn build(&mut self, regex_tx: Sender<regex::Message>) -> NamedView<LinearLayout> {
+  pub fn build(
+    &mut self,
+    regex_tx: Sender<regex::Message>,
+    midi_tx: Sender<midi::Message>,
+  ) -> NamedView<LinearLayout> {
     let top_section = TopSection::build(self, regex_tx);
     let middle_section = MiddleSection::build();
     let padding_section = DummyView::new().fixed_width(1);
-    let canvas_section = CanvasSection::build();
+    let canvas_section = CanvasSection::build(midi_tx);
 
     LinearLayout::vertical()
       .child(top_section)

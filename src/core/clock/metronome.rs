@@ -47,7 +47,6 @@ impl Metronome {
         Message::Reset => {
           clock_tx.send(clock::Message::Reset).unwrap();
         }
-        // Message::Start => clock_tx.send(clock::Message::Start).unwrap(),
         Message::StartStop => clock_tx.send(clock::Message::StartStop).unwrap(),
         Message::NudgeTempo(nudge) => {
           clock_tx.send(clock::Message::NudgeTempo(nudge)).unwrap();
@@ -61,15 +60,6 @@ impl Metronome {
         }
         // sent by clock
         Message::Tempo(tempo) => {
-          // self
-          //   .cb_sink
-          //   .send(Box::new(move |s| {
-          //     s.call_on_name(config::bpm_status_unit_view, |view: &mut TextView| {
-          //       view.set_content(utils::build_bpm_status_str(tempo.to_usize().unwrap()));
-          //     })
-          //     .unwrap();
-          //   }))
-          //   .unwrap();
           clock_tx.send(clock::Message::Tempo(tempo)).unwrap();
         }
         Message::Time(time) => {

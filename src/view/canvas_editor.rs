@@ -1,4 +1,4 @@
-use std::{collections::HashMap, thread::sleep, time::Duration, usize};
+use std::{collections::HashMap, sync::mpsc::Sender, usize};
 
 use cursive::{
   event::{Callback, Event, EventResult, Key, MouseButton, MouseEvent},
@@ -11,7 +11,7 @@ use cursive::{
 
 use crate::core::{
   config,
-  midi::Midi,
+  midi::{self, Midi, MidiMsg},
   regex::Match,
   traits::{Matrix, Printable},
   utils,
@@ -23,7 +23,7 @@ pub struct CanvasEditor {
   grid: Matrix<char>,
   text_contents: Option<String>,
   text_matcher: Option<HashMap<usize, Match>>,
-  pub midi: Midi,
+  midi_tx: Sender<midi::Message>,
 }
 
 #[derive(Clone)]
@@ -75,7 +75,9 @@ impl Marker {
             if editor.text_matcher.is_some() {
               let hl = editor.text_matcher.as_ref().unwrap();
               if hl.get(&(offset_x + offset_y * editor.grid.width)).is_some() {
-                editor.midi.send_midi_on();
+                let midi_msg = MidiMsg::from("C".to_string(), 4, 4, 8, 8, false);
+                editor.midi_tx.send(midi::Message::Push(midi_msg)).unwrap();
+                // editor.midi_tx.send(midi::Message::Press).unwrap();
                 (Style::none(), '@')
               } else {
                 (Style::none(), '>')
@@ -190,10 +192,7 @@ impl Marker {
 }
 
 impl CanvasEditor {
-  pub fn new() -> CanvasEditor {
-    let mut midi = Midi::default();
-    midi.init().unwrap();
-
+  pub fn new(midi_tx: Sender<midi::Message>) -> CanvasEditor {
     CanvasEditor {
       size: Vec2::zero(),
       marker: Marker {
@@ -207,12 +206,14 @@ impl CanvasEditor {
       grid: Matrix::new(0, 0, '\0'),
       text_contents: None,
       text_matcher: None,
-      midi,
+      midi_tx,
     }
   }
 
-  pub fn build() -> ResizedView<ResizedView<NamedView<Canvas<CanvasEditor>>>> {
-    Canvas::new(CanvasEditor::new())
+  pub fn build(
+    midi_tx: Sender<midi::Message>,
+  ) -> ResizedView<ResizedView<NamedView<Canvas<CanvasEditor>>>> {
+    Canvas::new(CanvasEditor::new(midi_tx))
       .with_draw(draw)
       .with_layout(layout)
       .with_on_event(on_event)

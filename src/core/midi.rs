@@ -1,8 +1,16 @@
 use midir::{MidiIO, MidiOutput, MidiOutputConnection, MidiOutputPort};
 use std::collections::HashMap;
 use std::error::Error;
-use std::sync::Mutex;
+use std::sync::mpsc::{channel, Receiver, Sender};
+use std::sync::{Arc, Mutex};
 
+#[derive(Clone, Debug)]
+pub enum Message {
+  Push(MidiMsg),
+  // Press,
+}
+
+#[derive(Clone, Debug)]
 pub struct MidiMsg {
   note: String,
   velocity: i8,
@@ -12,28 +20,56 @@ pub struct MidiMsg {
   is_played: bool,
 }
 
+impl MidiMsg {
+  pub fn from(
+    note: String,
+    velocity: i8,
+    octave: i8,
+    channel: i8,
+    length: i8,
+    is_played: bool,
+  ) -> MidiMsg {
+    Self {
+      note,
+      velocity,
+      octave,
+      channel,
+      length,
+      is_played,
+    }
+  }
+}
+
 pub struct Midi {
   pub midi: Mutex<Option<MidiOutput>>,
   pub devices: Mutex<HashMap<String, String>>,
   pub out_device: Mutex<Option<MidiOutputConnection>>,
-  pub stack: Vec<MidiMsg>,
+  pub stack: Arc<Mutex<Vec<MidiMsg>>>,
+  pub tx: Sender<Message>,
+  pub rx: Receiver<Message>,
 }
 
 impl Default for Midi {
   fn default() -> Self {
+    let (tx, rx) = channel();
+
     let Ok(midi_out) = MidiOutput::new("client-midi-output") else {
       return Self {
         midi: None.into(),
         devices: HashMap::new().into(),
         out_device: None.into(),
-        stack: vec![],
+        stack: Arc::new(Mutex::new(vec![])),
+        tx,
+        rx,
       };
     };
     Midi {
       midi: Some(midi_out).into(),
       devices: HashMap::new().into(),
       out_device: None.into(),
-      stack: vec![],
+      stack: Arc::new(Mutex::new(vec![])),
+      tx,
+      rx,
     }
   }
 }
@@ -72,21 +108,24 @@ impl Midi {
     Ok(())
   }
 
-  pub fn push(&mut self) {
-    let item = MidiMsg {
-      channel: 0,
-      octave: 4,
-      note: "C".to_string(),
-      velocity: 8,
-      length: 8,
-      is_played: false,
-    };
+  pub fn run(self) {
+    for control_message in &self.rx {
+      match control_message {
+        Message::Push(midi_msg) => {
+          self.push(midi_msg);
+        } // Message::Press => self.send_midi_on(),
+      }
+    }
+  }
+
+  pub fn push(&self, midi_msg: MidiMsg) {
     // Retrigger duplicates
     // for (const id in this.stack) {
     //   const dup = this.stack[id]
     //   if (dup.channel === channel && dup.octave === octave && dup.note === note) { this.release(item, id) }
     // }
-    self.stack.push(item)
+    let mut stack = self.stack.lock().unwrap();
+    stack.push(midi_msg);
   }
 
   pub fn trigger(&self) {}
