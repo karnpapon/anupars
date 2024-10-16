@@ -52,7 +52,7 @@ fn main() {
 
   let menu_app = Menubar::build_menu_app();
   let menu_help = Menubar::build_menu_help();
-  let mut midi = Midi::default();
+  let mut midi = Midi::new();
   midi.init().unwrap();
   let midi_tx = midi.tx.clone();
   let regex = RegExpHandler::new(siv.cb_sink().clone());
@@ -113,9 +113,7 @@ fn main() {
   thread::spawn(move || {
     metronome.run();
   });
-  thread::spawn(move || {
-    midi.run();
-  });
 
+  midi.run();
   siv.run();
 }

@@ -6,5 +6,6 @@ pub mod commands;
 pub mod config;
 pub mod midi;
 pub mod regex;
+pub mod stack;
 pub mod traits;
 pub mod utils;

@@ -1,13 +1,16 @@
-use midir::{MidiIO, MidiOutput, MidiOutputConnection, MidiOutputPort};
+use midir::{MidiOutput, MidiOutputConnection, MidiOutputPort};
 use std::collections::HashMap;
 use std::error::Error;
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::{Arc, Mutex};
+use std::thread;
+
+use super::stack::{self, Stack};
 
 #[derive(Clone, Debug)]
 pub enum Message {
   Push(MidiMsg),
-  // Press,
+  Trigger(MidiMsg, bool),
 }
 
 #[derive(Clone, Debug)]
@@ -16,8 +19,8 @@ pub struct MidiMsg {
   velocity: i8,
   octave: i8,
   channel: i8,
-  length: i8,
-  is_played: bool,
+  pub length: i8,
+  pub is_played: bool,
 }
 
 impl MidiMsg {
@@ -45,13 +48,13 @@ pub struct Midi {
   pub devices: Mutex<HashMap<String, String>>,
   pub out_device: Mutex<Option<MidiOutputConnection>>,
   pub out_device_name: Mutex<Option<String>>,
-  pub stack: Arc<Mutex<Vec<MidiMsg>>>,
+  // pub stack: Arc<Mutex<Vec<MidiMsg>>>,
   pub tx: Sender<Message>,
   pub rx: Receiver<Message>,
 }
 
-impl Default for Midi {
-  fn default() -> Self {
+impl Midi {
+  pub fn new() -> Self {
     let (tx, rx) = channel();
 
     let Ok(midi_out) = MidiOutput::new("client-midi-output") else {
@@ -60,7 +63,7 @@ impl Default for Midi {
         devices: HashMap::new().into(),
         out_device: None.into(),
         out_device_name: None.into(),
-        stack: Arc::new(Mutex::new(vec![])),
+        // stack: Arc::new(Mutex::new(vec![])),
         tx,
         rx,
       };
@@ -70,7 +73,7 @@ impl Default for Midi {
       devices: HashMap::new().into(),
       out_device: None.into(),
       out_device_name: None.into(),
-      stack: Arc::new(Mutex::new(vec![])),
+      // stack: Arc::new(Mutex::new(vec![])),
       tx,
       rx,
     }
@@ -114,13 +117,25 @@ impl Midi {
   }
 
   pub fn run(self) {
-    for control_message in &self.rx {
-      match control_message {
-        Message::Push(midi_msg) => {
-          self.push(midi_msg);
-        } // Message::Press => self.send_midi_on(),
+    let midi_tx_1 = self.tx.clone();
+    let midi_tx_2 = self.tx.clone();
+    let stack = Arc::new(Stack::new());
+    let stack_clone_2 = Arc::clone(&stack);
+    let stack_tx = stack.run(midi_tx_1);
+    stack_clone_2.refresh(midi_tx_2);
+
+    thread::spawn(move || {
+      for control_message in &self.rx {
+        match control_message {
+          Message::Push(midi_msg) => {
+            let _ = stack_tx.send(stack::Message::Push(midi_msg));
+          }
+          Message::Trigger(msg, is_pressed) => {
+            self.trigger(&msg, is_pressed);
+          }
+        }
       }
-    }
+    });
   }
 
   pub fn out_device_name(&self) -> String {
@@ -128,60 +143,14 @@ impl Midi {
     out_device_name.clone().unwrap()
   }
 
-  pub fn push(&self, midi_msg: MidiMsg) {
-    // Retrigger duplicates
-    // for (const id in this.stack) {
-    //   const dup = this.stack[id]
-    //   if (dup.channel === channel && dup.octave === octave && dup.note === note) { this.release(item, id) }
-    // }
-    let mut stack = self.stack.lock().unwrap();
-    stack.push(midi_msg);
-  }
-
-  pub fn trigger(&self) {}
-
-  pub fn press(&mut self, item: Option<MidiMsg>) {
-    if item.is_some() {
-      return;
-    }
-    // self.trigger(item, true);
-    item.unwrap().is_played = true
-  }
-
-  pub fn release(&self, item: Option<MidiMsg>) {
-    if item.is_some() {
-      return;
-    }
-    self.trigger();
-    // delete this.stack[id]
-  }
-
-  pub fn send_midi_on(&self) {
+  pub fn trigger(&self, item: &MidiMsg, down: bool) {
     let play_note = |note: u8, duration: u64| {
-      const NOTE_ON_MSG: u8 = 0x90;
+      let note_event = if down { 0x90 } else { 0x80 };
       const VELOCITY: u8 = 0x64;
       match self.out_device.lock() {
         Ok(mut conn_out) => {
           let connection_out = conn_out.as_mut().unwrap();
-          connection_out.send(&[NOTE_ON_MSG, note, VELOCITY]).unwrap();
-          Ok(())
-        }
-        _ => Err("send_midi_note_out::error"),
-      }
-    };
-    play_note(66, 4).unwrap();
-  }
-
-  pub fn send_midi_off(&self) {
-    let play_note = |note: u8, duration: u64| {
-      const NOTE_OFF_MSG: u8 = 0x80;
-      const VELOCITY: u8 = 0x64;
-      match self.out_device.lock() {
-        Ok(mut conn_out) => {
-          let connection_out = conn_out.as_mut().unwrap();
-          connection_out
-            .send(&[NOTE_OFF_MSG, note, VELOCITY])
-            .unwrap();
+          connection_out.send(&[note_event, note, VELOCITY]).unwrap();
           Ok(())
         }
         _ => Err("send_midi_note_out::error"),

@@ -77,7 +77,6 @@ impl Marker {
               if hl.get(&(offset_x + offset_y * editor.grid.width)).is_some() {
                 let midi_msg = MidiMsg::from("C".to_string(), 4, 4, 8, 8, false);
                 editor.midi_tx.send(midi::Message::Push(midi_msg)).unwrap();
-                // editor.midi_tx.send(midi::Message::Press).unwrap();
                 (Style::none(), '@')
               } else {
                 (Style::none(), '>')
