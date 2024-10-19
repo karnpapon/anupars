@@ -11,6 +11,7 @@ use super::stack::{self, Stack};
 pub enum Message {
   Push(MidiMsg),
   Trigger(MidiMsg, bool),
+  MsgConfig(String),
 }
 
 #[derive(Clone, Debug)]
@@ -132,6 +133,9 @@ impl Midi {
           }
           Message::Trigger(msg, is_pressed) => {
             self.trigger(&msg, is_pressed);
+          }
+          Message::MsgConfig(msg) => {
+            // self.trigger(&msg, is_pressed);
           }
         }
       }

@@ -3,7 +3,10 @@ mod view;
 
 use core::anu::Anu;
 use core::application::UserDataInner;
+// use core::clock::audio_stream::{OutputStreamCommand, OutputStreamManager};
+// use core::clock::dsp::PatchBox;
 use core::clock::metronome::{Message, Metronome};
+// use core::clock::new_metronome::SimpleMetronome;
 use core::commands::CommandManager;
 use core::config;
 use core::midi::Midi;
@@ -77,7 +80,10 @@ fn main() {
 
   siv.set_autohide_menu(true);
   siv.set_autorefresh(false); // "false" to prevent unintended events (eg. midi keep pushing into stack, etc.)
-  siv.set_user_data(Rc::new(UserDataInner { cmd: cmd_manager }));
+  siv.set_user_data(Rc::new(UserDataInner {
+    cmd: cmd_manager,
+    midi_tx: midi_tx.clone(),
+  }));
 
   let main_views = anu.build(regex.tx.clone(), midi_tx);
 
@@ -117,3 +123,12 @@ fn main() {
   midi.run();
   siv.run();
 }
+
+// fn main() {
+//   let metronome_manager =
+//     OutputStreamManager::new(SimpleMetronome::new(), Arc::new(PatchBox::new()));
+
+//   metronome_manager.send_command(OutputStreamCommand::Play);
+
+//   std::thread::park();
+// }

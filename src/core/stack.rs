@@ -15,12 +15,14 @@ pub enum Message {
 
 pub struct Stack {
   pub stack: Arc<Mutex<Vec<midi::MidiMsg>>>,
+  pub stack_msg_config: Arc<Mutex<Vec<midi::MidiMsg>>>,
 }
 
 impl Stack {
   pub fn new() -> Stack {
     Stack {
       stack: Arc::new(Mutex::new(vec![])),
+      stack_msg_config: Arc::new(Mutex::new(vec![])),
     }
   }
 
@@ -80,24 +82,4 @@ impl Stack {
     let mut stack = self.stack.lock().unwrap();
     stack.push(midi_msg);
   }
-
-  // pub fn press(&self, item: &MidiMsg) {
-  //   // if !item.is_some() {
-  //   //   return;
-  //   // }
-  //   // self.trigger(item, true);
-  //   item.is_played = true;
-  // }
-
-  // pub fn release(&self, item: &MidiMsg) {
-  //   // if !item.is_some() {
-  //   //   return;
-  //   // }
-  //   // println!("release: {:?}", item.length);
-  //   // self.trigger(item, false);
-  //   // let mut stack = self.stack.lock().unwrap();
-  //   // stack.remove(id);
-  //   // stack.remove(id);
-  //   // println!("release stack: {:?}", stack);
-  // }
 }
