@@ -14,7 +14,7 @@ use core::regex::RegExpHandler;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use cursive::theme::{BorderStyle, Palette};
+use cursive::theme::{BaseColor, BorderStyle, Color, ColorStyle, ColorType, Palette, PaletteStyle};
 use cursive::views::TextView;
 use cursive::{Cursive, CursiveExt, With};
 use num::rational::Ratio;
@@ -24,28 +24,12 @@ use std::thread;
 use view::menubar::Menubar;
 
 pub fn init_default_style(siv: &mut Cursive) {
+  let mut my_palette = Palette::terminal_default();
+  // my_palette[PaletteStyle::EditableText] = ColorStyle::title_primary().into();
   siv.set_theme(cursive::theme::Theme {
     shadow: false,
     borders: BorderStyle::Simple,
-    palette: Palette::retro().with(|palette| {
-      use cursive::style::Color::TerminalDefault;
-      use cursive::style::PaletteColor::{
-        Background, Highlight, HighlightInactive, HighlightText, Primary, Secondary, Shadow,
-        Tertiary, TitlePrimary, TitleSecondary, View,
-      };
-
-      palette[Background] = TerminalDefault;
-      palette[View] = TerminalDefault;
-      palette[Primary] = TerminalDefault;
-      palette[TitlePrimary] = TerminalDefault;
-      palette[Highlight] = TerminalDefault;
-      palette[Secondary] = TerminalDefault;
-      palette[HighlightInactive] = TerminalDefault;
-      palette[HighlightText] = TerminalDefault;
-      palette[Shadow] = TerminalDefault;
-      palette[TitleSecondary] = TerminalDefault;
-      palette[Tertiary] = TerminalDefault;
-    }),
+    palette: my_palette,
   });
 }
 

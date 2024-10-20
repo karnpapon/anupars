@@ -3,14 +3,14 @@ use std::sync::{mpsc::Sender, Arc};
 use crate::core::{
   application::UserData,
   config,
-  midi::{self, Midi},
+  midi::{self, Midi, MidiMsg},
   utils,
 };
 use cursive::{
   theme::Style,
   view::{Nameable, Resizable},
   views::{
-    Button, Dialog, DummyView, EditView, FocusTracker, LinearLayout, ListView, NamedView,
+    Button, Canvas, Dialog, DummyView, EditView, FocusTracker, LinearLayout, ListView, NamedView,
     PaddedView, ResizedView, TextView,
   },
   Cursive,
@@ -20,11 +20,17 @@ use cursive_tabs::{Align, TabPanel};
 use nom::{
   branch::alt,
   bytes::complete::tag,
-  character::complete::{char, digit1, one_of},
+  character::{
+    complete::{char, digit1, one_of},
+    streaming::space1,
+  },
   combinator::{map_res, opt},
+  multi::separated_list1,
   sequence::{pair, tuple},
   IResult,
 };
+
+use super::canvas_editor::CanvasEditor;
 
 pub struct MiddleSection {}
 
@@ -106,7 +112,7 @@ impl MiddleSection {
             .child(
               ListView::new()
                 .child(
-                  "   NOTE:",
+                  "   NTE:",
                   EditView::new()
                     .content("")
                     // .filler('X')
@@ -118,7 +124,7 @@ impl MiddleSection {
             .child(
               ListView::new()
                 .child(
-                  "   LENGTH:",
+                  "   LEN:",
                   EditView::new()
                     .content("")
                     .style(Style::highlight_inactive())
@@ -129,7 +135,7 @@ impl MiddleSection {
             .child(
               ListView::new()
                 .child(
-                  "   VELOCITY:",
+                  "   VEL:",
                   EditView::new()
                     .content("")
                     .style(Style::highlight_inactive())
@@ -140,7 +146,7 @@ impl MiddleSection {
             .child(
               ListView::new()
                 .child(
-                  "   CHANNEL:",
+                  "   CHN:",
                   EditView::new()
                     .content("")
                     .style(Style::highlight_inactive())
@@ -150,22 +156,44 @@ impl MiddleSection {
             )
             .child(
               Button::new_raw("[ SET ]", |s| {
-                let midi_note = get_input_msg(s, "midi_note");
-                let midi_len = get_input_msg(s, "midi_len");
-                let midi_vel = get_input_msg(s, "midi_vel");
-                let midi_chan = get_input_msg(s, "midi_chan");
+                let nte = get_input_msg(s, "midi_note");
+                let len = get_input_msg(s, "midi_len");
+                let vel = get_input_msg(s, "midi_vel");
+                let chn = get_input_msg(s, "midi_chan");
+                let mut midi_msg_list = Vec::new();
 
-                if [&midi_note, &midi_len, &midi_vel, &midi_chan]
-                  .iter()
-                  .any(|s| s.is_empty())
-                {
-                  println!("some msg is missing");
+                if [&nte, &len, &vel, &chn].iter().any(|s| s.is_empty()) {
+                  println!("midi msg should not left blank");
                 } else {
-                  match parse_note_octave(&midi_note) {
-                    Ok((remaining, (note, octave))) => {
-                      println!("Note: {}", note);
-                      println!("Octave: {}", octave);
-                      println!("remaining: {}", remaining);
+                  let midi_msg_str = [&nte, &len, &vel, &chn]
+                    .iter()
+                    .map(|arc_str| arc_str.as_str()) // Convert Arc<String> to &str
+                    .collect::<Vec<&str>>()
+                    .join(" ");
+
+                  match parse_midi_msg(&midi_msg_str) {
+                    Ok((_remaining, (note_n_oct, length, velocity, channel))) => {
+                      for (note, octave) in note_n_oct {
+                        let note_idx = [
+                          "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B",
+                        ]
+                        .iter()
+                        .position(|nte| nte == &note)
+                        .unwrap();
+
+                        let midi_msg = MidiMsg::from(
+                          note_idx.try_into().unwrap(),
+                          octave,
+                          length,
+                          velocity,
+                          channel,
+                          false,
+                        );
+
+                        midi_msg_list.push(midi_msg);
+                      }
+
+                      input_submit_note(s, &midi_msg_list);
                     }
                     Err(e) => {
                       s.add_layer(Dialog::around(TextView::new(e.to_string())).button(
@@ -209,26 +237,88 @@ impl MiddleSection {
     FocusTracker::new(tab).fixed_height(8)
   }
 }
-// fn input_submit_note(s: &mut Cursive, notes: &str) {
-//   if let Some(data) = s.user_data::<UserData>().cloned() {
-//     let midi_msg = midi::MidiMsg::from(notes.to_string(), 4, 4, 8, 8, false);
-//     // data.midi_tx.send(midi::Message::Push(midi_msg)).unwrap();
-//   };
-// }
+fn input_submit_note(s: &mut Cursive, midi_msg: &[MidiMsg]) {
+  s.call_on_name(
+    config::canvas_editor_section_view,
+    |c: &mut Canvas<CanvasEditor>| {
+      c.state_mut().clear_marker_midi_msg_config_list(); // clear or create new vec?
+      midi_msg
+        .iter()
+        .for_each(|msg| c.state_mut().set_marker_midi_msg_config_list(msg.clone()));
+    },
+  )
+  .unwrap();
+}
 
 fn get_input_msg(s: &mut Cursive, name: &str) -> Arc<String> {
   s.call_on_name(name, |view: &mut EditView| view.get_content())
     .unwrap_or(Arc::new("".to_string()))
 }
 
-fn parse_note_octave(input: &str) -> IResult<&str, (String, i32)> {
-  let (input, note) = one_of("CDEFGAB")(input)?;
-  let (input, sharp) = opt(tag("#"))(input)?;
-  let (input, octave) = map_res(digit1, |s: &str| s.parse::<i32>())(input)?;
+fn parse_note_octave_array(input: &str) -> IResult<&str, Vec<(String, u8)>> {
+  separated_list1(tag(","), parse_note_octave)(input)
+}
+
+fn parse_note_octave(input: &str) -> IResult<&str, (String, u8)> {
+  let (input, note) = one_of("CDEFGAB")(input)?; // Parse note (C, D, E, F, G, A, B)
+  let (input, sharp) = opt(tag("#"))(input)?; // Parse optional sharp symbol (#)
+  let (input, octave) = map_res(digit1, |s: &str| s.parse::<u8>())(input)?; // Parse octave
 
   let note_with_sharp = format!("{}{}", note, sharp.unwrap_or(""));
 
-  // Ensure no extra characters are left
+  Ok((input, (note_with_sharp, octave)))
+}
+
+fn parse_midi_channel(input: &str) -> IResult<&str, u8> {
+  let (input, channel) = map_res(digit1, |s: &str| s.parse::<u8>())(input)?;
+
+  if channel <= 16 {
+    Ok((input, channel))
+  } else {
+    Err(nom::Err::Error(nom::error::Error {
+      input,
+      code: nom::error::ErrorKind::Eof,
+    }))
+  }
+}
+
+fn parse_midi_length(input: &str) -> IResult<&str, u8> {
+  let (input, channel) = map_res(digit1, |s: &str| s.parse::<u8>())(input)?;
+
+  if channel <= 127 {
+    Ok((input, channel))
+  } else {
+    Err(nom::Err::Error(nom::error::Error {
+      input,
+      code: nom::error::ErrorKind::Eof,
+    }))
+  }
+}
+
+fn parse_midi_velocity(input: &str) -> IResult<&str, u8> {
+  let (input, channel) = map_res(digit1, |s: &str| s.parse::<u8>())(input)?;
+
+  if channel <= 127 {
+    Ok((input, channel))
+  } else {
+    Err(nom::Err::Error(nom::error::Error {
+      input,
+      code: nom::error::ErrorKind::Eof,
+    }))
+  }
+}
+
+fn parse_midi_msg(input: &str) -> IResult<&str, (Vec<(String, u8)>, u8, u8, u8)> {
+  let (input, (note_octave, _, len, _, vel, _, channel)) = tuple((
+    parse_note_octave_array,
+    space1,
+    parse_midi_length,
+    space1,
+    parse_midi_velocity,
+    space1,
+    parse_midi_channel,
+  ))(input)?;
+
   if !input.is_empty() {
     return Err(nom::Err::Error(nom::error::Error {
       input,
@@ -236,5 +326,5 @@ fn parse_note_octave(input: &str) -> IResult<&str, (String, i32)> {
     }));
   }
 
-  Ok((input, (note_with_sharp, octave)))
+  Ok((input, (note_octave, len, vel, channel)))
 }

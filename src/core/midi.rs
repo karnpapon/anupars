@@ -16,29 +16,29 @@ pub enum Message {
 
 #[derive(Clone, Debug)]
 pub struct MidiMsg {
-  note: String,
-  velocity: i8,
-  octave: i8,
-  channel: i8,
-  pub length: i8,
+  note: u8,
+  velocity: u8,
+  octave: u8,
+  channel: u8,
+  pub length: u8,
   pub is_played: bool,
 }
 
 impl MidiMsg {
   pub fn from(
-    note: String,
-    velocity: i8,
-    octave: i8,
-    channel: i8,
-    length: i8,
+    note: u8,
+    octave: u8,
+    length: u8,
+    velocity: u8,
+    channel: u8,
     is_played: bool,
   ) -> MidiMsg {
     Self {
       note,
-      velocity,
       octave,
-      channel,
       length,
+      velocity,
+      channel,
       is_played,
     }
   }
@@ -147,19 +147,33 @@ impl Midi {
     out_device_name.clone().unwrap()
   }
 
-  pub fn trigger(&self, item: &MidiMsg, down: bool) {
-    let play_note = |note: u8, duration: u64| {
-      let note_event = if down { 0x90 } else { 0x80 };
-      const VELOCITY: u8 = 0x64;
+  pub fn trigger(&self, midi_msg: &MidiMsg, down: bool) {
+    let play_note = |item: &MidiMsg| {
+      let note_event = if down {
+        0x90 + item.channel
+      } else {
+        0x80 + item.channel
+      };
+      // const VELOCITY: u8 = 0x64;
       match self.out_device.lock() {
         Ok(mut conn_out) => {
           let connection_out = conn_out.as_mut().unwrap();
-          connection_out.send(&[note_event, note, VELOCITY]).unwrap();
+          connection_out
+            .send(&[
+              note_event,
+              convert_to_midi_note_num(item.octave, item.note),
+              item.velocity,
+            ])
+            .unwrap();
           Ok(())
         }
         _ => Err("send_midi_note_out::error"),
       }
     };
-    play_note(66, 4).unwrap();
+    play_note(midi_msg).unwrap();
   }
+}
+
+pub fn convert_to_midi_note_num(octave: u8, note: u8) -> u8 {
+  24 + (octave * 12) + note // 60 = C3
 }

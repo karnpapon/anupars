@@ -2,10 +2,7 @@ use cursive::{
   view::{Nameable, Resizable},
   views::{DummyView, LinearLayout, NamedView, RadioGroup},
 };
-use std::{
-  borrow::Borrow,
-  sync::{mpsc::Sender, Arc, RwLock},
-};
+use std::sync::{mpsc::Sender, Arc, RwLock};
 
 use super::{clock::clock, config, midi, regex};
 use crate::view::{

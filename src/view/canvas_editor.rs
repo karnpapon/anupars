@@ -1,4 +1,8 @@
-use std::{collections::HashMap, sync::mpsc::Sender, usize};
+use std::{
+  collections::HashMap,
+  sync::{mpsc::Sender, Arc, Mutex},
+  usize,
+};
 
 use cursive::{
   event::{Callback, Event, EventResult, Key, MouseButton, MouseEvent},
@@ -33,6 +37,7 @@ pub struct Marker {
   drag_start_x: usize,
   drag_start_y: usize,
   actived_pos: Vec2,
+  midi_msg_config_list: Arc<Mutex<Vec<midi::MidiMsg>>>,
 }
 
 enum Direction {
@@ -75,8 +80,13 @@ impl Marker {
             if editor.text_matcher.is_some() {
               let hl = editor.text_matcher.as_ref().unwrap();
               if hl.get(&(offset_x + offset_y * editor.grid.width)).is_some() {
-                // let midi_msg = MidiMsg::from("C".to_string(), 4, 4, 8, 8, false);
-                // editor.midi_tx.send(midi::Message::Push(midi_msg)).unwrap();
+                let midi_msg_config_list = self.midi_msg_config_list.lock().unwrap();
+                if midi_msg_config_list.len() > 0 {
+                  editor
+                    .midi_tx
+                    .send(midi::Message::Push(midi_msg_config_list[0].clone()))
+                    .unwrap();
+                }
                 (Style::none(), '@')
               } else {
                 (Style::none(), '>')
@@ -199,8 +209,8 @@ impl CanvasEditor {
         area: Rect::from_point(Vec2::zero()),
         drag_start_y: 0,
         drag_start_x: 0,
-        // is_playing: false,
         actived_pos: Vec2::zero(),
+        midi_msg_config_list: Arc::new(Mutex::new(Vec::new())),
       },
       grid: Matrix::new(0, 0, '\0'),
       text_contents: None,
@@ -329,6 +339,16 @@ impl CanvasEditor {
 
   pub fn set_text_matcher(&mut self, text_matcher: Option<HashMap<usize, Match>>) {
     self.text_matcher = text_matcher
+  }
+
+  pub fn clear_marker_midi_msg_config_list(&mut self) {
+    let mut midi_msg_config_list = self.marker.midi_msg_config_list.lock().unwrap();
+    midi_msg_config_list.clear();
+  }
+
+  pub fn set_marker_midi_msg_config_list(&mut self, midi: midi::MidiMsg) {
+    let mut midi_msg_config_list = self.marker.midi_msg_config_list.lock().unwrap();
+    midi_msg_config_list.push(midi);
   }
 }
 
