@@ -14,9 +14,9 @@ use core::regex::RegExpHandler;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use cursive::theme::{BaseColor, BorderStyle, Color, ColorStyle, ColorType, Palette, PaletteStyle};
+use cursive::theme::{BorderStyle, Palette};
 use cursive::views::TextView;
-use cursive::{Cursive, CursiveExt, With};
+use cursive::{Cursive, CursiveExt};
 use num::rational::Ratio;
 use num::FromPrimitive;
 use std::rc::Rc;
@@ -24,7 +24,7 @@ use std::thread;
 use view::menubar::Menubar;
 
 pub fn init_default_style(siv: &mut Cursive) {
-  let mut my_palette = Palette::terminal_default();
+  let my_palette = Palette::terminal_default();
   // my_palette[PaletteStyle::EditableText] = ColorStyle::title_primary().into();
   siv.set_theme(cursive::theme::Theme {
     shadow: false,

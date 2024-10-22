@@ -1,5 +1,5 @@
 use std::{
-  collections::HashMap,
+  collections::{BTreeMap, BTreeSet, HashMap},
   sync::{mpsc::Sender, Arc, Mutex},
   usize,
 };
@@ -38,6 +38,7 @@ pub struct Marker {
   drag_start_y: usize,
   actived_pos: Vec2,
   midi_msg_config_list: Arc<Mutex<Vec<midi::MidiMsg>>>,
+  regex_indexes: Arc<Mutex<BTreeSet<usize>>>,
 }
 
 enum Direction {
@@ -75,16 +76,24 @@ impl Marker {
           continue;
         }
 
+        let curr_running_marker = offset_x + offset_y * editor.grid.width;
         let (displayed_style, displayed_char) =
           if self.is_actived_position((offset_x, offset_y).into()) {
             if editor.text_matcher.is_some() {
               let hl = editor.text_matcher.as_ref().unwrap();
-              if hl.get(&(offset_x + offset_y * editor.grid.width)).is_some() {
+              if hl.get(&curr_running_marker).is_some() {
+                let regex_indexes = self.regex_indexes.lock().unwrap();
+                let triggered_index = regex_indexes
+                  .iter()
+                  .position(|v| v == &curr_running_marker)
+                  .unwrap();
                 let midi_msg_config_list = self.midi_msg_config_list.lock().unwrap();
                 if midi_msg_config_list.len() > 0 {
                   editor
                     .midi_tx
-                    .send(midi::Message::Push(midi_msg_config_list[0].clone()))
+                    .send(midi::Message::Push(
+                      midi_msg_config_list[triggered_index % midi_msg_config_list.len()].clone(),
+                    ))
                     .unwrap();
                 }
                 (Style::none(), '@')
@@ -97,7 +106,14 @@ impl Marker {
           } else {
             let ch = if editor.text_matcher.is_some() {
               let hl = editor.text_matcher.as_ref().unwrap();
-              if hl.get(&(offset_x + offset_y * editor.grid.width)).is_some() {
+              let hl_item = hl.get(&curr_running_marker);
+              if hl_item.is_some() {
+                let mut regex_indexes = self.regex_indexes.lock().unwrap();
+                regex_indexes.insert(curr_running_marker);
+                regex_indexes.retain(|re_idx: &usize| {
+                  let dd = editor.index_to_xy(re_idx);
+                  dd.fits(self.pos) && dd.fits_in(self.pos + self.area.size())
+                });
                 '*'
               } else {
                 editor.get(offset_x, offset_y)
@@ -155,6 +171,7 @@ impl Marker {
     let pos_x = pos.x.abs_diff(1);
     let pos_y = pos.y.abs_diff(offset.y);
     self.pos = (pos_x, pos_y).into();
+    // self.area.
   }
 
   pub fn set_grid_area(&mut self, current_pos: XY<usize>) {
@@ -211,6 +228,7 @@ impl CanvasEditor {
         drag_start_x: 0,
         actived_pos: Vec2::zero(),
         midi_msg_config_list: Arc::new(Mutex::new(Vec::new())),
+        regex_indexes: Arc::new(Mutex::new(BTreeSet::new())),
       },
       grid: Matrix::new(0, 0, '\0'),
       text_contents: None,
@@ -349,6 +367,12 @@ impl CanvasEditor {
   pub fn set_marker_midi_msg_config_list(&mut self, midi: midi::MidiMsg) {
     let mut midi_msg_config_list = self.marker.midi_msg_config_list.lock().unwrap();
     midi_msg_config_list.push(midi);
+  }
+
+  fn index_to_xy(&self, index: &usize) -> Vec2 {
+    let x = index % self.size.x;
+    let y = index / self.size.x;
+    (x, y).into()
   }
 }
 
