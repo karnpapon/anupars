@@ -307,14 +307,18 @@ impl Clock {
           }
         }
 
-        if self.playing {
-          #[allow(unused_variables)]
-          let diff = self.tick();
-          // send clock time
-          metronome_tx
-            .send(metronome::Message::Time(self.time()))
-            .unwrap();
-        }
+        // FIX: `self.playing` cause CPU usage spike to 100% !!!!
+        // when metronome "pause", since it's catched in loop without any sleep interval !!!
+        // if self.playing {
+        //   return;
+        // }
+
+        #[allow(unused_variables)]
+        let diff = self.tick();
+        // send clock time
+        metronome_tx
+          .send(metronome::Message::Time(self.time()))
+          .unwrap();
       }
     });
 
