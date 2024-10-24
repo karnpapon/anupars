@@ -55,10 +55,7 @@ impl Metronome {
           clock_tx.send(clock::Message::Reset).unwrap();
         }
         Message::StartStop => {
-          match clock_tx.send(clock::Message::StartStop) {
-            Ok(e) => {}
-            Err(e) => println!("StartStopErr: {:?}", e),
-          };
+          clock_tx.send(clock::Message::StartStop).unwrap();
         }
         Message::NudgeTempo(nudge) => {
           clock_tx.send(clock::Message::NudgeTempo(nudge)).unwrap();

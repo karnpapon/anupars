@@ -229,10 +229,10 @@ impl Timer {
 #[derive(Debug)]
 pub struct Clock {
   time: Arc<Mutex<Time>>,
-  timer: Timer,
-  signature: Signature,
+  timer: Arc<Mutex<Timer>>,
+  signature: Arc<Mutex<Signature>>,
   tempo: Arc<Mutex<Tempo>>,
-  tap: Option<Instant>,
+  tap: Arc<Mutex<Option<Instant>>>,
   playing: AtomicBool,
 }
 
@@ -248,9 +248,9 @@ pub enum Message {
 
 impl Clock {
   pub fn new() -> Self {
-    let signature = Signature::default();
-    let time = Arc::new(Mutex::new(Time::new(signature)));
-    let timer = Timer::new(signature);
+    let signature = Arc::new(Mutex::new(Signature::default()));
+    let time = Arc::new(Mutex::new(Time::new(Signature::default())));
+    let timer = Arc::new(Mutex::new(Timer::new(Signature::default())));
     let tempo = Arc::new(Mutex::new(Ratio::from_integer(DEFAULT_BEATS_PER_MINUTE)));
 
     Self {
@@ -258,8 +258,8 @@ impl Clock {
       timer,
       signature,
       tempo,
-      tap: None,
-      playing: AtomicBool::new(true),
+      tap: Arc::new(Mutex::new(None)),
+      playing: AtomicBool::new(false),
     }
   }
 
@@ -275,19 +275,14 @@ impl Clock {
       .send(metronome::Message::Tempo(*self.get_tempo().deref()))
       .unwrap();
 
-    thread::spawn(move || {
-      loop {
-        // FIX: `self.playing` cause CPU usage spike to 100% !!!!
-        // when metronome "pause", since it's catched in loop without any sleep interval !!!
-
-        if self.is_playing() {
-          let diff = self.tick();
-          metronome_tx
-            .send(metronome::Message::Time(self.time()))
-            .unwrap();
-        } else {
-          thread::sleep(Duration::from_millis(100));
-        }
+    thread::spawn(move || loop {
+      if self.is_playing() {
+        let _diff = self.tick();
+        metronome_tx
+          .send(metronome::Message::Time(self.time()))
+          .unwrap();
+      } else {
+        thread::sleep(Duration::from_millis(100));
       }
     });
   }
@@ -310,21 +305,19 @@ impl Clock {
     thread::spawn(move || {
       for control_message in &rx {
         match control_message {
-          Message::Reset => {
-            // self.reset()
-          }
+          Message::Reset => self.reset(),
           Message::StartStop => {
             self.playing.fetch_xor(true, Ordering::SeqCst);
           }
           Message::Signature(signature) => {
-            // self.set_signature(signature);
+            self.set_signature(signature);
           }
           Message::Tap => {
-            // if let Some(new_tempo) = self.tap() {
-            //   metronome_tx
-            //     .send(metronome::Message::Tempo(new_tempo))
-            //     .unwrap();
-            // }
+            if let Some(new_tempo) = self.tap() {
+              metronome_tx
+                .send(metronome::Message::Tempo(new_tempo))
+                .unwrap();
+            }
           }
           Message::NudgeTempo(nudge) => {
             let mut _tempo = self.get_tempo();
@@ -337,12 +330,7 @@ impl Clock {
           Message::Tempo(tempo) => {
             let mut _tempo = self.get_tempo();
             *_tempo = tempo;
-          } // TryRecvError::Empty => {
-            //   // is_empty = true;
-            // }
-            // Err(TryRecvError::Disconnected) => {
-            //   panic!("{:?}", TryRecvError::Disconnected);
-            // }
+          }
         }
       }
     });
@@ -376,16 +364,22 @@ impl Clock {
   //   });
   // }
 
-  // pub fn reset(&mut self) {
-  //   self.time = Time::new(self.signature);
-  //   self.timer = Timer::new(self.signature);
-  // }
+  pub fn reset(&self) {
+    let mut time = self.time.lock().unwrap();
+    let mut timer = self.timer.lock().unwrap();
+    let signature = self.signature.lock().unwrap();
+    *time = Time::new(*signature);
+    *timer = Timer::new(*signature);
+  }
 
-  // pub fn set_signature(&mut self, signature: Signature) {
-  //   self.signature = signature;
-  //   self.time = Time::new(self.signature);
-  //   self.timer = Timer::new(self.signature);
-  // }
+  pub fn set_signature(&self, signature: Signature) {
+    let mut sig = self.signature.lock().unwrap();
+    *sig = signature;
+    let mut time = self.time.lock().unwrap();
+    let mut timer = self.timer.lock().unwrap();
+    *time = Time::new(*sig);
+    *timer = Timer::new(*sig);
+  }
 
   pub fn time(&self) -> Time {
     let t = self.time.lock().unwrap();
@@ -393,33 +387,37 @@ impl Clock {
   }
 
   pub fn tick(&self) -> Tick {
-    let nanos_until_tick = self.timer.next(*self.get_tempo().deref());
+    let nanos_until_tick = self.timer.lock().unwrap().next(*self.get_tempo().deref());
     let mut time = self.time.lock().unwrap();
     *time = time.next();
     nanos_until_tick
   }
 
-  // pub fn tap(&mut self) -> Option<Tempo> {
-  //   // on every tap, quantize beat
-  //   self.time = self.time.quantize_beat();
+  pub fn tap(&self) -> Option<Tempo> {
+    let mut time = self.time.lock().unwrap();
+    // on every tap, quantize beat
+    *time = time.quantize_beat();
 
-  //   let mut next_tempo = None;
+    let mut next_tempo = None;
 
-  //   // if second tap on beat, adjust tempo
-  //   if let Some(tap) = self.tap {
-  //     let tap_nanos = Ratio::from_integer(duration_to_nanos(tap.elapsed()));
-  //     if tap_nanos < self.signature.nanos_per_beat(*self.get_tempo().deref()) * 2 {
-  //       let tap_beats_per_nanos = Ratio::from_integer(1) / tap_nanos;
-  //       let tap_beats_per_seconds = tap_beats_per_nanos * Ratio::from_integer(NANOS_PER_SECOND);
-  //       let beats_per_minute = tap_beats_per_seconds * Ratio::from_integer(SECONDS_PER_MINUTE);
-  //       next_tempo = Some(round_to_nearest(beats_per_minute, 100));
-  //     }
-  //   }
+    let mut tap = self.tap.lock().unwrap();
 
-  //   self.tap = Some(Instant::now());
+    // if second tap on beat, adjust tempo
+    if let Some(t) = *tap {
+      let sig = self.signature.lock().unwrap();
+      let tap_nanos = Ratio::from_integer(duration_to_nanos(t.elapsed()));
+      if tap_nanos < sig.nanos_per_beat(*self.get_tempo().deref()) * 2 {
+        let tap_beats_per_nanos = Ratio::from_integer(1) / tap_nanos;
+        let tap_beats_per_seconds = tap_beats_per_nanos * Ratio::from_integer(NANOS_PER_SECOND);
+        let beats_per_minute = tap_beats_per_seconds * Ratio::from_integer(SECONDS_PER_MINUTE);
+        next_tempo = Some(round_to_nearest(beats_per_minute, 100));
+      }
+    }
 
-  //   next_tempo
-  // }
+    *tap = Some(Instant::now());
+
+    next_tempo
+  }
 }
 
 fn duration_to_nanos(duration: Duration) -> i64 {
