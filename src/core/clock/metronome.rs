@@ -1,4 +1,7 @@
-use std::sync::mpsc::{channel, Receiver, Sender};
+use std::sync::{
+  mpsc::{channel, Receiver, Sender},
+  Arc,
+};
 
 // use crossbeam_utils::sync::{Parker, Unparker};
 use cursive::views::{Canvas, TextView};
@@ -39,15 +42,24 @@ impl Metronome {
   }
 
   pub fn run(self) {
-    let clock = clock::Clock::new();
-    let clock_tx = clock.start(self.tx.clone());
+    let clock = Arc::new(clock::Clock::new());
+    let metronome_tx_cloned = self.tx.clone();
+    let metronome_tx_cloned_2 = self.tx.clone();
+    let clock_cloned = Arc::clone(&clock);
+    let clock_tx = clock.run(metronome_tx_cloned);
+    clock_cloned.run_tick(metronome_tx_cloned_2);
 
     for control_message in self.rx {
       match control_message {
         Message::Reset => {
           clock_tx.send(clock::Message::Reset).unwrap();
         }
-        Message::StartStop => clock_tx.send(clock::Message::StartStop).unwrap(),
+        Message::StartStop => {
+          match clock_tx.send(clock::Message::StartStop) {
+            Ok(e) => {}
+            Err(e) => println!("StartStopErr: {:?}", e),
+          };
+        }
         Message::NudgeTempo(nudge) => {
           clock_tx.send(clock::Message::NudgeTempo(nudge)).unwrap();
         }

@@ -123,7 +123,7 @@ impl Midi {
     let stack = Arc::new(Stack::new());
     let stack_clone_2 = Arc::clone(&stack);
     let stack_tx = stack.run(midi_tx_1);
-    stack_clone_2.refresh(midi_tx_2);
+    // stack_clone_2.refresh(midi_tx_2);
 
     thread::spawn(move || {
       for control_message in &self.rx {
