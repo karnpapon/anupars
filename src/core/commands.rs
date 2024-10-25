@@ -1,12 +1,12 @@
 use std::collections::HashMap;
 use std::sync::mpsc::Sender;
 use std::sync::{Arc, Mutex};
-use std::thread;
 use std::time::Instant;
 
-use crate::view::canvas_editor::CanvasEditor;
+use crate::view::common::canvas_editor::CanvasEditor;
+use crate::view::microcontroller::anu::Anu;
+// use crate::view::desktop::anu::Anu;
 
-use super::anu::Anu;
 use super::application::UserData;
 use super::clock::metronome::Message;
 use super::command::{Adjustment, Command, MoveDirection};
@@ -25,7 +25,7 @@ pub struct CommandManager {
   metronome_sender: Sender<Message>,
   cb_sink: cursive::CbSink,
   temp_tempo: Arc<Mutex<i64>>,
-  last_key_time: Arc<Mutex<Option<Instant>>>,
+  pub last_key_time: Arc<Mutex<Option<Instant>>>,
 }
 
 impl CommandManager {
@@ -84,10 +84,8 @@ impl CommandManager {
         self.anu.set_toggle_regex_input();
 
         if !self.anu.toggle_regex_input() {
-          let mut regex_display_unit_view = s
-            .find_name::<TextView>(config::regex_display_unit_view)
-            .unwrap();
-          regex_display_unit_view.set_content(utils::build_doc_string(&config::APP_WELCOME_MSG));
+          let mut display_view = s.find_name::<TextView>(config::display_view).unwrap();
+          display_view.set_content(utils::build_doc_string(&config::APP_WELCOME_MSG));
 
           let mut interactive_display_section_view = s
             .find_name::<LinearLayout>(config::main_section_view)

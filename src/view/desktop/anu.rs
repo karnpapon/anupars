@@ -4,9 +4,12 @@ use cursive::{
 };
 use std::sync::{mpsc::Sender, Arc, RwLock};
 
-use super::{clock::clock, config, midi, regex};
-use crate::view::{
-  canvas_section::CanvasSection,
+use crate::{
+  core::{clock::clock, config, midi, regex},
+  view::common::canvas_section::CanvasSection,
+};
+
+use super::{
   middle_section::MiddleSection,
   top_section::{RegexFlag, RegexMode, TopSection},
 };

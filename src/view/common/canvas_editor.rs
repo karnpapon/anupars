@@ -28,6 +28,7 @@ pub struct CanvasEditor {
   text_contents: Option<String>,
   text_matcher: Option<HashMap<usize, Match>>,
   midi_tx: Sender<midi::Message>,
+  hold_key: bool,
 }
 
 #[derive(Clone)]
@@ -80,13 +81,13 @@ impl Marker {
         let (displayed_style, displayed_char) =
           if self.is_actived_position((offset_x, offset_y).into()) {
             if editor.text_matcher.is_some() {
-              let hl = editor.text_matcher.as_ref().unwrap();
+              let hl: &HashMap<usize, Match> = editor.text_matcher.as_ref().unwrap();
               if hl.get(&curr_running_marker).is_some() {
                 let regex_indexes = self.regex_indexes.lock().unwrap();
                 let triggered_index = regex_indexes
                   .iter()
                   .position(|v| v == &curr_running_marker)
-                  .unwrap();
+                  .unwrap_or(0); //TODO: properly handle moving marker while is_playing=true
                 let midi_msg_config_list = self.midi_msg_config_list.lock().unwrap();
                 if midi_msg_config_list.len() > 0 {
                   editor
@@ -234,6 +235,7 @@ impl CanvasEditor {
       text_contents: None,
       text_matcher: None,
       midi_tx,
+      hold_key: false,
     }
   }
 

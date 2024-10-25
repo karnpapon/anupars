@@ -1,0 +1,427 @@
+use crate::{
+  core::{
+    config,
+    midi::MidiMsg,
+    parser::{self},
+    utils,
+  },
+  view::common::{canvas_base::CanvasBase, canvas_editor::CanvasEditor},
+};
+use cursive::{
+  theme::Style,
+  view::{Nameable, Resizable},
+  views::{
+    Button, Canvas, Dialog, DummyView, EditView, FocusTracker, LinearLayout, ListView, NamedView,
+    PaddedView, ResizedView, TextView,
+  },
+  Cursive,
+};
+use cursive_tabs::{Align, TabPanel};
+use std::sync::Arc;
+
+pub struct MiddleSection {}
+
+use std::sync::mpsc::Sender;
+
+use cfonts::{render, Fonts, Options};
+use cursive::{event::EventResult, utils::span::SpannedString, Vec2};
+
+use crate::core::regex;
+
+use super::anu::Anu;
+
+pub enum RegexFlag {
+  CaseSensitive,
+  Multiline,
+  Newline,
+  IgnoreWhiteSpace,
+  Lazy,
+}
+
+pub enum RegexMode {
+  Realtime,
+  OnEval,
+}
+
+#[derive(Clone)]
+pub struct TopSection {
+  bpm: usize,
+  ratio: (i64, usize),
+  pos: Vec2,
+  len: (usize, usize),
+}
+
+impl Default for TopSection {
+  fn default() -> Self {
+    Self::new()
+  }
+}
+
+impl TopSection {
+  pub fn new() -> Self {
+    TopSection {
+      bpm: 120,
+      ratio: (1, 16),
+      pos: Vec2::zero(),
+      len: (1, 1),
+    }
+  }
+
+  pub fn build(app: &mut Anu, regex_tx: Sender<regex::Message>) -> FocusTracker<NamedView<Dialog>> {
+    let regex_tx_on_edit = regex_tx.clone();
+    let regex_tx_on_submit = regex_tx.clone();
+    let regex_input_unit_view = EditView::new()
+      .content(app.input_regex.clone())
+      .style(Style::highlight_inactive())
+      .on_edit(move |siv: &mut Cursive, texts: &str, pos: usize| {
+        input_edit(siv, texts, pos, regex_tx_on_edit.clone())
+      })
+      .on_submit(move |siv: &mut Cursive, texts: &str| {
+        input_submit(siv, texts, regex_tx_on_submit.clone())
+      })
+      .with_name(config::regex_input_unit_view)
+      .fixed_width(25);
+
+    let flag_view = LinearLayout::horizontal()
+      .child(
+        app
+          .flag_state
+          .button(RegexFlag::CaseSensitive, "i ")
+          .selected(),
+      )
+      .child(app.flag_state.button(RegexFlag::Multiline, "m "))
+      .child(app.flag_state.button(RegexFlag::Newline, "s "))
+      .child(app.flag_state.button(RegexFlag::IgnoreWhiteSpace, "x "))
+      .child(app.flag_state.button(RegexFlag::Lazy, "U "));
+    // .with(|layout| {
+    //   if app.boolean {
+    //     layout.set_focus_index(1).unwrap();
+    //   }
+    // });
+
+    let mode_view = LinearLayout::horizontal()
+      .child(
+        app
+          .mode_state
+          .button(RegexMode::Realtime, "Realtime ")
+          .selected(),
+      )
+      .child(app.mode_state.button(RegexMode::OnEval, "On-Eval "));
+
+    let input_status_unit_view = TextView::new("-")
+      .with_name(config::input_status_unit_view)
+      .max_width(25);
+
+    let input_controller_section_view = ListView::new()
+      .child("RegExp: ", regex_input_unit_view)
+      .child("Mode: ", mode_view)
+      .child("flag: ", flag_view)
+      .child("status: ", input_status_unit_view)
+      .full_width();
+
+    let status_controller_section_view = ListView::new()
+      .child(
+        "BPM: ",
+        TextView::new(utils::build_bpm_status_str(app.top_section.bpm))
+          .with_name(config::bpm_status_unit_view),
+      )
+      .child(
+        "RTO: ",
+        TextView::new(utils::build_ratio_status_str(app.top_section.ratio, ""))
+          .with_name(config::ratio_status_unit_view),
+      )
+      .child(
+        "LEN: ",
+        TextView::new(utils::build_len_status_str(app.top_section.len))
+          .with_name(config::len_status_unit_view),
+      )
+      .child(
+        "POS: ",
+        TextView::new(utils::build_pos_status_str(app.top_section.pos))
+          .with_name(config::pos_status_unit_view),
+      )
+      .full_width();
+
+    let protocol_controller_section_view = ListView::new()
+      .child(
+        "OSC: ",
+        TextView::new("-")
+          .with_name(config::osc_status_unit_view)
+          .fixed_width(8),
+      )
+      .child(
+        "MIDI: ",
+        TextView::new("-").with_name(config::midi_status_unit_view),
+      )
+      .full_width();
+
+    FocusTracker::new(
+      Dialog::around(
+        LinearLayout::horizontal()
+          .child(input_controller_section_view.with_name(config::input_controller_section_view))
+          .child(status_controller_section_view.with_name(config::status_controller_section_view))
+          .child(
+            protocol_controller_section_view.with_name(config::protocol_controller_section_view),
+          ),
+      )
+      .title_position(cursive::align::HAlign::Right)
+      .with_name(config::control_section_view),
+    )
+    .on_focus(|this| {
+      this.get_mut().set_title(SpannedString::styled(
+        format!(" {} ", config::control_section_view),
+        Style::highlight(),
+      ));
+      EventResult::consumed()
+    })
+    .on_focus_lost(|this| {
+      this.get_mut().set_title("");
+      EventResult::consumed()
+    })
+  }
+}
+
+fn solve_regex(siv: &mut Cursive, texts: &str, regex_tx: Sender<regex::Message>) {
+  let mut canvas_base_section_view = siv
+    .find_name::<Canvas<CanvasBase>>(config::canvas_base_section_view)
+    .unwrap();
+  let text = canvas_base_section_view.state_mut().text_contents();
+  let input_regex = regex::EventData {
+    text,
+    pattern: texts.to_string(),
+    flags: String::new(),
+  };
+
+  regex_tx.send(regex::Message::Solve(input_regex)).unwrap()
+}
+
+fn input_submit(siv: &mut Cursive, texts: &str, regex_tx: Sender<regex::Message>) {
+  solve_regex(siv, texts, regex_tx);
+}
+
+fn input_edit(siv: &mut Cursive, texts: &str, _cursor: usize, regex_tx: Sender<regex::Message>) {
+  let mut display_view = siv.find_name::<TextView>(config::display_view).unwrap();
+
+  if texts.is_empty() {
+    display_view.set_content(utils::build_doc_string(&config::APP_WELCOME_MSG));
+    regex_tx.send(regex::Message::Clear).unwrap();
+    return;
+  }
+
+  let output = render(Options {
+    text: String::from(texts),
+    font: Fonts::FontTiny,
+    ..Options::default()
+  });
+
+  display_view.set_content(output.text);
+
+  solve_regex(siv, texts, regex_tx);
+}
+
+impl MiddleSection {
+  pub fn new() -> Self {
+    MiddleSection {}
+  }
+
+  fn build_welcome_msg() -> NamedView<TextView> {
+    TextView::new(utils::build_doc_string(&config::APP_WELCOME_MSG))
+      .center()
+      .with_name(config::display_view)
+  }
+
+  fn build_osc_input() -> NamedView<PaddedView<LinearLayout>> {
+    PaddedView::lrtb(
+      10,
+      10,
+      1,
+      1,
+      LinearLayout::vertical()
+        .child(DummyView::new().full_height())
+        .child(
+          LinearLayout::horizontal()
+            .child(
+              ListView::new()
+                .child(
+                  "   PATH:",
+                  EditView::new()
+                    .content("")
+                    .style(Style::highlight_inactive())
+                    // .on_edit(input_edit)
+                    // .on_submit(input_submit)
+                    .with_name("osc_path"),
+                )
+                .full_width(),
+            )
+            .child(
+              ListView::new()
+                .child(
+                  "   MSG:",
+                  EditView::new()
+                    .content("")
+                    .style(Style::highlight_inactive())
+                    .with_name("osc_msg"),
+                )
+                .full_width(),
+            ),
+        )
+        .child(DummyView::new().full_height()),
+    )
+    .with_name("osc_input")
+  }
+
+  fn build_midi_input() -> NamedView<PaddedView<LinearLayout>> {
+    PaddedView::lrtb(
+      10,
+      10,
+      1,
+      1,
+      LinearLayout::vertical()
+        .child(DummyView::new().full_height())
+        .child(
+          LinearLayout::horizontal()
+            .child(
+              ListView::new()
+                .child(
+                  "   NTE:",
+                  EditView::new()
+                    .content("")
+                    // .filler('X')
+                    .style(Style::highlight_inactive())
+                    .with_name("midi_note"),
+                )
+                .full_width(),
+            )
+            .child(
+              ListView::new()
+                .child(
+                  "   LEN:",
+                  EditView::new()
+                    .content("")
+                    .style(Style::highlight_inactive())
+                    .with_name("midi_len"),
+                )
+                .full_width(),
+            )
+            .child(
+              ListView::new()
+                .child(
+                  "   VEL:",
+                  EditView::new()
+                    .content("")
+                    .style(Style::highlight_inactive())
+                    .with_name("midi_vel"),
+                )
+                .full_width(),
+            )
+            .child(
+              ListView::new()
+                .child(
+                  "   CHN:",
+                  EditView::new()
+                    .content("")
+                    .style(Style::highlight_inactive())
+                    .with_name("midi_chan"),
+                )
+                .full_width(),
+            )
+            .child(
+              Button::new_raw("[ SET ]", |s| {
+                let nte = get_input_msg(s, "midi_note");
+                let len = get_input_msg(s, "midi_len");
+                let vel = get_input_msg(s, "midi_vel");
+                let chn = get_input_msg(s, "midi_chan");
+                let mut midi_msg_list = Vec::new();
+
+                if [&nte, &len, &vel, &chn].iter().any(|s| s.is_empty()) {
+                  println!("midi msg should not left blank");
+                } else {
+                  let midi_msg_str = [&nte, &len, &vel, &chn]
+                    .iter()
+                    .map(|arc_str| arc_str.as_str()) // Convert Arc<String> to &str
+                    .collect::<Vec<&str>>()
+                    .join(" ");
+
+                  match parser::midi::parser::parse_midi_msg(&midi_msg_str) {
+                    Ok((_remaining, (note_n_oct, length, velocity, channel))) => {
+                      for (note, octave) in note_n_oct {
+                        let note_idx = [
+                          "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B",
+                        ]
+                        .iter()
+                        .position(|nte| nte == &note)
+                        .unwrap();
+
+                        let midi_msg = MidiMsg::from(
+                          note_idx.try_into().unwrap(),
+                          octave,
+                          length,
+                          velocity,
+                          channel,
+                          false,
+                        );
+
+                        midi_msg_list.push(midi_msg);
+                      }
+
+                      input_submit_note(s, &midi_msg_list);
+                    }
+                    Err(e) => {
+                      s.add_layer(Dialog::around(TextView::new(e.to_string())).button(
+                        "Close",
+                        |s| {
+                          s.pop_layer();
+                        },
+                      ));
+                    }
+                  }
+                }
+              })
+              .with_name("midi_submit_config")
+              .full_width(),
+            )
+            .child(DummyView::new().full_height()),
+        )
+        .child(DummyView::new().full_height()),
+    )
+    .with_name("midi_input")
+  }
+
+  pub fn build_tab() -> NamedView<TabPanel> {
+    let mut tab = TabPanel::new()
+      .with_tab(Self::build_welcome_msg())
+      .with_tab(Self::build_midi_input())
+      // .with_tab(Self::build_osc_input())
+      .with_bar_alignment(Align::End)
+      .with_name(config::interactive_display_section_view);
+
+    tab
+      .get_mut()
+      .set_active_tab(config::display_view)
+      .expect("View not found");
+
+    tab
+  }
+
+  pub fn build() -> ResizedView<FocusTracker<NamedView<TabPanel>>> {
+    let tab = Self::build_tab();
+    FocusTracker::new(tab).fixed_height(8)
+  }
+}
+fn input_submit_note(s: &mut Cursive, midi_msg: &[MidiMsg]) {
+  s.call_on_name(
+    config::canvas_editor_section_view,
+    |c: &mut Canvas<CanvasEditor>| {
+      c.state_mut().clear_marker_midi_msg_config_list(); // clear or create new vec?
+      midi_msg
+        .iter()
+        .for_each(|msg| c.state_mut().set_marker_midi_msg_config_list(msg.clone()));
+    },
+  )
+  .unwrap();
+}
+
+fn get_input_msg(s: &mut Cursive, name: &str) -> Arc<String> {
+  s.call_on_name(name, |view: &mut EditView| view.get_content())
+    .unwrap_or(Arc::new("".to_string()))
+}

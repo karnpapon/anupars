@@ -1,8 +1,11 @@
-use crate::core::{
-  config,
-  midi::MidiMsg,
-  parser::{self},
-  utils,
+use crate::{
+  core::{
+    config,
+    midi::MidiMsg,
+    parser::{self},
+    utils,
+  },
+  view::common::canvas_editor::CanvasEditor,
 };
 use cursive::{
   theme::Style,
@@ -16,8 +19,6 @@ use cursive::{
 use cursive_tabs::{Align, TabPanel};
 use std::sync::Arc;
 
-use super::canvas_editor::CanvasEditor;
-
 pub struct MiddleSection {}
 
 impl MiddleSection {
@@ -28,7 +29,7 @@ impl MiddleSection {
   fn build_welcome_msg() -> NamedView<TextView> {
     TextView::new(utils::build_doc_string(&config::APP_WELCOME_MSG))
       .center()
-      .with_name(config::regex_display_unit_view)
+      .with_name(config::display_view)
   }
 
   fn build_osc_input() -> NamedView<PaddedView<LinearLayout>> {
@@ -198,7 +199,7 @@ impl MiddleSection {
 
     tab
       .get_mut()
-      .set_active_tab(config::regex_display_unit_view)
+      .set_active_tab(config::display_view)
       .expect("View not found");
 
     tab

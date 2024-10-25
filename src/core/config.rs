@@ -102,6 +102,9 @@ pub static file_contents_unit_view: &str = "file_contents_unit_view";
 
 pub static main_section_view: &str = "main_section_view";
 
+// alias for `regex_display_unit_view`
+pub static display_view: &str = "display_view";
+
 // canvas
 pub static GRID_ROW_SPACING: usize = 9;
 pub static GRID_COL_SPACING: usize = 9;

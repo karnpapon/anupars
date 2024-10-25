@@ -1,12 +1,8 @@
 mod core;
 mod view;
 
-use core::anu::Anu;
 use core::application::UserDataInner;
-// use core::clock::audio_stream::{OutputStreamCommand, OutputStreamManager};
-// use core::clock::dsp::PatchBox;
 use core::clock::metronome::{Message, Metronome};
-// use core::clock::new_metronome::SimpleMetronome;
 use core::commands::CommandManager;
 use core::config;
 use core::midi::Midi;
@@ -21,11 +17,12 @@ use num::rational::Ratio;
 use num::FromPrimitive;
 use std::rc::Rc;
 use std::thread;
-use view::menubar::Menubar;
+use view::common::menubar::Menubar;
+// use view::desktop::anu::Anu;
+use view::microcontroller::anu::Anu;
 
 pub fn init_default_style(siv: &mut Cursive) {
   let my_palette = Palette::terminal_default();
-  // my_palette[PaletteStyle::EditableText] = ColorStyle::title_primary().into();
   siv.set_theme(cursive::theme::Theme {
     shadow: false,
     borders: BorderStyle::Simple,
@@ -43,12 +40,13 @@ fn main() {
   midi.init().unwrap();
   let midi_tx = midi.tx.clone();
   let regex = RegExpHandler::new(siv.cb_sink().clone());
+  let last_key_time = Arc::new(Mutex::new(None));
+  let last_key_time_clone = Arc::clone(&last_key_time);
+  // let last_key_time_clone_2 = Arc::clone(&last_key_time);
   let mut anu: Anu = Anu::new();
   let metronome = Metronome::new(siv.cb_sink().clone());
   let m_tx = metronome.tx.clone();
   let m_tx_2 = metronome.tx.clone();
-  let last_key_time = Arc::new(Mutex::new(None));
-  let last_key_time_clone = Arc::clone(&last_key_time);
   let temp_tempo = Arc::new(Mutex::new(120));
   let temp_tempo_cloned = Arc::clone(&temp_tempo);
   let mut cmd_manager = CommandManager::new(
@@ -107,12 +105,3 @@ fn main() {
   midi.run();
   siv.run();
 }
-
-// fn main() {
-//   let metronome_manager =
-//     OutputStreamManager::new(SimpleMetronome::new(), Arc::new(PatchBox::new()));
-
-//   metronome_manager.send_command(OutputStreamCommand::Play);
-
-//   std::thread::park();
-// }

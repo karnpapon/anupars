@@ -10,9 +10,12 @@ use cursive::{
   Cursive, Vec2,
 };
 
-use crate::core::{anu::Anu, config, regex, utils};
+use crate::{
+  core::{config, regex, utils},
+  view::common::canvas_base::CanvasBase,
+};
 
-use super::canvas_base::CanvasBase;
+use super::anu::Anu;
 
 pub enum RegexFlag {
   CaseSensitive,
@@ -184,12 +187,10 @@ fn input_submit(siv: &mut Cursive, texts: &str, regex_tx: Sender<regex::Message>
 }
 
 fn input_edit(siv: &mut Cursive, texts: &str, _cursor: usize, regex_tx: Sender<regex::Message>) {
-  let mut regex_display_unit_view = siv
-    .find_name::<TextView>(config::regex_display_unit_view)
-    .unwrap();
+  let mut display_view = siv.find_name::<TextView>(config::display_view).unwrap();
 
   if texts.is_empty() {
-    regex_display_unit_view.set_content(utils::build_doc_string(&config::APP_WELCOME_MSG));
+    display_view.set_content(utils::build_doc_string(&config::APP_WELCOME_MSG));
     regex_tx.send(regex::Message::Clear).unwrap();
     return;
   }
@@ -200,7 +201,7 @@ fn input_edit(siv: &mut Cursive, texts: &str, _cursor: usize, regex_tx: Sender<r
     ..Options::default()
   });
 
-  regex_display_unit_view.set_content(output.text);
+  display_view.set_content(output.text);
 
   solve_regex(siv, texts, regex_tx);
 }

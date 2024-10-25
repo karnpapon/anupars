@@ -3,17 +3,12 @@ use std::sync::{
   Arc,
 };
 
-// use crossbeam_utils::sync::{Parker, Unparker};
-use cursive::views::{Canvas, TextView};
+use cursive::views::Canvas;
 use num::ToPrimitive;
 
-use crate::{
-  core::{config, utils},
-  view::canvas_editor::CanvasEditor,
-};
+use crate::{core::config, view::common::canvas_editor::CanvasEditor};
 
 use super::clock;
-// use super::thread;
 
 #[derive(Clone, Debug)]
 pub enum Message {

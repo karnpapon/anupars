@@ -8,7 +8,7 @@ use regex::Regex;
 
 use serde::{Deserialize, Serialize};
 
-use crate::view::{canvas_base::CanvasBase, canvas_editor::CanvasEditor};
+use crate::view::common::{canvas_base::CanvasBase, canvas_editor::CanvasEditor};
 
 use super::config;
 
@@ -147,10 +147,8 @@ impl RegExpHandler {
               };
 
               if !res.is_empty() {
-                s.call_on_name(config::regex_display_unit_view, |c: &mut TextView| {
-                  c.set_content(res)
-                })
-                .unwrap();
+                s.call_on_name(config::display_view, |c: &mut TextView| c.set_content(res))
+                  .unwrap();
               }
             }))
             .unwrap();
