@@ -1,4 +1,9 @@
-use crate::core::{config, midi::MidiMsg, parser, utils};
+use crate::core::{
+  config,
+  midi::MidiMsg,
+  parser::{self},
+  utils,
+};
 use cursive::{
   theme::Style,
   view::{Nameable, Resizable},
@@ -14,20 +19,6 @@ use std::sync::Arc;
 use super::canvas_editor::CanvasEditor;
 
 pub struct MiddleSection {}
-
-// impl Default for MiddleSection {
-//   fn default() -> Self {
-//     Self::new()
-//   }
-// }
-
-// impl View for MiddleSection {
-//   fn draw(&self, _: &Printer) {}
-
-//   fn on_event(&mut self, _: Event) -> EventResult {
-//     EventResult::Consumed(None)
-//   }
-// }
 
 impl MiddleSection {
   pub fn new() -> Self {
@@ -152,7 +143,7 @@ impl MiddleSection {
                     .collect::<Vec<&str>>()
                     .join(" ");
 
-                  match parser::midi_parser::parse_midi_msg(&midi_msg_str) {
+                  match parser::midi::parser::parse_midi_msg(&midi_msg_str) {
                     Ok((_remaining, (note_n_oct, length, velocity, channel))) => {
                       for (note, octave) in note_n_oct {
                         let note_idx = [

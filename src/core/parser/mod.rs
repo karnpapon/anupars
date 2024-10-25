@@ -1,1 +1,2 @@
-pub mod midi_parser;
+pub mod midi;
+pub mod osc;
