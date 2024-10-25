@@ -9,7 +9,7 @@ use crate::{
   view::common::canvas_section::CanvasSection,
 };
 
-use super::console::{RegexFlag, RegexMode, TopSection};
+use super::console::{Console, RegexFlag, RegexMode};
 
 #[derive(Clone, Debug)]
 pub enum Message {
@@ -26,7 +26,7 @@ pub struct Anu {
   pub flag_state: RadioGroup<RegexFlag>,
   pub input_regex: String,
   pub toggle_regex_input: Arc<RwLock<bool>>,
-  pub top_section: TopSection,
+  pub top_section: Console,
 }
 
 impl Anu {
@@ -36,7 +36,7 @@ impl Anu {
       flag_state: RadioGroup::new(),
       input_regex: String::new(),
       toggle_regex_input: Arc::new(RwLock::new(false)),
-      top_section: TopSection::new(),
+      top_section: Console::new(),
     }
   }
 
@@ -45,7 +45,7 @@ impl Anu {
     regex_tx: Sender<regex::Message>,
     midi_tx: Sender<midi::Message>,
   ) -> NamedView<LinearLayout> {
-    let top_section = TopSection::build(self, regex_tx);
+    let top_section = Console::build(self, regex_tx);
     let padding_section = DummyView::new().fixed_width(1);
     let canvas_section = CanvasSection::build(midi_tx);
 
