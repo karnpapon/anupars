@@ -78,7 +78,7 @@ impl Console {
         input_submit(siv, texts, regex_tx_on_submit.clone())
       })
       .with_name(config::regex_input_unit_view)
-      .fixed_width(25);
+      .min_width(10);
 
     let flag_view = LinearLayout::horizontal()
       .child(
@@ -104,8 +104,10 @@ impl Console {
       .child("RegExp: ", regex_input_unit_view)
       .child("Mode: ", mode_view)
       .child("flag: ", flag_view)
-      .child("status: ", input_status_unit_view);
-    // .fixed_width(25);
+      .child("status: ", input_status_unit_view)
+      .full_width()
+      .max_width(50)
+      .min_width(10);
 
     let status_controller_section_view = ListView::new()
       .child(
@@ -128,7 +130,9 @@ impl Console {
         TextView::new(utils::build_pos_status_str(app.top_section.pos))
           .with_name(config::pos_status_unit_view),
       )
-      .fixed_width(15);
+      .full_width()
+      .max_width(20)
+      .min_width(10);
 
     let protocol_controller_section_view = ListView::new()
       .child(
@@ -140,17 +144,6 @@ impl Console {
         TextView::new("-").with_name(config::midi_status_unit_view),
       )
       .fixed_width(10);
-
-    // Dialog::around(
-    //   LinearLayout::horizontal()
-    //     .child(input_controller_section_view.with_name(config::input_controller_section_view))
-    //     .child(status_controller_section_view.with_name(config::status_controller_section_view))
-    //     .child(
-    //       protocol_controller_section_view.with_name(config::protocol_controller_section_view),
-    //     ),
-    // )
-    // .title_position(cursive::align::HAlign::Right)
-    // .with_name(config::control_section_view)
 
     let padding_section_1 = DummyView::new().fixed_width(2);
     let padding_section_2 = DummyView::new().fixed_width(2);
