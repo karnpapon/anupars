@@ -194,10 +194,9 @@ impl Marker {
   }
 
   pub fn set_actived_pos(&mut self, pos: usize) {
-    let prev_x = self.actived_pos.x;
     self.actived_pos.x = pos % self.area.width();
 
-    if prev_x != 0 && self.actived_pos.x == 0 {
+    if self.actived_pos.x == 0 {
       self.actived_pos.y += 1;
       self.actived_pos.y %= self.area.height();
     }
