@@ -89,16 +89,14 @@ impl Console {
       )
       .child(app.flag_state.button(RegexFlag::Multiline, "m"))
       .child(app.flag_state.button(RegexFlag::Newline, "s"))
-      .child(app.flag_state.button(RegexFlag::IgnoreWhiteSpace, "x"));
-    // .child(app.flag_state.button(RegexFlag::Lazy, "U"));
+      .child(app.flag_state.button(RegexFlag::IgnoreWhiteSpace, "x"))
+      .child(app.flag_state.button(RegexFlag::Lazy, "U"));
 
     let mode_view = LinearLayout::horizontal()
       .child(app.mode_state.button(RegexMode::Realtime, "RT").selected())
       .child(app.mode_state.button(RegexMode::OnEval, "OE"));
 
-    let input_status_unit_view = TextView::new("-")
-      .with_name(config::input_status_unit_view)
-      .max_width(25);
+    let input_status_unit_view = TextView::new("-").with_name(config::input_status_unit_view);
 
     let input_controller_section_view = ListView::new()
       .child("RegExp: ", regex_input_unit_view)
@@ -106,7 +104,7 @@ impl Console {
       .child("flag: ", flag_view)
       .child("status: ", input_status_unit_view)
       .full_width()
-      .max_width(50)
+      .max_width(35)
       .min_width(10);
 
     let status_controller_section_view = ListView::new()
@@ -320,12 +318,12 @@ impl Console {
 
   pub fn build_tab(app: &mut Anu, regex_tx: Sender<regex::Message>) -> NamedView<TabPanel> {
     let mut tab = TabPanel::new()
-      .with_tab(Self::build_main(app, regex_tx))
-      .with_tab(Self::build_welcome_msg())
       .with_tab(Self::build_midi_input())
+      .with_tab(Self::build_main(app, regex_tx))
       .with_bar_alignment(Align::End)
       .with_name(config::interactive_display_section_view);
 
+    tab.get_mut().add_tab_at(Self::build_welcome_msg(), 0);
     tab
       .get_mut()
       .set_active_tab(config::display_view)

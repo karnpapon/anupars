@@ -90,7 +90,7 @@ impl CommandManager {
           let mut interactive_display_section_view = s
             .find_name::<LinearLayout>(config::main_section_view)
             .unwrap();
-          let _ = interactive_display_section_view.set_focus_index(3);
+          let _ = interactive_display_section_view.set_focus_index(2); // microcontroller=2, desktop=3
         } else {
           let mut interactive_display_section_view = s
             .find_name::<LinearLayout>(config::main_section_view)
@@ -133,10 +133,6 @@ impl CommandManager {
 
         let mut last_press = self.last_key_time.lock().unwrap();
         *last_press = Some(Instant::now());
-
-        // let _ = self
-        //   .metronome_sender
-        //   .send(Message::NudgeTempo(nudge.into()));
 
         let mut tempo = self.temp_tempo.lock().unwrap();
         *tempo += nudge;
