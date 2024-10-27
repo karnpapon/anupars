@@ -1,7 +1,7 @@
 use std::{
   collections::{BTreeMap, BTreeSet, HashMap},
   sync::{mpsc::Sender, Arc, Mutex},
-  usize,
+  thread, usize,
 };
 
 use cursive::{
@@ -83,20 +83,10 @@ impl Marker {
             if editor.text_matcher.is_some() {
               let hl: &HashMap<usize, Match> = editor.text_matcher.as_ref().unwrap();
               if hl.get(&curr_running_marker).is_some() {
-                let regex_indexes = self.regex_indexes.lock().unwrap();
-                let triggered_index = regex_indexes
-                  .iter()
-                  .position(|v| v == &curr_running_marker)
-                  .unwrap_or(0); //TODO: properly handle moving marker while is_playing=true
-                let midi_msg_config_list = self.midi_msg_config_list.lock().unwrap();
-                if midi_msg_config_list.len() > 0 {
-                  editor
-                    .midi_tx
-                    .send(midi::Message::Push(
-                      midi_msg_config_list[triggered_index % midi_msg_config_list.len()].clone(),
-                    ))
-                    .unwrap();
-                }
+                let _ = editor.midi_tx.send(midi::Message::TriggerWithRegexPos((
+                  curr_running_marker,
+                  self.regex_indexes.clone(),
+                )));
                 (Style::none(), '@')
               } else {
                 (Style::none(), '>')
@@ -359,15 +349,15 @@ impl CanvasEditor {
     self.text_matcher = text_matcher
   }
 
-  pub fn clear_marker_midi_msg_config_list(&mut self) {
-    let mut midi_msg_config_list = self.marker.midi_msg_config_list.lock().unwrap();
-    midi_msg_config_list.clear();
-  }
+  // pub fn clear_marker_midi_msg_config_list(&mut self) {
+  //   let mut midi_msg_config_list = self.marker.midi_msg_config_list.lock().unwrap();
+  //   midi_msg_config_list.clear();
+  // }
 
-  pub fn set_marker_midi_msg_config_list(&mut self, midi: midi::MidiMsg) {
-    let mut midi_msg_config_list = self.marker.midi_msg_config_list.lock().unwrap();
-    midi_msg_config_list.push(midi);
-  }
+  // pub fn set_marker_midi_msg_config_list(&mut self, midi: midi::MidiMsg) {
+  //   let mut midi_msg_config_list = self.marker.midi_msg_config_list.lock().unwrap();
+  //   midi_msg_config_list.push(midi);
+  // }
 
   fn index_to_xy(&self, index: &usize) -> Vec2 {
     let x = index % self.size.x;

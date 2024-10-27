@@ -1,5 +1,5 @@
 use midir::{MidiOutput, MidiOutputConnection, MidiOutputPort};
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 use std::error::Error;
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::{Arc, Mutex};
@@ -11,7 +11,9 @@ use super::stack::{self, Stack};
 pub enum Message {
   Push(MidiMsg),
   Trigger(MidiMsg, bool),
-  MsgConfig(String),
+  SetMsgConfig(MidiMsg),
+  ClearMsgConfig(),
+  TriggerWithRegexPos((usize, Arc<Mutex<BTreeSet<usize>>>)),
 }
 
 #[derive(Clone, Debug)]
@@ -49,7 +51,7 @@ pub struct Midi {
   pub devices: Mutex<HashMap<String, String>>,
   pub out_device: Mutex<Option<MidiOutputConnection>>,
   pub out_device_name: Mutex<Option<String>>,
-  // pub stack: Arc<Mutex<Vec<MidiMsg>>>,
+  pub msg_config_list: Arc<Mutex<Vec<MidiMsg>>>,
   pub tx: Sender<Message>,
   pub rx: Receiver<Message>,
 }
@@ -64,9 +66,9 @@ impl Midi {
         devices: HashMap::new().into(),
         out_device: None.into(),
         out_device_name: None.into(),
-        // stack: Arc::new(Mutex::new(vec![])),
         tx,
         rx,
+        msg_config_list: Arc::new(Mutex::new(Vec::new())),
       };
     };
     Midi {
@@ -74,9 +76,9 @@ impl Midi {
       devices: HashMap::new().into(),
       out_device: None.into(),
       out_device_name: None.into(),
-      // stack: Arc::new(Mutex::new(vec![])),
       tx,
       rx,
+      msg_config_list: Arc::new(Mutex::new(Vec::new())),
     }
   }
 }
@@ -132,10 +134,16 @@ impl Midi {
             let _ = stack_tx.send(stack::Message::Push(midi_msg));
           }
           Message::Trigger(msg, is_pressed) => {
-            self.trigger(&msg, is_pressed);
+            self.trigger(&msg, is_pressed).unwrap();
           }
-          Message::MsgConfig(msg) => {
-            // self.trigger(&msg, is_pressed);
+          Message::SetMsgConfig(msg) => {
+            self.set_msg_config_list(msg);
+          }
+          Message::ClearMsgConfig() => {
+            self.clear_msg_config_list();
+          }
+          Message::TriggerWithRegexPos(msg) => {
+            self.trigger_w_regex_pos(msg.0, msg.1);
           }
         }
       }
@@ -147,30 +155,61 @@ impl Midi {
     out_device_name.clone().unwrap()
   }
 
-  pub fn trigger(&self, midi_msg: &MidiMsg, down: bool) {
-    let play_note = |item: &MidiMsg| {
-      let note_event = if down {
-        0x90 + item.channel
-      } else {
-        0x80 + item.channel
-      };
-      // const VELOCITY: u8 = 0x64;
-      match self.out_device.lock() {
-        Ok(mut conn_out) => {
-          let connection_out = conn_out.as_mut().unwrap();
-          connection_out
-            .send(&[
-              note_event,
-              convert_to_midi_note_num(item.octave, item.note),
-              item.velocity,
-            ])
-            .unwrap();
-          Ok(())
-        }
-        _ => Err("send_midi_note_out::error"),
-      }
+  fn clear_msg_config_list(&self) {
+    let mut midi_msg_config_list = self.msg_config_list.lock().unwrap();
+    midi_msg_config_list.clear();
+  }
+
+  fn set_msg_config_list(&self, midi: MidiMsg) {
+    let mut midi_msg_config_list = self.msg_config_list.lock().unwrap();
+    midi_msg_config_list.push(midi);
+  }
+
+  fn trigger_w_regex_pos(
+    &self,
+    curr_running_marker: usize,
+    regex_indexes: Arc<Mutex<BTreeSet<usize>>>,
+  ) {
+    let regex_indexes = regex_indexes.lock().unwrap();
+    let triggered_index = regex_indexes
+      .iter()
+      .position(|v| v == &curr_running_marker)
+      .unwrap_or(0); //TODO: properly handle moving marker while is_playing=true
+    let midi_msg_config_list = self.msg_config_list.lock().unwrap();
+    if midi_msg_config_list.len() > 0 {
+      self
+        .tx
+        .send(Message::Push(
+          midi_msg_config_list[triggered_index % midi_msg_config_list.len()].clone(),
+        ))
+        .unwrap();
+    }
+  }
+
+  fn build_midi_msg(&self, midi_msg: &MidiMsg, down: bool) -> [u8; 3] {
+    let note_event = if down {
+      0x90 + midi_msg.channel
+    } else {
+      0x80 + midi_msg.channel
     };
-    play_note(midi_msg).unwrap();
+
+    [
+      note_event,
+      convert_to_midi_note_num(midi_msg.octave, midi_msg.note),
+      midi_msg.velocity,
+    ]
+  }
+
+  pub fn trigger(&self, midi_msg: &MidiMsg, down: bool) -> Result<(), &str> {
+    let built_msg = self.build_midi_msg(midi_msg, down);
+    match self.out_device.lock() {
+      Ok(mut conn_out) => {
+        let connection_out = conn_out.as_mut().unwrap();
+        connection_out.send(&built_msg).unwrap();
+        Ok(())
+      }
+      _ => Err("send_midi_note_out::error"),
+    }
   }
 }
 

@@ -1,7 +1,8 @@
 use crate::{
   core::{
+    application::UserData,
     config,
-    midi::MidiMsg,
+    midi::{self, MidiMsg},
     parser::{self},
     utils,
   },
@@ -211,16 +212,13 @@ impl MiddleSection {
   }
 }
 fn input_submit_note(s: &mut Cursive, midi_msg: &[MidiMsg]) {
-  s.call_on_name(
-    config::canvas_editor_section_view,
-    |c: &mut Canvas<CanvasEditor>| {
-      c.state_mut().clear_marker_midi_msg_config_list(); // clear or create new vec?
-      midi_msg
-        .iter()
-        .for_each(|msg| c.state_mut().set_marker_midi_msg_config_list(msg.clone()));
-    },
-  )
-  .unwrap();
+  if let Some(data) = s.user_data::<UserData>().cloned() {
+    let _ = data.midi_tx.send(midi::Message::ClearMsgConfig());
+    midi_msg.iter().for_each(|msg| {
+      let set_midi_conf = midi::Message::SetMsgConfig(msg.clone());
+      let _ = data.midi_tx.send(set_midi_conf);
+    });
+  };
 }
 
 fn get_input_msg(s: &mut Cursive, name: &str) -> Arc<String> {

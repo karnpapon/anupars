@@ -1,7 +1,4 @@
-use midir::{MidiOutput, MidiOutputConnection, MidiOutputPort};
-use std::collections::HashMap;
-use std::error::Error;
-use std::sync::mpsc::{channel, Receiver, Sender, TryRecvError};
+use std::sync::mpsc::{channel, Sender};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -74,11 +71,6 @@ impl Stack {
   }
 
   pub fn push(&self, midi_msg: MidiMsg) {
-    // Retrigger duplicates
-    // for (const id in this.stack) {
-    //   const dup = this.stack[id]
-    //   if (dup.channel === channel && dup.octave === octave && dup.note === note) { this.release(item, id) }
-    // }
     let mut stack = self.stack.lock().unwrap();
     stack.push(midi_msg);
   }
