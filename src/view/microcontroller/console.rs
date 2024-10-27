@@ -5,7 +5,7 @@ use crate::{
     parser::{self},
     utils,
   },
-  view::common::{canvas_base::CanvasBase, canvas_editor::CanvasEditor},
+  view::common::canvas_editor::CanvasEditor,
 };
 use cursive::{
   theme::Style,
@@ -359,10 +359,10 @@ fn get_input_msg(s: &mut Cursive, name: &str) -> Arc<String> {
 }
 
 fn solve_regex(siv: &mut Cursive, texts: &str, regex_tx: Sender<regex::Message>) {
-  let mut canvas_base_section_view = siv
-    .find_name::<Canvas<CanvasBase>>(config::canvas_base_section_view)
+  let mut canvas_editor_section_view = siv
+    .find_name::<Canvas<CanvasEditor>>(config::canvas_editor_section_view)
     .unwrap();
-  let text = canvas_base_section_view.state_mut().text_contents();
+  let text = canvas_editor_section_view.state_mut().text_contents();
   let input_regex = regex::EventData {
     text,
     pattern: texts.to_string(),

@@ -15,10 +15,10 @@ use cursive::{
     Canvas, Dialog, DummyView, HideableView, LinearLayout, NamedView, OnEventView, ResizedView,
     SelectView, TextView,
   },
-  Cursive, View, With,
+  Cursive, With,
 };
 
-use super::{canvas_base::CanvasBase, canvas_editor::CanvasEditor};
+use super::canvas_editor::CanvasEditor;
 use crate::core::{config, utils};
 
 #[derive(Clone, Copy)]
@@ -169,17 +169,6 @@ pub fn set_preview_contents(siv: &mut Cursive, file: &PathBuf) {
 fn set_selected_contents(siv: &mut Cursive, file: &PathBuf) {
   siv.pop_layer();
   if let Ok(contents) = read_file(Path::new(file)) {
-    siv
-      .call_on_name(
-        config::canvas_base_section_view,
-        |c: &mut Canvas<CanvasBase>| {
-          c.state_mut().update_text_contents(&contents);
-          c.state_mut().clear();
-          c.state_mut().update_grid_src();
-        },
-      )
-      .unwrap();
-
     siv
       .call_on_name(
         config::canvas_editor_section_view,

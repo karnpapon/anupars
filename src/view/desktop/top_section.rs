@@ -12,7 +12,7 @@ use cursive::{
 
 use crate::{
   core::{config, regex, utils},
-  view::common::canvas_base::CanvasBase,
+  view::common::canvas_editor::CanvasEditor,
 };
 
 use super::anu::Anu;
@@ -169,10 +169,10 @@ impl TopSection {
 }
 
 fn solve_regex(siv: &mut Cursive, texts: &str, regex_tx: Sender<regex::Message>) {
-  let mut canvas_base_section_view = siv
-    .find_name::<Canvas<CanvasBase>>(config::canvas_base_section_view)
+  let mut canvas_editor_section_view = siv
+    .find_name::<Canvas<CanvasEditor>>(config::canvas_editor_section_view)
     .unwrap();
-  let text = canvas_base_section_view.state_mut().text_contents();
+  let text = canvas_editor_section_view.state_mut().text_contents();
   let input_regex = regex::EventData {
     text,
     pattern: texts.to_string(),

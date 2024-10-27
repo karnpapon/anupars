@@ -4,7 +4,7 @@ use cursive::views::{stack_view::Transparent, FocusTracker, StackView};
 
 use crate::core::midi;
 
-use super::{canvas_base::CanvasBase, canvas_editor::CanvasEditor};
+use super::canvas_editor::CanvasEditor;
 
 pub struct CanvasSection {}
 
@@ -20,10 +20,6 @@ impl CanvasSection {
   }
 
   pub fn build(midi_tx: Sender<midi::Message>) -> FocusTracker<StackView> {
-    FocusTracker::new(
-      StackView::new()
-        .layer(Transparent(CanvasBase::build()))
-        .layer(Transparent(CanvasEditor::build(midi_tx))),
-    )
+    FocusTracker::new(StackView::new().layer(Transparent(CanvasEditor::build(midi_tx))))
   }
 }

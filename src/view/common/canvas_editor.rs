@@ -172,7 +172,6 @@ impl Marker {
     let pos_x = pos.x.abs_diff(1);
     let pos_y = pos.y.abs_diff(offset.y);
     self.pos = (pos_x, pos_y).into();
-    // self.area.
   }
 
   pub fn set_grid_area(&mut self, current_pos: XY<usize>) {
@@ -375,9 +374,18 @@ impl CanvasEditor {
     let y = index / self.size.x;
     (x, y).into()
   }
+
+  pub fn text_contents(&self) -> String {
+    self
+      .text_contents
+      .as_ref()
+      .unwrap_or(&"".to_string())
+      .to_string()
+  }
 }
 
 fn draw(canvas: &CanvasEditor, printer: &Printer) {
+  canvas.grid.print(printer, &canvas.text_matcher);
   canvas.marker.print(printer, canvas);
 }
 

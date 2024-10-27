@@ -8,7 +8,7 @@ use regex::Regex;
 
 use serde::{Deserialize, Serialize};
 
-use crate::view::common::{canvas_base::CanvasBase, canvas_editor::CanvasEditor};
+use crate::view::common::canvas_editor::CanvasEditor;
 
 use super::config;
 
@@ -105,12 +105,6 @@ impl RegExpHandler {
         Message::Clear => {
           let _ = self.cb_sink.send(Box::new(move |s| {
             s.call_on_name(
-              config::canvas_base_section_view,
-              |c: &mut Canvas<CanvasBase>| c.state_mut().set_text_matcher(None),
-            )
-            .unwrap();
-
-            s.call_on_name(
               config::canvas_editor_section_view,
               |c: &mut Canvas<CanvasEditor>| c.state_mut().set_text_matcher(None),
             )
@@ -128,12 +122,6 @@ impl RegExpHandler {
                   } else {
                     Some(matches)
                   };
-
-                  s.call_on_name(
-                    config::canvas_base_section_view,
-                    |c: &mut Canvas<CanvasBase>| c.state_mut().set_text_matcher(mm.clone()),
-                  )
-                  .unwrap();
 
                   s.call_on_name(
                     config::canvas_editor_section_view,
