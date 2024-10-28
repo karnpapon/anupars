@@ -14,15 +14,6 @@ use super::{
   top_section::{RegexFlag, RegexMode, TopSection},
 };
 
-#[derive(Clone, Debug)]
-pub enum Message {
-  Time(clock::Time),
-  Signature(clock::Signature),
-  Tempo(clock::Tempo),
-  Start,
-  Pause,
-}
-
 #[derive(Clone)]
 pub struct Anu {
   pub mode_state: RadioGroup<RegexMode>,

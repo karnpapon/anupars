@@ -5,20 +5,11 @@ use cursive::{
 use std::sync::{mpsc::Sender, Arc, RwLock};
 
 use crate::{
-  core::{clock::clock, config, midi, regex},
+  core::{config, midi, regex},
   view::common::canvas_section::CanvasSection,
 };
 
 use super::console::{Console, RegexFlag, RegexMode};
-
-#[derive(Clone, Debug)]
-pub enum Message {
-  Time(clock::Time),
-  Signature(clock::Signature),
-  Tempo(clock::Tempo),
-  Start,
-  Pause,
-}
 
 #[derive(Clone)]
 pub struct Anu {
