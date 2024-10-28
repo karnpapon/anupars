@@ -24,10 +24,6 @@ serde = "1.0.210"
 nom = "7.1.3"
 nom_locate = "4.0.0"
 rosc = "0.8.1"
-# cpal = "0.15.3"
-# atomic-wait = "1.1.0"
-# hound = "3.5.1"
-# rand = "0.8"
 
 [profile.release]
 panic = "abort"   # Strip expensive panic clean-up logic

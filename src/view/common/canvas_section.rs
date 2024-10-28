@@ -1,6 +1,6 @@
 use std::sync::mpsc::Sender;
 
-use cursive::views::{stack_view::Transparent, FocusTracker, StackView};
+use cursive::views::{Canvas, FocusTracker, NamedView, ResizedView};
 
 use crate::core::midi;
 
@@ -19,7 +19,9 @@ impl CanvasSection {
     CanvasSection {}
   }
 
-  pub fn build(midi_tx: Sender<midi::Message>) -> FocusTracker<StackView> {
-    FocusTracker::new(StackView::new().layer(Transparent(CanvasEditor::build(midi_tx))))
+  pub fn build(
+    midi_tx: Sender<midi::Message>,
+  ) -> FocusTracker<ResizedView<ResizedView<NamedView<Canvas<CanvasEditor>>>>> {
+    FocusTracker::new(CanvasEditor::build(midi_tx))
   }
 }
