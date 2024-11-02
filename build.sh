@@ -28,6 +28,7 @@ fi
 # Check if `cross` is already installed
 if ! command -v cross &> /dev/null; then
     echo "'cross' is not installed. Installing now..."
+    rustup update
     cargo install cross
 else
     echo "'cross' is already installed."
