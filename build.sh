@@ -25,7 +25,14 @@ else
   fi
 fi
 
-# TODO: check cross is installed first 
+# Check if `cross` is already installed
+if ! command -v cross &> /dev/null; then
+    echo "'cross' is not installed. Installing now..."
+    cargo install cross
+else
+    echo "'cross' is already installed."
+fi
+
 cross build --release --target=${TARGET_ARCH}
 rsync ${SOURCE_PATH} ${TARGET_HOST}:${TARGET_PATH}
 # ssh -t ${TARGET_HOST} sudo systemctl restart anu-rs.service
