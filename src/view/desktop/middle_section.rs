@@ -1,18 +1,15 @@
-use crate::{
-  core::{
+use crate::core::{
     application::UserData,
     config,
     midi::{self, MidiMsg},
     parser::{self},
     utils,
-  },
-  view::common::canvas_editor::CanvasEditor,
-};
+  };
 use cursive::{
   theme::Style,
   view::{Nameable, Resizable},
   views::{
-    Button, Canvas, Dialog, DummyView, EditView, FocusTracker, LinearLayout, ListView, NamedView,
+    Button, Dialog, DummyView, EditView, FocusTracker, LinearLayout, ListView, NamedView,
     PaddedView, ResizedView, TextView,
   },
   Cursive,

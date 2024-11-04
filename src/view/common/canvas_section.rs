@@ -2,9 +2,7 @@ use std::sync::mpsc::Sender;
 
 use cursive::views::{Canvas, FocusTracker, NamedView, ResizedView};
 
-use crate::core::midi;
-
-use super::canvas_editor::CanvasEditor;
+use super::{canvas_editor::CanvasEditor, marker};
 
 pub struct CanvasSection {}
 
@@ -20,8 +18,8 @@ impl CanvasSection {
   }
 
   pub fn build(
-    midi_tx: Sender<midi::Message>,
+    marker_tx: Sender<marker::Message>,
   ) -> FocusTracker<ResizedView<ResizedView<NamedView<Canvas<CanvasEditor>>>>> {
-    FocusTracker::new(CanvasEditor::build(midi_tx))
+    FocusTracker::new(CanvasEditor::build(marker_tx))
   }
 }

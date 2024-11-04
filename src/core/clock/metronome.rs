@@ -74,7 +74,7 @@ impl Metronome {
               s.call_on_name(
                 config::canvas_editor_section_view,
                 |c: &mut Canvas<CanvasEditor>| {
-                  c.state_mut().marker_mut().set_actived_pos(tick);
+                  // c.state_mut().marker_mut().set_actived_pos(tick);
                 },
               )
               .unwrap();

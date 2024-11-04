@@ -5,7 +5,7 @@ use cursive::{
 use std::sync::{mpsc::Sender, Arc, RwLock};
 
 use crate::{
-  core::{clock::clock, config, midi, regex},
+  core::{config, midi, regex},
   view::common::canvas_section::CanvasSection,
 };
 

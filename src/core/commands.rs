@@ -108,20 +108,20 @@ impl CommandManager {
           MoveDirection::Up => (0, 1),
         };
 
-        let mut canvas_editor_section_view = s
+        let canvas_editor_section_view = s
           .find_name::<Canvas<CanvasEditor>>(config::canvas_editor_section_view)
           .unwrap();
 
-        canvas_editor_section_view.state_mut().marker.scale(dir);
+        // canvas_editor_section_view.state_mut().marker.scale(dir);
 
-        s.call_on_name(config::len_status_unit_view, move |view: &mut TextView| {
-          view.set_content(utils::build_len_status_str(
-            canvas_editor_section_view
-              .state_mut()
-              .marker
-              .get_area_size(),
-          ));
-        });
+        // s.call_on_name(config::len_status_unit_view, move |view: &mut TextView| {
+        //   view.set_content(utils::build_len_status_str(
+        //     canvas_editor_section_view
+        //       .state_mut()
+        //       .marker
+        //       .get_area_size(),
+        //   ));
+        // });
 
         Ok(None)
       }

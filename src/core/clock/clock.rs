@@ -4,7 +4,7 @@ use num::integer::Integer;
 use num::rational::Ratio;
 use std::ops::Deref;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::mpsc::{channel, Sender, TryRecvError};
+use std::sync::mpsc::{channel, Sender};
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::thread::{self, sleep};
 use std::time::{Duration, Instant};

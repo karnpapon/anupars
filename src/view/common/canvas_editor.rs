@@ -1,236 +1,49 @@
-use std::{
-  collections::{BTreeMap, BTreeSet, HashMap},
-  sync::{mpsc::Sender, Arc, Mutex},
-  thread, usize,
-};
+use std::{collections::HashMap, sync::mpsc::Sender, usize};
 
 use cursive::{
   event::{Callback, Event, EventResult, Key, MouseButton, MouseEvent},
-  theme::Style,
-  utils::span::SpannedString,
   view::{CannotFocus, Nameable, Resizable},
   views::{Canvas, NamedView, ResizedView, TextView},
-  Printer, Rect, Vec2, XY,
+  Printer, Vec2,
 };
 
 use crate::core::{
   config,
-  midi::{self, Midi, MidiMsg},
+  midi::{self},
   regex::Match,
-  traits::{Matrix, Printable},
+  traits::Matrix,
   utils,
 };
 
+use super::marker::{self, Direction, Message};
+
 pub struct CanvasEditor {
   size: Vec2,
-  pub marker: Marker,
+  marker_tx: Sender<Message>,
   grid: Matrix<char>,
   text_contents: Option<String>,
   text_matcher: Option<HashMap<usize, Match>>,
-  midi_tx: Sender<midi::Message>,
-  hold_key: bool,
-}
-
-#[derive(Clone)]
-pub struct Marker {
-  pos: Vec2,
-  area: Rect,
-  drag_start_x: usize,
-  drag_start_y: usize,
-  actived_pos: Vec2,
-  midi_msg_config_list: Arc<Mutex<Vec<midi::MidiMsg>>>,
-  regex_indexes: Arc<Mutex<BTreeSet<usize>>>,
-}
-
-enum Direction {
-  Up,
-  Down,
-  Left,
-  Right,
-  Idle,
-}
-
-impl Direction {
-  pub fn get_direction(&self) -> (i32, i32) {
-    match self {
-      Direction::Right => (1, 0),
-      Direction::Up => (0, -1),
-      Direction::Left => (-1, 0),
-      Direction::Down => (0, 1),
-      Direction::Idle => (0, 0),
-    }
-  }
-}
-
-impl Marker {
-  pub fn print(&self, printer: &Printer, editor: &CanvasEditor) {
-    for x in 0..self.area.width() {
-      for y in 0..self.area.height() {
-        let offset_x = self.pos.x + x;
-        let offset_y = self.pos.y + y;
-
-        if self.is_head((offset_x, offset_y).into()) {
-          printer.print_styled(
-            (offset_x, offset_y),
-            &SpannedString::styled('>', Style::highlight()),
-          );
-          continue;
-        }
-
-        let curr_running_marker = offset_x + offset_y * editor.grid.width;
-        let (displayed_style, displayed_char) =
-          if self.is_actived_position((offset_x, offset_y).into()) {
-            if editor.text_matcher.is_some() {
-              let hl: &HashMap<usize, Match> = editor.text_matcher.as_ref().unwrap();
-              if hl.get(&curr_running_marker).is_some() {
-                let _ = editor.midi_tx.send(midi::Message::TriggerWithRegexPos((
-                  curr_running_marker,
-                  self.regex_indexes.clone(),
-                )));
-                (Style::none(), '@')
-              } else {
-                (Style::none(), '>')
-              }
-            } else {
-              (Style::none(), '>')
-            }
-          } else {
-            let ch = if editor.text_matcher.is_some() {
-              let hl = editor.text_matcher.as_ref().unwrap();
-              let hl_item = hl.get(&curr_running_marker);
-              if hl_item.is_some() {
-                let mut regex_indexes = self.regex_indexes.lock().unwrap();
-                regex_indexes.insert(curr_running_marker);
-                regex_indexes.retain(|re_idx: &usize| {
-                  let dd = editor.index_to_xy(re_idx);
-                  dd.fits(self.pos) && dd.fits_in(self.pos + self.area.size())
-                });
-                '*'
-              } else {
-                editor.get(offset_x, offset_y)
-              }
-            } else {
-              editor.get(offset_x, offset_y)
-            };
-
-            (
-              Style::highlight(),
-              ch.display_char((offset_x, offset_y).into()),
-            )
-          };
-
-        printer.print_styled(
-          (offset_x, offset_y),
-          &SpannedString::styled(displayed_char, displayed_style),
-        );
-      }
-    }
-  }
-
-  fn is_head(&self, curr_pos: Vec2) -> bool {
-    self.pos.eq(&curr_pos)
-  }
-  fn is_actived_position(&self, curr_pos: Vec2) -> bool {
-    self.pos.saturating_add(self.actived_pos).eq(&curr_pos)
-  }
-
-  fn set_move(&mut self, direction: Direction, canvas_size: Vec2) -> EventResult {
-    let next_pos = self.pos.saturating_add(direction.get_direction());
-    let next_pos_bottom_right: Vec2 = (
-      next_pos.x + self.area.width() - 1,
-      next_pos.y + self.area.height() - 1,
-    )
-      .into();
-
-    if !next_pos_bottom_right.fits_in_rect(Vec2::ZERO, canvas_size) {
-      return EventResult::Ignored;
-    }
-
-    self.pos = next_pos;
-
-    let pos_x = self.pos.x;
-    let pos_y = self.pos.y;
-
-    EventResult::Consumed(Some(Callback::from_fn(move |siv| {
-      siv.call_on_name(config::pos_status_unit_view, move |view: &mut TextView| {
-        view.set_content(utils::build_pos_status_str((pos_x, pos_y).into()));
-      });
-    })))
-  }
-
-  pub fn set_current_pos(&mut self, pos: XY<usize>, offset: XY<usize>) {
-    let pos_x = pos.x.abs_diff(1);
-    let pos_y = pos.y.abs_diff(offset.y);
-    self.pos = (pos_x, pos_y).into();
-  }
-
-  pub fn set_grid_area(&mut self, current_pos: XY<usize>) {
-    let new_w = current_pos.x.abs_diff(self.pos.x).clamp(1, usize::MAX);
-    let new_h = current_pos.y.abs_diff(self.pos.y).clamp(1, usize::MAX);
-    let new_x = match current_pos.x.saturating_sub(self.pos.x) == 0 {
-      true => current_pos.x,
-      false => self.pos.x,
-    };
-
-    let new_y = match current_pos.y.saturating_sub(self.pos.y) == 0 {
-      true => current_pos.y,
-      false => self.pos.y,
-    };
-
-    self.area = Rect::from_size((new_x, new_y), (new_w, new_h));
-    self.drag_start_x = new_x;
-    self.drag_start_y = new_y;
-  }
-
-  pub fn set_actived_pos(&mut self, pos: usize) {
-    self.actived_pos.x = pos % self.area.width();
-
-    if self.actived_pos.x == 0 {
-      self.actived_pos.y += 1;
-      self.actived_pos.y %= self.area.height();
-    }
-  }
-
-  pub fn scale(&mut self, (w, h): (i32, i32)) {
-    self.area = Rect::from_size(
-      self.pos,
-      (
-        (self.area.width() as i32) + w,
-        (self.area.height() as i32) - h,
-      ),
-    );
-  }
-
-  pub fn get_area_size(&self) -> (usize, usize) {
-    (self.area.width(), self.area.height())
-  }
+  // midi_tx: Sender<midi::Message>,
+  // hold_key: bool,
 }
 
 impl CanvasEditor {
-  pub fn new(midi_tx: Sender<midi::Message>) -> CanvasEditor {
+  pub fn new(marker_tx: Sender<marker::Message>) -> CanvasEditor {
     CanvasEditor {
       size: Vec2::zero(),
-      marker: Marker {
-        pos: Vec2::zero(),
-        area: Rect::from_point(Vec2::zero()),
-        drag_start_y: 0,
-        drag_start_x: 0,
-        actived_pos: Vec2::zero(),
-        midi_msg_config_list: Arc::new(Mutex::new(Vec::new())),
-        regex_indexes: Arc::new(Mutex::new(BTreeSet::new())),
-      },
+      marker_tx,
       grid: Matrix::new(0, 0, '\0'),
       text_contents: None,
       text_matcher: None,
-      midi_tx,
-      hold_key: false,
+      // midi_tx,
+      // hold_key: false,
     }
   }
 
   pub fn build(
-    midi_tx: Sender<midi::Message>,
+    marker_tx: Sender<marker::Message>,
   ) -> ResizedView<ResizedView<NamedView<Canvas<CanvasEditor>>>> {
-    Canvas::new(CanvasEditor::new(midi_tx))
+    Canvas::new(CanvasEditor::new(marker_tx))
       .with_draw(draw)
       .with_layout(layout)
       .with_on_event(on_event)
@@ -337,13 +150,13 @@ impl CanvasEditor {
     *self.grid.get(x, y).unwrap_or(&'.')
   }
 
-  pub fn marker_mut(&mut self) -> &mut Marker {
-    &mut self.marker
-  }
+  // pub fn marker_mut(&mut self) -> &mut Marker {
+  //   &mut self.marker
+  // }
 
-  pub fn marker_area(&self) -> &Rect {
-    &self.marker.area
-  }
+  // pub fn marker_area(&self) -> &Rect {
+  //   &self.marker.area
+  // }
 
   pub fn set_text_matcher(&mut self, text_matcher: Option<HashMap<usize, Match>>) {
     self.text_matcher = text_matcher
@@ -376,7 +189,7 @@ impl CanvasEditor {
 
 fn draw(canvas: &CanvasEditor, printer: &Printer) {
   canvas.grid.print(printer, &canvas.text_matcher);
-  canvas.marker.print(printer, canvas);
+  // canvas.marker.print(printer, canvas);
 }
 
 fn layout(canvas: &mut CanvasEditor, size: Vec2) {
@@ -395,32 +208,53 @@ fn take_focus(
 fn on_event(canvas: &mut CanvasEditor, event: Event) -> EventResult {
   match event {
     Event::Refresh => EventResult::consumed(),
-    Event::Key(Key::Left) => canvas.marker.set_move(Direction::Left, canvas.size),
-    Event::Key(Key::Right) => canvas.marker.set_move(Direction::Right, canvas.size),
-    Event::Key(Key::Up) => canvas.marker.set_move(Direction::Up, canvas.size),
-    Event::Key(Key::Down) => canvas.marker.set_move(Direction::Down, canvas.size),
+    Event::Key(Key::Left) => {
+      canvas
+        .marker_tx
+        .send(Message::Move(Direction::Left, canvas.size))
+        .unwrap();
+      EventResult::Ignored
+    }
+    Event::Key(Key::Right) => {
+      canvas
+        .marker_tx
+        .send(Message::Move(Direction::Right, canvas.size))
+        .unwrap();
+      EventResult::Ignored
+    }
+    Event::Key(Key::Up) => {
+      canvas
+        .marker_tx
+        .send(Message::Move(Direction::Up, canvas.size))
+        .unwrap();
+      EventResult::consumed()
+    }
+    Event::Key(Key::Down) => {
+      canvas
+        .marker_tx
+        .send(Message::Move(Direction::Down, canvas.size))
+        .unwrap();
+      EventResult::Ignored
+    }
     Event::Mouse {
       offset,
       position,
       event: MouseEvent::Press(_btn),
     } => {
-      canvas.marker.set_current_pos(position, offset);
-      canvas.marker.set_move(Direction::Idle, canvas.size);
+      canvas
+        .marker_tx
+        .send(Message::SetCurrentPos(position, offset))
+        .unwrap();
+      canvas
+        .marker_tx
+        .send(Message::Move(Direction::Idle, canvas.size))
+        .unwrap();
+      canvas
+        .marker_tx
+        .send(Message::UpdateInfoStatusView())
+        .unwrap();
 
-      let pos_x = canvas.marker.pos.x;
-      let pos_y = canvas.marker.pos.y;
-      let w = canvas.marker.area.width();
-      let h = canvas.marker.area.height();
-
-      EventResult::Consumed(Some(Callback::from_fn(move |siv| {
-        siv.call_on_name(config::pos_status_unit_view, move |view: &mut TextView| {
-          view.set_content(utils::build_pos_status_str((pos_x, pos_y).into()))
-        });
-
-        siv.call_on_name(config::len_status_unit_view, move |view: &mut TextView| {
-          view.set_content(utils::build_len_status_str((w, h)));
-        });
-      })))
+      EventResult::consumed()
     }
     Event::Mouse {
       offset,
@@ -432,15 +266,13 @@ fn on_event(canvas: &mut CanvasEditor, event: Event) -> EventResult {
 
       let pos_x = position.x.abs_diff(1);
       let pos_y = position.y.abs_diff(offset.y);
-      canvas.marker.set_grid_area((pos_x, pos_y).into());
-      let w = canvas.marker.area.width();
-      let h = canvas.marker.area.height();
 
-      EventResult::Consumed(Some(Callback::from_fn(move |siv| {
-        siv.call_on_name(config::len_status_unit_view, move |view: &mut TextView| {
-          view.set_content(utils::build_len_status_str((w, h)));
-        });
-      })))
+      canvas
+        .marker_tx
+        .send(Message::SetGridArea((pos_x, pos_y).into()))
+        .unwrap();
+
+      EventResult::Ignored
     }
     _ => EventResult::Ignored,
   }

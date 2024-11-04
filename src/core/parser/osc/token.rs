@@ -1,4 +1,4 @@
-use nom::{InputIter, InputLength, InputTake, Needed, Slice};
+use nom::{InputIter, InputLength, InputTake, Needed};
 use std::iter::Enumerate;
 
 #[derive(PartialEq, Debug, Clone)]

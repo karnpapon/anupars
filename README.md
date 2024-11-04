@@ -11,3 +11,7 @@ purposely to run on low-powered machine or embedded system
 - before building you will need to install `Docker` first
 - then just run `sh ./build`
 - finger-crossed
+
+# credits
+
+- font-face: [Departure Mono](https://departuremono.com/)

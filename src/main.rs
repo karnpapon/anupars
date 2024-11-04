@@ -17,6 +17,7 @@ use num::rational::Ratio;
 use num::FromPrimitive;
 use std::rc::Rc;
 use std::thread;
+use view::common::marker::Marker;
 use view::common::menubar::Menubar;
 // use view::desktop::anu::Anu;
 use view::microcontroller::anu::Anu;
@@ -44,6 +45,8 @@ fn main() {
   let last_key_time_clone = Arc::clone(&last_key_time);
   // let last_key_time_clone_2 = Arc::clone(&last_key_time);
   let mut anu: Anu = Anu::new();
+  let marker = Marker::new(siv.cb_sink().clone());
+  let marker_tx = marker.tx.clone();
   let metronome = Metronome::new(siv.cb_sink().clone());
   let m_tx = metronome.tx.clone();
   let m_tx_2 = metronome.tx.clone();
@@ -67,7 +70,7 @@ fn main() {
     midi_tx: midi_tx.clone(),
   }));
 
-  let main_views = anu.build(regex.tx.clone(), midi_tx);
+  let main_views = anu.build(regex.tx.clone(), midi_tx, marker_tx);
 
   siv
     .menubar()
@@ -94,6 +97,9 @@ fn main() {
         let _ = m_tx_2.send(Message::Tempo(Ratio::from_i64(tempo).unwrap()));
       }
     }
+  });
+  thread::spawn(move || {
+    marker.run();
   });
   thread::spawn(move || {
     regex.run();
