@@ -43,11 +43,12 @@ fn main() {
   let regex = RegExpHandler::new(siv.cb_sink().clone());
   let last_key_time = Arc::new(Mutex::new(None));
   let last_key_time_clone = Arc::clone(&last_key_time);
-  // let last_key_time_clone_2 = Arc::clone(&last_key_time);
   let mut anu: Anu = Anu::new();
   let marker = Marker::new(siv.cb_sink().clone());
+  // let marker_cloned = Arc::clone(&marker);
   let marker_tx = marker.tx.clone();
-  let metronome = Metronome::new(siv.cb_sink().clone());
+  let marker_tx_2 = marker.tx.clone();
+  let metronome = Metronome::new(siv.cb_sink().clone(), marker_tx_2);
   let m_tx = metronome.tx.clone();
   let m_tx_2 = metronome.tx.clone();
   let temp_tempo = Arc::new(Mutex::new(120));
@@ -98,16 +99,14 @@ fn main() {
       }
     }
   });
-  thread::spawn(move || {
-    marker.run();
-  });
+
   thread::spawn(move || {
     regex.run();
   });
   thread::spawn(move || {
     metronome.run();
   });
-
+  marker.run();
   midi.run();
   siv.run();
 }

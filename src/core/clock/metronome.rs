@@ -6,7 +6,10 @@ use std::sync::{
 use cursive::views::Canvas;
 use num::ToPrimitive;
 
-use crate::{core::config, view::common::canvas_editor::CanvasEditor};
+use crate::{
+  core::config,
+  view::common::{canvas_editor::CanvasEditor, marker},
+};
 
 use super::clock;
 
@@ -26,14 +29,20 @@ pub enum Message {
 pub struct Metronome {
   pub tx: Sender<Message>,
   pub rx: Receiver<Message>,
+  pub marker_tx: Sender<marker::Message>,
   cb_sink: cursive::CbSink,
 }
 
 impl Metronome {
-  pub fn new(cb_sink: cursive::CbSink) -> Self {
+  pub fn new(cb_sink: cursive::CbSink, marker_tx: Sender<marker::Message>) -> Self {
     let (tx, rx) = channel();
 
-    Self { tx, rx, cb_sink }
+    Self {
+      tx,
+      rx,
+      cb_sink,
+      marker_tx,
+    }
   }
 
   pub fn run(self) {
@@ -69,16 +78,8 @@ impl Metronome {
         Message::Time(time) => {
           let tick = time.ticks().to_usize().unwrap();
           self
-            .cb_sink
-            .send(Box::new(move |s| {
-              s.call_on_name(
-                config::canvas_editor_section_view,
-                |c: &mut Canvas<CanvasEditor>| {
-                  // c.state_mut().marker_mut().set_actived_pos(tick);
-                },
-              )
-              .unwrap();
-            }))
+            .marker_tx
+            .send(marker::Message::SetActivePos(tick))
             .unwrap();
         }
       }

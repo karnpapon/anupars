@@ -1,30 +1,38 @@
 use std::{collections::HashMap, sync::mpsc::Sender, usize};
 
 use cursive::{
-  event::{Callback, Event, EventResult, Key, MouseButton, MouseEvent},
+  event::{Event, EventResult, Key, MouseButton, MouseEvent},
+  theme::Style,
+  utils::span::SpannedString,
   view::{CannotFocus, Nameable, Resizable},
-  views::{Canvas, NamedView, ResizedView, TextView},
-  Printer, Vec2,
+  views::{Canvas, NamedView, ResizedView},
+  Printer, Vec2, XY,
 };
 
-use crate::core::{
-  config,
-  midi::{self},
-  regex::Match,
-  traits::Matrix,
-  utils,
-};
+use crate::core::{config, regex::Match, traits::Matrix};
 
 use super::marker::{self, Direction, Message};
+
+pub struct MarkerUI {
+  pub marker_head_pos: ((usize, usize), SpannedString<Style>),
+}
 
 pub struct CanvasEditor {
   size: Vec2,
   marker_tx: Sender<Message>,
-  grid: Matrix<char>,
-  text_contents: Option<String>,
-  text_matcher: Option<HashMap<usize, Match>>,
-  // midi_tx: Sender<midi::Message>,
-  // hold_key: bool,
+  pub grid: Matrix<char>,
+  pub text_contents: Option<String>,
+  pub text_matcher: Option<HashMap<usize, Match>>,
+  pub marker_ui: MarkerUI, // midi_tx: Sender<midi::Message>,
+                           // hold_key: bool,
+}
+
+impl MarkerUI {
+  fn new() -> Self {
+    MarkerUI {
+      marker_head_pos: ((0, 0), SpannedString::styled('>', Style::highlight())),
+    }
+  }
 }
 
 impl CanvasEditor {
@@ -35,8 +43,8 @@ impl CanvasEditor {
       grid: Matrix::new(0, 0, '\0'),
       text_contents: None,
       text_matcher: None,
-      // midi_tx,
-      // hold_key: false,
+      marker_ui: MarkerUI::new(), // midi_tx,
+                                  // hold_key: false,
     }
   }
 
@@ -51,10 +59,6 @@ impl CanvasEditor {
       .with_name(config::canvas_editor_section_view)
       .full_height()
       .full_width()
-  }
-
-  pub fn run(&mut self) {
-    //
   }
 
   pub fn update_text_contents(&mut self, contents: &str) {
@@ -154,10 +158,6 @@ impl CanvasEditor {
   //   &mut self.marker
   // }
 
-  // pub fn marker_area(&self) -> &Rect {
-  //   &self.marker.area
-  // }
-
   pub fn set_text_matcher(&mut self, text_matcher: Option<HashMap<usize, Match>>) {
     self.text_matcher = text_matcher
   }
@@ -188,7 +188,10 @@ impl CanvasEditor {
 }
 
 fn draw(canvas: &CanvasEditor, printer: &Printer) {
-  canvas.grid.print(printer, &canvas.text_matcher);
+  canvas
+    .grid
+    .print(printer, &canvas.text_matcher, &canvas.marker_ui);
+  // canvas.marker_tx.send(marker::Message::Draw).unwrap();
   // canvas.marker.print(printer, canvas);
 }
 

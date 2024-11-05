@@ -6,6 +6,8 @@ use cursive::{
   Printer,
 };
 
+use crate::view::common::canvas_editor::MarkerUI;
+
 use super::{config, regex::Match};
 
 #[derive(Clone, Default, Debug)]
@@ -70,7 +72,12 @@ impl Printable for char {
 }
 
 impl<T: Printable + Copy> Matrix<T> {
-  pub fn print(&self, printer: &Printer, highlighter: &Option<HashMap<usize, Match>>) {
+  pub fn print(
+    &self,
+    printer: &Printer,
+    highlighter: &Option<HashMap<usize, Match>>,
+    marker_ui: &MarkerUI,
+  ) {
     for y in 0..self.width {
       for x in 0..self.height {
         let style = if highlighter.is_some() {
@@ -95,6 +102,10 @@ impl<T: Printable + Copy> Matrix<T> {
             style,
           ),
         );
+
+        if (y, x) == marker_ui.marker_head_pos.0 {
+          printer.print_styled(marker_ui.marker_head_pos.0, &marker_ui.marker_head_pos.1);
+        }
       }
     }
   }
