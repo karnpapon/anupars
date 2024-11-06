@@ -3,13 +3,9 @@ use std::sync::{
   Arc,
 };
 
-use cursive::views::Canvas;
 use num::ToPrimitive;
 
-use crate::{
-  core::config,
-  view::common::{canvas_editor::CanvasEditor, marker},
-};
+use crate::view::common::marker;
 
 use super::clock;
 

@@ -103,8 +103,25 @@ impl<T: Printable + Copy> Matrix<T> {
           ),
         );
 
-        if (y, x) == marker_ui.marker_head_pos.0 {
-          printer.print_styled(marker_ui.marker_head_pos.0, &marker_ui.marker_head_pos.1);
+        if (y, x) == (marker_ui.marker_pos.x, marker_ui.marker_pos.y) {
+          printer.print_styled(
+            marker_ui.marker_pos,
+            &SpannedString::styled('>', Style::highlight()),
+          );
+        } else if marker_ui.marker_area.contains((y, x).into()) {
+          printer.print_styled(
+            (y, x),
+            &SpannedString::styled(
+              self
+                .get(y, x)
+                .unwrap()
+                .display_char((x, y).into())
+                .to_string(),
+              Style::highlight(),
+            ),
+          );
+        } else {
+          //
         }
       }
     }

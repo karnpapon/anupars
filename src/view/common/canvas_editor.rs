@@ -2,19 +2,18 @@ use std::{collections::HashMap, sync::mpsc::Sender, usize};
 
 use cursive::{
   event::{Event, EventResult, Key, MouseButton, MouseEvent},
-  theme::Style,
-  utils::span::SpannedString,
   view::{CannotFocus, Nameable, Resizable},
   views::{Canvas, NamedView, ResizedView},
-  Printer, Vec2, XY,
+  Printer, Vec2,
 };
 
-use crate::core::{config, regex::Match, traits::Matrix};
+use crate::core::{config, rect::Rect, regex::Match, traits::Matrix};
 
 use super::marker::{self, Direction, Message};
 
 pub struct MarkerUI {
-  pub marker_head_pos: ((usize, usize), SpannedString<Style>),
+  pub marker_area: Rect,
+  pub marker_pos: Vec2,
 }
 
 pub struct CanvasEditor {
@@ -30,7 +29,8 @@ pub struct CanvasEditor {
 impl MarkerUI {
   fn new() -> Self {
     MarkerUI {
-      marker_head_pos: ((0, 0), SpannedString::styled('>', Style::highlight())),
+      marker_area: Rect::from_point(Vec2::zero()),
+      marker_pos: Vec2::zero(),
     }
   }
 }
@@ -191,7 +191,6 @@ fn draw(canvas: &CanvasEditor, printer: &Printer) {
   canvas
     .grid
     .print(printer, &canvas.text_matcher, &canvas.marker_ui);
-  // canvas.marker_tx.send(marker::Message::Draw).unwrap();
   // canvas.marker.print(printer, canvas);
 }
 

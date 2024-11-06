@@ -3,7 +3,7 @@ use std::sync::mpsc::Sender;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
-use crate::view::common::canvas_editor::CanvasEditor;
+use crate::view::common::marker;
 use crate::view::microcontroller::anu::Anu;
 // use crate::view::desktop::anu::Anu;
 
@@ -13,7 +13,7 @@ use super::command::{Adjustment, Command, MoveDirection};
 use super::{config, utils};
 
 use cursive::event::{Event, Key};
-use cursive::views::{Canvas, LinearLayout, TextView};
+use cursive::views::{LinearLayout, TextView};
 use cursive::Cursive;
 use log::error;
 use std::cell::RefCell;
@@ -26,6 +26,7 @@ pub struct CommandManager {
   cb_sink: cursive::CbSink,
   temp_tempo: Arc<Mutex<i64>>,
   pub last_key_time: Arc<Mutex<Option<Instant>>>,
+  marker_tx_cloned: Sender<marker::Message>,
 }
 
 impl CommandManager {
@@ -35,6 +36,7 @@ impl CommandManager {
     cb_sink: cursive::CbSink,
     temp_tempo: Arc<Mutex<i64>>,
     last_key_time: Arc<Mutex<Option<Instant>>>,
+    marker_tx_cloned: Sender<marker::Message>,
   ) -> Self {
     let bindings = RefCell::new(Self::get_bindings());
     Self {
@@ -45,6 +47,7 @@ impl CommandManager {
       cb_sink,
       temp_tempo,
       last_key_time,
+      marker_tx_cloned,
     }
   }
 
@@ -108,20 +111,10 @@ impl CommandManager {
           MoveDirection::Up => (0, 1),
         };
 
-        let canvas_editor_section_view = s
-          .find_name::<Canvas<CanvasEditor>>(config::canvas_editor_section_view)
+        self
+          .marker_tx_cloned
+          .send(marker::Message::Scale(dir))
           .unwrap();
-
-        // canvas_editor_section_view.state_mut().marker.scale(dir);
-
-        // s.call_on_name(config::len_status_unit_view, move |view: &mut TextView| {
-        //   view.set_content(utils::build_len_status_str(
-        //     canvas_editor_section_view
-        //       .state_mut()
-        //       .marker
-        //       .get_area_size(),
-        //   ));
-        // });
 
         Ok(None)
       }
@@ -159,11 +152,6 @@ impl CommandManager {
 
   pub fn handle(&self, siv: &mut Cursive, cmd: Command) {
     let _result = self.handle_callbacks(siv, &cmd);
-
-    // s.call_on_name("main", |v: &mut Layout| {
-    //   v.set_result(result);
-    // });
-
     siv.on_event(Event::Refresh);
   }
 

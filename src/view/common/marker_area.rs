@@ -1,31 +1,30 @@
 use std::{
-  collections::{BTreeSet, HashMap},
+  collections::BTreeSet,
   sync::{
     atomic::{AtomicUsize, Ordering},
-    mpsc::{channel, Receiver, Sender},
+    mpsc::{channel, Sender},
     Arc, Mutex,
   },
   thread, usize,
 };
 
 use cursive::{
-  theme::Style,
-  utils::span::SpannedString,
   views::{Canvas, TextView},
-  Printer, Rect, Vec2, XY,
+  Vec2, XY,
 };
 
-use crate::core::{config, midi, regex::Match, traits::Printable, utils};
+use crate::core::{config, midi, rect::Rect, utils};
 
 use super::{canvas_editor::CanvasEditor, marker::Direction};
 
 #[derive(Clone, Debug)]
 pub enum Message {
-  Move(Direction, XY<usize>),
-  SetCurrentPos(XY<usize>, XY<usize>),
+  Move(Direction, XY<usize>, cursive::CbSink),
+  SetCurrentPos(XY<usize>, XY<usize>, cursive::CbSink),
   UpdateInfoStatusView(cursive::CbSink),
   SetGridArea(XY<usize>, cursive::CbSink),
   SetActivePos(usize),
+  Scale((i32, i32), cursive::CbSink),
 }
 
 pub struct MarkerArea {
@@ -66,18 +65,6 @@ impl MarkerArea {
     }
 
     *pos = next_pos;
-
-    let pos_x = pos.x;
-    let pos_y = pos.y;
-
-    // self
-    //   .cb_sink
-    //   .send(Box::new(move |siv| {
-    //     siv.call_on_name(config::pos_status_unit_view, move |view: &mut TextView| {
-    //       view.set_content(utils::build_pos_status_str((pos_x, pos_y).into()));
-    //     });
-    //   }))
-    //   .unwrap();
   }
 
   pub fn set_current_pos(&self, pos: XY<usize>, offset: XY<usize>) {
@@ -121,7 +108,7 @@ impl MarkerArea {
     }
   }
 
-  pub fn scale(&mut self, (w, h): (i32, i32)) {
+  pub fn scale(&self, (w, h): (i32, i32)) {
     let pos = self.pos.lock().unwrap();
     let mut area = self.area.lock().unwrap();
 
@@ -152,11 +139,59 @@ impl MarkerArea {
     thread::spawn(move || {
       for control_message in &rx {
         match control_message {
-          Message::Move(direction, canvas_size) => {
-            self.set_move(direction, canvas_size);
+          Message::Move(direction, canvas_size, cb_sink) => {
+            let dir = direction.clone();
+            let get_dir = dir.get_direction();
+            let direction_cloned = (dir, get_dir);
+            self.set_move(direction.clone(), canvas_size);
+            let pos_mutex = self.pos.lock().unwrap();
+            let pos = *pos_mutex;
+
+            cb_sink
+              .send(Box::new(move |siv| {
+                siv.call_on_name(config::pos_status_unit_view, move |view: &mut TextView| {
+                  view.set_content(utils::build_pos_status_str(pos));
+                });
+
+                siv.call_on_name(
+                  config::canvas_editor_section_view,
+                  move |canvas: &mut Canvas<CanvasEditor>| {
+                    let editor = canvas.state_mut();
+                    editor.marker_ui.marker_pos = pos;
+
+                    match direction_cloned.0 {
+                      Direction::Left => {
+                        editor.marker_ui.marker_area.offset_subtract_x();
+                      }
+                      Direction::Up => {
+                        editor.marker_ui.marker_area.offset_subtract_y();
+                      }
+                      Direction::Right | Direction::Down => {
+                        editor.marker_ui.marker_area.offset(direction_cloned.1);
+                      }
+                      Direction::Idle => {}
+                    }
+                  },
+                );
+              }))
+              .unwrap();
           }
-          Message::SetCurrentPos(position, offset) => {
+          Message::SetCurrentPos(position, offset, cb_sink) => {
             self.set_current_pos(position, offset);
+            let mutex_pos = self.pos.lock().unwrap();
+            let pos = *mutex_pos;
+            cb_sink
+              .send(Box::new(move |siv| {
+                siv.call_on_name(
+                  config::canvas_editor_section_view,
+                  move |canvas: &mut Canvas<CanvasEditor>| {
+                    let editor = canvas.state_mut();
+
+                    editor.marker_ui.marker_pos = pos;
+                  },
+                );
+              }))
+              .unwrap();
           }
           Message::UpdateInfoStatusView(cb_sink) => {
             let pos = self.pos.lock().unwrap();
@@ -184,17 +219,38 @@ impl MarkerArea {
             let area = self.area.lock().unwrap();
             let w = area.width();
             let h = area.height();
+            let marker_area = *area;
 
             cb_sink
               .send(Box::new(move |siv| {
                 siv.call_on_name(config::len_status_unit_view, move |view: &mut TextView| {
                   view.set_content(utils::build_len_status_str((w, h)));
                 });
+
+                siv.call_on_name(
+                  config::canvas_editor_section_view,
+                  move |canvas: &mut Canvas<CanvasEditor>| {
+                    let editor = canvas.state_mut();
+
+                    editor.marker_ui.marker_area = marker_area;
+                  },
+                );
               }))
               .unwrap();
           }
           Message::SetActivePos(tick) => {
             self.set_actived_pos(tick);
+          }
+          Message::Scale(size, cb_sink) => {
+            self.scale(size);
+            let area_size = self.get_area_size();
+            cb_sink
+              .send(Box::new(move |siv| {
+                siv.call_on_name(config::len_status_unit_view, move |view: &mut TextView| {
+                  view.set_content(utils::build_len_status_str(area_size));
+                });
+              }))
+              .unwrap();
           }
         }
       }
@@ -203,98 +259,106 @@ impl MarkerArea {
     tx
   }
 
-  pub fn refresh(self: Arc<Self>, cb_sink: cursive::CbSink) {
-    thread::spawn(move || {
-      let pos = self.pos.lock().unwrap();
-      let area = self.area.lock().unwrap();
-      for x in 0..area.width() {
-        for y in 0..area.height() {
-          let offset_x = pos.x + x;
-          let offset_y = pos.y + y;
+  pub fn refresh(&self, cb_sink: cursive::CbSink) {
+    // thread::spawn(move || {
+    // loop {
+    let pos = self.pos.lock().unwrap();
+    let area = self.area.lock().unwrap();
+    for x in 0..area.width() {
+      for y in 0..area.height() {
+        // let offset_x = pos.x + x;
+        // let offset_y = pos.y + y;
 
-          if self.is_head((offset_x, offset_y).into()) {
-            cb_sink
-              .send(Box::new(move |siv| {
-                siv.call_on_name(
-                  config::canvas_editor_section_view,
-                  move |canvas: &mut Canvas<CanvasEditor>| {
-                    let editor = canvas.state_mut();
+        // if self.is_head((offset_x, offset_y).into()) {
+        //   cb_sink
+        //     .send(Box::new(move |siv| {
+        //       siv.call_on_name(
+        //         config::canvas_editor_section_view,
+        //         move |canvas: &mut Canvas<CanvasEditor>| {
+        //           let editor = canvas.state_mut();
 
-                    editor.marker_ui.marker_head_pos = (
-                      (offset_x, offset_y),
-                      SpannedString::styled('>', Style::highlight()),
-                    );
-                  },
-                );
-              }))
-              .unwrap();
+        //           editor.marker_ui.marker_head_pos = (
+        //             (offset_x, offset_y),
+        //             SpannedString::styled('>', Style::highlight()),
+        //           );
+        //         },
+        //       );
+        //     }))
+        //     .unwrap();
 
-            continue;
-          }
+        //   continue;
+        // }
 
-          // self
-          //   .cb_sink
-          //   .send(Box::new(move |siv| {
-          //     siv.call_on_name(
-          //       config::canvas_editor_section_view,
-          //       move |canvas: &mut Canvas<CanvasEditor>| {
-          //         let editor = canvas.state_mut();
-          //         let curr_running_marker = offset_x + offset_y * editor.grid.width;
+        // self
+        //   .cb_sink
+        //   .send(Box::new(move |siv| {
+        //     siv.call_on_name(
+        //       config::canvas_editor_section_view,
+        //       move |canvas: &mut Canvas<CanvasEditor>| {
+        //         let editor = canvas.state_mut();
+        //         let curr_running_marker = offset_x + offset_y * editor.grid.width;
 
-          //         // let (displayed_style, displayed_char) =
-          //         //   if self.is_actived_position((offset_x, offset_y).into()) {
-          //         //     // if editor.text_matcher.is_some() {
-          //         //     //   let hl: &HashMap<usize, Match> = editor.text_matcher.as_ref().unwrap();
-          //         //     //   if hl.get(&curr_running_marker).is_some() {
-          //         //     //     // let _ = editor.midi_tx.send(midi::Message::TriggerWithRegexPos((
-          //         //     //     //   curr_running_marker,
-          //         //     //     //   self.regex_indexes.clone(),
-          //         //     //     // )));
-          //         //     //     (Style::none(), '@')
-          //         //     //   } else {
-          //         //     //     (Style::none(), '>')
-          //         //     //   }
-          //         //     // } else {
-          //         //     //   (Style::none(), '>')
-          //         //     // }
-          //         //     ("none", '>')
-          //         //   } else {
-          //         //     let ch = '*';
-          //         //     // let ch = if editor.text_matcher.is_some() {
-          //         //     //   let hl = editor.text_matcher.as_ref().unwrap();
-          //         //     //   let hl_item = hl.get(&curr_running_marker);
-          //         //     //   if hl_item.is_some() {
-          //         //     //     let mut regex_indexes = self.regex_indexes.lock().unwrap();
-          //         //     //     regex_indexes.insert(curr_running_marker);
-          //         //     //     regex_indexes.retain(|re_idx: &usize| {
-          //         //     //       let dd = editor.index_to_xy(re_idx);
-          //         //     //       dd.fits(self.pos) && dd.fits_in(self.pos + self.area.size())
-          //         //     //     });
-          //         //     //     '*'
-          //         //     //   } else {
-          //         //     //     editor.get(offset_x, offset_y)
-          //         //     //   }
-          //         //     // } else {
-          //         //     //   editor.get(offset_x, offset_y)
-          //         //     // };
+        //         // let (displayed_style, displayed_char) =
+        //         //   if self.is_actived_position((offset_x, offset_y).into()) {
+        //         //     // if editor.text_matcher.is_some() {
+        //         //     //   let hl: &HashMap<usize, Match> = editor.text_matcher.as_ref().unwrap();
+        //         //     //   if hl.get(&curr_running_marker).is_some() {
+        //         //     //     // let _ = editor.midi_tx.send(midi::Message::TriggerWithRegexPos((
+        //         //     //     //   curr_running_marker,
+        //         //     //     //   self.regex_indexes.clone(),
+        //         //     //     // )));
+        //         //     //     (Style::none(), '@')
+        //         //     //   } else {
+        //         //     //     (Style::none(), '>')
+        //         //     //   }
+        //         //     // } else {
+        //         //     //   (Style::none(), '>')
+        //         //     // }
+        //         //     ("none", '>')
+        //         //   } else {
+        //         //     let ch = '*';
+        //         //     // let ch = if editor.text_matcher.is_some() {
+        //         //     //   let hl = editor.text_matcher.as_ref().unwrap();
+        //         //     //   let hl_item = hl.get(&curr_running_marker);
+        //         //     //   if hl_item.is_some() {
+        //         //     //     let mut regex_indexes = self.regex_indexes.lock().unwrap();
+        //         //     //     regex_indexes.insert(curr_running_marker);
+        //         //     //     regex_indexes.retain(|re_idx: &usize| {
+        //         //     //       let dd = editor.index_to_xy(re_idx);
+        //         //     //       dd.fits(self.pos) && dd.fits_in(self.pos + self.area.size())
+        //         //     //     });
+        //         //     //     '*'
+        //         //     //   } else {
+        //         //     //     editor.get(offset_x, offset_y)
+        //         //     //   }
+        //         //     // } else {
+        //         //     //   editor.get(offset_x, offset_y)
+        //         //     // };
 
-          //         //     // (
-          //         //     //   Style::highlight(),
-          //         //     //   ch.display_char((offset_x, offset_y).into()),
-          //         //     // )
-          //         //     ("none", '>')
-          //         //   };
-          //       },
-          //     );
-          //   }))
-          //   .unwrap();
+        //         //     // (
+        //         //     //   Style::highlight(),
+        //         //     //   ch.display_char((offset_x, offset_y).into()),
+        //         //     // )
+        //         //     ("none", '>')
+        //         //   };
+        //       },
+        //     );
+        //   }))
+        //   .unwrap();
 
-          // printer.print_styled(
-          //   (offset_x, offset_y),
-          //   &SpannedString::styled(displayed_char, displayed_style),
-          // );
-        }
+        // printer.print_styled(
+        //   (offset_x, offset_y),
+        //   &SpannedString::styled(displayed_char, displayed_style),
+        // );
       }
-    });
+    }
+
+    //   let elapsed = frame_start.elapsed();
+
+    //   if elapsed < frame_duration {
+    //     thread::sleep(frame_duration - elapsed);
+    //   }
+    // }
+    // });
   }
 }

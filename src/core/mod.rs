@@ -5,6 +5,7 @@ pub mod commands;
 pub mod config;
 pub mod midi;
 pub mod parser;
+pub mod rect;
 pub mod regex;
 pub mod stack;
 pub mod traits;

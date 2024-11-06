@@ -45,7 +45,7 @@ fn main() {
   let last_key_time_clone = Arc::clone(&last_key_time);
   let mut anu: Anu = Anu::new();
   let marker = Marker::new(siv.cb_sink().clone());
-  // let marker_cloned = Arc::clone(&marker);
+  let marker_tx_cloned = marker.tx.clone();
   let marker_tx = marker.tx.clone();
   let marker_tx_2 = marker.tx.clone();
   let metronome = Metronome::new(siv.cb_sink().clone(), marker_tx_2);
@@ -59,6 +59,7 @@ fn main() {
     siv.cb_sink().clone(),
     temp_tempo_cloned,
     last_key_time.clone(),
+    marker_tx_cloned,
   );
 
   cmd_manager.register_all();
