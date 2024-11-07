@@ -10,10 +10,10 @@ use cursive::{
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Rect {
   /// Top-left corner, inclusive
-  top_left: Vec2,
+  pub top_left: Vec2,
 
   /// Bottom-right corner, inclusive
-  bottom_right: Vec2,
+  pub bottom_right: Vec2,
 }
 
 impl<T> Add<T> for Rect

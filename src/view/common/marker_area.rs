@@ -52,7 +52,7 @@ impl MarkerArea {
 
   fn set_move(&self, direction: Direction, canvas_size: Vec2) {
     let mut pos = self.pos.lock().unwrap();
-    let area = self.area.lock().unwrap();
+    let mut area = self.area.lock().unwrap();
     let next_pos = pos.saturating_add(direction.get_direction());
     let next_pos_bottom_right: Vec2 = (
       next_pos.x + area.width() - 1,
@@ -65,6 +65,13 @@ impl MarkerArea {
     }
 
     *pos = next_pos;
+
+    let w = area.width();
+    let h = area.height();
+
+    if direction == Direction::Idle {
+      *area = Rect::from_size(next_pos, (w, h));
+    }
   }
 
   pub fn set_current_pos(&self, pos: XY<usize>, offset: XY<usize>) {
@@ -74,7 +81,7 @@ impl MarkerArea {
     *mutex_pos = (pos_x, pos_y).into();
   }
 
-  pub fn set_grid_area(&self, current_pos: XY<usize>) {
+  pub fn move_to(&self, current_pos: XY<usize>) {
     let pos = self.pos.lock().unwrap();
     let mut area = self.area.lock().unwrap();
 
@@ -91,9 +98,16 @@ impl MarkerArea {
     };
 
     *area = Rect::from_size((new_x, new_y), (new_w, new_h));
+  }
 
-    self.drag_start_x.store(new_x, Ordering::SeqCst);
-    self.drag_start_y.store(new_y, Ordering::SeqCst);
+  pub fn set_grid_area(&self, current_pos: XY<usize>) {
+    self.move_to(current_pos);
+
+    let area = self.area.lock().unwrap();
+    let top_left = area.top_left();
+
+    self.drag_start_x.store(top_left.x, Ordering::SeqCst);
+    self.drag_start_y.store(top_left.y, Ordering::SeqCst);
   }
 
   pub fn set_actived_pos(&self, pos: usize) {
@@ -147,6 +161,9 @@ impl MarkerArea {
             let pos_mutex = self.pos.lock().unwrap();
             let pos = *pos_mutex;
 
+            let area_mutex = self.area.lock().unwrap();
+            let area = *area_mutex;
+
             cb_sink
               .send(Box::new(move |siv| {
                 siv.call_on_name(config::pos_status_unit_view, move |view: &mut TextView| {
@@ -169,7 +186,9 @@ impl MarkerArea {
                       Direction::Right | Direction::Down => {
                         editor.marker_ui.marker_area.offset(direction_cloned.1);
                       }
-                      Direction::Idle => {}
+                      Direction::Idle => {
+                        editor.marker_ui.marker_area = area;
+                      }
                     }
                   },
                 );
@@ -186,7 +205,6 @@ impl MarkerArea {
                   config::canvas_editor_section_view,
                   move |canvas: &mut Canvas<CanvasEditor>| {
                     let editor = canvas.state_mut();
-
                     editor.marker_ui.marker_pos = pos;
                   },
                 );

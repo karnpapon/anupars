@@ -10,7 +10,7 @@ use cursive::XY;
 
 use super::marker_area::{self, MarkerArea};
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum Direction {
   Up,
   Down,
