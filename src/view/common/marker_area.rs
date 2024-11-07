@@ -23,7 +23,7 @@ pub enum Message {
   SetCurrentPos(XY<usize>, XY<usize>, cursive::CbSink),
   UpdateInfoStatusView(cursive::CbSink),
   SetGridArea(XY<usize>, cursive::CbSink),
-  SetActivePos(usize),
+  SetActivePos(usize, cursive::CbSink),
   Scale((i32, i32), cursive::CbSink),
 }
 
@@ -141,6 +141,7 @@ impl MarkerArea {
     let pos = self.pos.lock().unwrap();
     pos.eq(&curr_pos)
   }
+
   fn is_actived_position(&self, curr_pos: Vec2) -> bool {
     let pos = self.pos.lock().unwrap();
     let actived_pos = self.actived_pos.lock().unwrap();
@@ -256,8 +257,23 @@ impl MarkerArea {
               }))
               .unwrap();
           }
-          Message::SetActivePos(tick) => {
+          Message::SetActivePos(tick, cb_sink) => {
             self.set_actived_pos(tick);
+
+            let active_pos_mutex = self.actived_pos.lock().unwrap();
+            let active_pos = *active_pos_mutex;
+
+            cb_sink
+              .send(Box::new(move |siv| {
+                siv.call_on_name(
+                  config::canvas_editor_section_view,
+                  move |canvas: &mut Canvas<CanvasEditor>| {
+                    let editor = canvas.state_mut();
+                    editor.marker_ui.actived_pos = active_pos;
+                  },
+                );
+              }))
+              .unwrap();
           }
           Message::Scale(size, cb_sink) => {
             self.scale(size);

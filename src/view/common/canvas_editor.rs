@@ -14,6 +14,7 @@ use super::marker::{self, Direction, Message};
 pub struct MarkerUI {
   pub marker_area: Rect,
   pub marker_pos: Vec2,
+  pub actived_pos: Vec2,
 }
 
 pub struct CanvasEditor {
@@ -31,6 +32,7 @@ impl MarkerUI {
     MarkerUI {
       marker_area: Rect::from_point(Vec2::zero()),
       marker_pos: Vec2::zero(),
+      actived_pos: Vec2::zero(),
     }
   }
 }

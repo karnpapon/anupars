@@ -96,7 +96,10 @@ impl Marker {
           }
           Message::SetActivePos(tick) => {
             marker_area_tx
-              .send(marker_area::Message::SetActivePos(tick))
+              .send(marker_area::Message::SetActivePos(
+                tick,
+                self.cb_sink.clone(),
+              ))
               .unwrap();
           }
           Message::Scale(dir) => {

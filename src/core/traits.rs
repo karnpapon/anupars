@@ -109,17 +109,25 @@ impl<T: Printable + Copy> Matrix<T> {
             &SpannedString::styled('>', Style::highlight()),
           );
         } else if marker_ui.marker_area.contains((y, x).into()) {
-          printer.print_styled(
-            (y, x),
-            &SpannedString::styled(
-              self
-                .get(y, x)
-                .unwrap()
-                .display_char((x, y).into())
-                .to_string(),
-              Style::highlight(),
-            ),
-          );
+          if marker_ui
+            .marker_pos
+            .saturating_add(marker_ui.actived_pos)
+            .eq(&(y, x))
+          {
+            printer.print_styled((y, x), &SpannedString::styled('>', Style::none()));
+          } else {
+            printer.print_styled(
+              (y, x),
+              &SpannedString::styled(
+                self
+                  .get(y, x)
+                  .unwrap()
+                  .display_char((x, y).into())
+                  .to_string(),
+                Style::highlight(),
+              ),
+            );
+          }
         } else {
           //
         }
