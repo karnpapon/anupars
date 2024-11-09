@@ -1,4 +1,8 @@
-use std::{collections::HashMap, sync::mpsc::Sender, usize};
+use std::{
+  collections::{BTreeSet, HashMap},
+  sync::{mpsc::Sender, Arc, Mutex},
+  usize,
+};
 
 use cursive::{
   event::{Event, EventResult, Key, MouseButton, MouseEvent},
@@ -16,6 +20,7 @@ pub struct MarkerUI {
   pub marker_pos: Vec2,
   pub actived_pos: Vec2,
   pub text_matcher: Option<HashMap<usize, Match>>,
+  pub regex_indexes: Arc<Mutex<BTreeSet<usize>>>,
 }
 
 pub struct CanvasEditor {
@@ -33,6 +38,7 @@ impl MarkerUI {
       marker_pos: Vec2::zero(),
       actived_pos: Vec2::zero(),
       text_matcher: None,
+      regex_indexes: Arc::new(Mutex::new(BTreeSet::new())),
     }
   }
 }
@@ -44,7 +50,6 @@ impl CanvasEditor {
       marker_tx,
       grid: Matrix::new(0, 0, '\0'),
       text_contents: None,
-      // text_matcher: None,
       marker_ui: MarkerUI::new(),
     }
   }
@@ -142,26 +147,6 @@ impl CanvasEditor {
     self.grid = Matrix::new(size.x, size.y, '\0');
     self.size = size;
   }
-
-  pub fn get(&self, x: usize, y: usize) -> char {
-    // if self
-    //   .marker
-    //   .pos
-    //   .saturating_add(self.marker.actived_pos)
-    //   .eq(&(x, y))
-    // {
-    //   return '*';
-    // }
-    *self.grid.get(x, y).unwrap_or(&'.')
-  }
-
-  // pub fn marker_mut(&mut self) -> &mut Marker {
-  //   &mut self.marker
-  // }
-
-  // pub fn set_text_matcher(&mut self, text_matcher: Option<HashMap<usize, Match>>) {
-  //   self.text_matcher = text_matcher
-  // }
 
   // pub fn clear_marker_midi_msg_config_list(&mut self) {
   //   let mut midi_msg_config_list = self.marker.midi_msg_config_list.lock().unwrap();

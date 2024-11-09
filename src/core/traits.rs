@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use cursive::{
   theme::{ColorStyle, ColorType, Style},
   utils::span::SpannedString,
-  Printer,
+  Printer, Vec2,
 };
 
 use crate::view::common::canvas_editor::MarkerUI;
@@ -46,6 +46,12 @@ impl<T: Copy> Matrix<T> {
       }
     }
   }
+
+  pub fn index_to_xy(&self, index: &usize) -> Vec2 {
+    let x = index % self.width;
+    let y = index / self.width;
+    (x, y).into()
+  }
 }
 
 pub trait Printable {
@@ -73,10 +79,18 @@ impl Printable for char {
 
 impl<T: Printable + Copy> Matrix<T> {
   pub fn print(&self, printer: &Printer, marker_ui: &MarkerUI) {
+    let MarkerUI {
+      regex_indexes,
+      text_matcher,
+      marker_pos,
+      marker_area,
+      actived_pos,
+    } = &marker_ui;
+
     for y in 0..self.width {
       for x in 0..self.height {
-        let style = if marker_ui.text_matcher.is_some() {
-          let hl = marker_ui.text_matcher.as_ref().unwrap();
+        let style = if text_matcher.is_some() {
+          let hl = text_matcher.as_ref().unwrap();
           if hl.get(&(y + x * self.width)).is_some() {
             Style::highlight()
           } else {
@@ -100,19 +114,22 @@ impl<T: Printable + Copy> Matrix<T> {
 
         // draw marker
         // is_head_pos
-        if (y, x) == (marker_ui.marker_pos.x, marker_ui.marker_pos.y) {
-          printer.print_styled(
-            marker_ui.marker_pos,
-            &SpannedString::styled('>', Style::highlight()),
-          );
-        } else if marker_ui.marker_area.contains((y, x).into()) {
+        // if (y, x) == (marker_pos.x, marker_pos.y) {
+        //   printer.print_styled(marker_pos, &SpannedString::styled('>', Style::highlight()));
+        // }
+
+        if marker_area.contains((y, x).into()) {
           // is within marker area
-          if marker_ui
-            .marker_pos
-            .saturating_add(marker_ui.actived_pos)
-            .eq(&(y, x))
-          {
+          if marker_ui.marker_pos.saturating_add(actived_pos).eq(&(y, x)) {
             printer.print_styled((y, x), &SpannedString::styled('>', Style::none()));
+
+            if marker_ui.text_matcher.is_some() {
+              let curr_running_marker = y + x * self.width;
+              let hl = marker_ui.text_matcher.as_ref().unwrap();
+              if hl.get(&curr_running_marker).is_some() {
+                printer.print_styled((y, x), &SpannedString::styled('@', Style::none()));
+              }
+            }
           } else {
             // inside marker area
             printer.print_styled(
@@ -130,14 +147,15 @@ impl<T: Printable + Copy> Matrix<T> {
             if marker_ui.text_matcher.is_some() {
               let curr_running_marker = y + x * self.width;
               let hl = marker_ui.text_matcher.as_ref().unwrap();
-              let hl_item = hl.get(&curr_running_marker);
-              if hl_item.is_some() {
-                // let mut regex_indexes = self.regex_indexes.lock().unwrap();
-                // regex_indexes.insert(curr_running_marker);
-                // regex_indexes.retain(|re_idx: &usize| {
-                //   let dd = editor.index_to_xy(re_idx);
-                //   dd.fits(self.pos) && dd.fits_in(self.pos + self.area.size())
-                // });
+              if hl.get(&curr_running_marker).is_some() {
+                let mut regex_idx = regex_indexes.lock().unwrap();
+                regex_idx.insert(curr_running_marker);
+                regex_idx.retain(|re_idx: &usize| {
+                  let dd = self.index_to_xy(re_idx);
+                  dd.fits(marker_ui.marker_pos)
+                    && dd.fits_in(marker_ui.marker_pos + marker_ui.marker_area.size())
+                });
+
                 printer.print_styled((y, x), &SpannedString::styled('*', Style::highlight()));
               }
             }

@@ -287,6 +287,8 @@ impl MarkerArea {
             let text_matcher = self.text_matcher.lock().unwrap();
             let mm = text_matcher.clone();
 
+            let regex_indexes_cloned = self.regex_indexes.clone();
+
             cb_sink
               .send(Box::new(move |siv| {
                 siv.call_on_name(
@@ -294,6 +296,7 @@ impl MarkerArea {
                   move |canvas: &mut Canvas<CanvasEditor>| {
                     let editor = canvas.state_mut();
                     editor.marker_ui.text_matcher = mm;
+                    editor.marker_ui.regex_indexes = regex_indexes_cloned;
                   },
                 );
               }))
@@ -304,100 +307,5 @@ impl MarkerArea {
     });
 
     tx
-  }
-
-  pub fn refresh(&self, cb_sink: cursive::CbSink) {
-    // thread::spawn(move || {
-    // loop {
-    let pos = self.pos.lock().unwrap();
-    let area = self.area.lock().unwrap();
-    for x in 0..area.width() {
-      for y in 0..area.height() {
-        // let offset_x = pos.x + x;
-        // let offset_y = pos.y + y;
-
-        // if self.is_head((offset_x, offset_y).into()) {
-        //   cb_sink
-        //     .send(Box::new(move |siv| {
-        //       siv.call_on_name(
-        //         config::canvas_editor_section_view,
-        //         move |canvas: &mut Canvas<CanvasEditor>| {
-        //           let editor = canvas.state_mut();
-
-        //           editor.marker_ui.marker_head_pos = (
-        //             (offset_x, offset_y),
-        //             SpannedString::styled('>', Style::highlight()),
-        //           );
-        //         },
-        //       );
-        //     }))
-        //     .unwrap();
-
-        //   continue;
-        // }
-
-        // self
-        //   .cb_sink
-        //   .send(Box::new(move |siv| {
-        //     siv.call_on_name(
-        //       config::canvas_editor_section_view,
-        //       move |canvas: &mut Canvas<CanvasEditor>| {
-        //         let editor = canvas.state_mut();
-        //         let curr_running_marker = offset_x + offset_y * editor.grid.width;
-
-        //         // let (displayed_style, displayed_char) =
-        //         //   if self.is_actived_position((offset_x, offset_y).into()) {
-        //         //     // if editor.text_matcher.is_some() {
-        //         //     //   let hl: &HashMap<usize, Match> = editor.text_matcher.as_ref().unwrap();
-        //         //     //   if hl.get(&curr_running_marker).is_some() {
-        //         //     //     // let _ = editor.midi_tx.send(midi::Message::TriggerWithRegexPos((
-        //         //     //     //   curr_running_marker,
-        //         //     //     //   self.regex_indexes.clone(),
-        //         //     //     // )));
-        //         //     //     (Style::none(), '@')
-        //         //     //   } else {
-        //         //     //     (Style::none(), '>')
-        //         //     //   }
-        //         //     // } else {
-        //         //     //   (Style::none(), '>')
-        //         //     // }
-        //         //     ("none", '>')
-        //         //   } else {
-        //         //     let ch = '*';
-        //         //     // let ch = if editor.text_matcher.is_some() {
-        //         //     //   let hl = editor.text_matcher.as_ref().unwrap();
-        //         //     //   let hl_item = hl.get(&curr_running_marker);
-        //         //     //   if hl_item.is_some() {
-        //         //     //     let mut regex_indexes = self.regex_indexes.lock().unwrap();
-        //         //     //     regex_indexes.insert(curr_running_marker);
-        //         //     //     regex_indexes.retain(|re_idx: &usize| {
-        //         //     //       let dd = editor.index_to_xy(re_idx);
-        //         //     //       dd.fits(self.pos) && dd.fits_in(self.pos + self.area.size())
-        //         //     //     });
-        //         //     //     '*'
-        //         //     //   } else {
-        //         //     //     editor.get(offset_x, offset_y)
-        //         //     //   }
-        //         //     // } else {
-        //         //     //   editor.get(offset_x, offset_y)
-        //         //     // };
-
-        //         //     // (
-        //         //     //   Style::highlight(),
-        //         //     //   ch.display_char((offset_x, offset_y).into()),
-        //         //     // )
-        //         //     ("none", '>')
-        //         //   };
-        //       },
-        //     );
-        //   }))
-        //   .unwrap();
-
-        // printer.print_styled(
-        //   (offset_x, offset_y),
-        //   &SpannedString::styled(displayed_char, displayed_style),
-        // );
-      }
-    }
   }
 }
