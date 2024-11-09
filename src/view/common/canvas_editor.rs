@@ -148,22 +148,6 @@ impl CanvasEditor {
     self.size = size;
   }
 
-  // pub fn clear_marker_midi_msg_config_list(&mut self) {
-  //   let mut midi_msg_config_list = self.marker.midi_msg_config_list.lock().unwrap();
-  //   midi_msg_config_list.clear();
-  // }
-
-  // pub fn set_marker_midi_msg_config_list(&mut self, midi: midi::MidiMsg) {
-  //   let mut midi_msg_config_list = self.marker.midi_msg_config_list.lock().unwrap();
-  //   midi_msg_config_list.push(midi);
-  // }
-
-  fn index_to_xy(&self, index: &usize) -> Vec2 {
-    let x = index % self.size.x;
-    let y = index / self.size.x;
-    (x, y).into()
-  }
-
   pub fn text_contents(&self) -> String {
     self
       .text_contents
@@ -174,7 +158,9 @@ impl CanvasEditor {
 }
 
 fn draw(canvas: &CanvasEditor, printer: &Printer) {
-  canvas.grid.print(printer, &canvas.marker_ui);
+  canvas
+    .grid
+    .print(printer, &canvas.marker_ui, canvas.marker_tx.clone());
 }
 
 fn layout(canvas: &mut CanvasEditor, size: Vec2) {

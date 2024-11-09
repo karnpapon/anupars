@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::mpsc::Sender};
 
 use cursive::{
   theme::{ColorStyle, ColorType, Style},
@@ -6,9 +6,9 @@ use cursive::{
   Printer, Vec2,
 };
 
-use crate::view::common::canvas_editor::MarkerUI;
+use crate::view::common::{canvas_editor::MarkerUI, marker};
 
-use super::{config, regex::Match};
+use super::{config, midi, regex::Match};
 
 #[derive(Clone, Default, Debug)]
 pub struct Matrix<T> {
@@ -78,7 +78,7 @@ impl Printable for char {
 }
 
 impl<T: Printable + Copy> Matrix<T> {
-  pub fn print(&self, printer: &Printer, marker_ui: &MarkerUI) {
+  pub fn print(&self, printer: &Printer, marker_ui: &MarkerUI, marker_tx: Sender<marker::Message>) {
     let MarkerUI {
       regex_indexes,
       text_matcher,
@@ -120,13 +120,18 @@ impl<T: Printable + Copy> Matrix<T> {
 
         if marker_area.contains((y, x).into()) {
           // is within marker area
-          if marker_ui.marker_pos.saturating_add(actived_pos).eq(&(y, x)) {
+          if marker_pos.saturating_add(actived_pos).eq(&(y, x)) {
             printer.print_styled((y, x), &SpannedString::styled('>', Style::none()));
 
-            if marker_ui.text_matcher.is_some() {
+            if text_matcher.is_some() {
               let curr_running_marker = y + x * self.width;
-              let hl = marker_ui.text_matcher.as_ref().unwrap();
+              let hl = text_matcher.as_ref().unwrap();
               if hl.get(&curr_running_marker).is_some() {
+                let _ = marker_tx.send(marker::Message::TriggerWithRegexPos((
+                  curr_running_marker,
+                  regex_indexes.clone(),
+                )));
+
                 printer.print_styled((y, x), &SpannedString::styled('@', Style::none()));
               }
             }
@@ -144,24 +149,21 @@ impl<T: Printable + Copy> Matrix<T> {
               ),
             );
 
-            if marker_ui.text_matcher.is_some() {
+            if text_matcher.is_some() {
               let curr_running_marker = y + x * self.width;
-              let hl = marker_ui.text_matcher.as_ref().unwrap();
+              let hl = text_matcher.as_ref().unwrap();
               if hl.get(&curr_running_marker).is_some() {
                 let mut regex_idx = regex_indexes.lock().unwrap();
                 regex_idx.insert(curr_running_marker);
                 regex_idx.retain(|re_idx: &usize| {
                   let dd = self.index_to_xy(re_idx);
-                  dd.fits(marker_ui.marker_pos)
-                    && dd.fits_in(marker_ui.marker_pos + marker_ui.marker_area.size())
+                  dd.fits(marker_pos) && dd.fits_in(*marker_pos + marker_area.size())
                 });
 
                 printer.print_styled((y, x), &SpannedString::styled('*', Style::highlight()));
               }
             }
           }
-        } else {
-          //
         }
       }
     }

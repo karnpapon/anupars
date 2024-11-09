@@ -44,7 +44,7 @@ fn main() {
   let last_key_time = Arc::new(Mutex::new(None));
   let last_key_time_clone = Arc::clone(&last_key_time);
   let mut anu: Anu = Anu::new();
-  let marker = Marker::new(siv.cb_sink().clone());
+  let marker = Marker::new(siv.cb_sink().clone(), midi_tx.clone());
   let marker_tx_cloned = marker.tx.clone();
   let marker_tx = marker.tx.clone();
   let marker_tx_2 = marker.tx.clone();

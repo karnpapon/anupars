@@ -1,15 +1,15 @@
 use std::{
-  collections::HashMap,
+  collections::{BTreeSet, HashMap},
   sync::{
     mpsc::{channel, Receiver, Sender},
-    Arc,
+    Arc, Mutex,
   },
   thread, usize,
 };
 
 use cursive::XY;
 
-use crate::core::regex::Match;
+use crate::core::{midi, regex::Match};
 
 use super::marker_area::{self, MarkerArea};
 
@@ -31,12 +31,14 @@ pub enum Message {
   SetActivePos(usize),
   Scale((i32, i32)),
   SetMatcher(Option<HashMap<usize, Match>>),
+  TriggerWithRegexPos((usize, Arc<Mutex<BTreeSet<usize>>>)),
 }
 
 pub struct Marker {
   pub tx: Sender<Message>,
   pub rx: Receiver<Message>,
   cb_sink: cursive::CbSink,
+  midi_tx: Sender<midi::Message>,
 }
 
 impl Direction {
@@ -52,10 +54,15 @@ impl Direction {
 }
 
 impl Marker {
-  pub fn new(cb_sink: cursive::CbSink) -> Self {
+  pub fn new(cb_sink: cursive::CbSink, midi_tx: Sender<midi::Message>) -> Self {
     let (tx, rx) = channel();
 
-    Marker { tx, rx, cb_sink }
+    Marker {
+      tx,
+      rx,
+      cb_sink,
+      midi_tx,
+    }
   }
 
   pub fn run(self) {
@@ -117,6 +124,12 @@ impl Marker {
                 matcher,
                 self.cb_sink.clone(),
               ))
+              .unwrap();
+          }
+          Message::TriggerWithRegexPos(msg) => {
+            self
+              .midi_tx
+              .send(midi::Message::TriggerWithRegexPos(msg))
               .unwrap();
           }
         }

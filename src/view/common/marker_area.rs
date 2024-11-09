@@ -34,7 +34,7 @@ pub struct MarkerArea {
   drag_start_x: AtomicUsize,
   drag_start_y: AtomicUsize,
   actived_pos: Arc<Mutex<Vec2>>,
-  midi_msg_config_list: Arc<Mutex<Vec<midi::MidiMsg>>>,
+  // midi_msg_config_list: Arc<Mutex<Vec<midi::MidiMsg>>>,
   regex_indexes: Arc<Mutex<BTreeSet<usize>>>,
   text_matcher: Arc<Mutex<Option<HashMap<usize, Match>>>>,
 }
@@ -47,7 +47,7 @@ impl MarkerArea {
       drag_start_y: AtomicUsize::new(0),
       drag_start_x: AtomicUsize::new(0),
       actived_pos: Arc::new(Mutex::new(Vec2::zero())),
-      midi_msg_config_list: Arc::new(Mutex::new(Vec::new())),
+      // midi_msg_config_list: Arc::new(Mutex::new(Vec::new())),
       regex_indexes: Arc::new(Mutex::new(BTreeSet::new())),
       text_matcher: Arc::new(Mutex::new(None)),
     }
