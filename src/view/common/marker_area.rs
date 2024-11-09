@@ -1,5 +1,5 @@
 use std::{
-  collections::BTreeSet,
+  collections::{BTreeSet, HashMap},
   sync::{
     atomic::{AtomicUsize, Ordering},
     mpsc::{channel, Sender},
@@ -13,7 +13,7 @@ use cursive::{
   Vec2, XY,
 };
 
-use crate::core::{config, midi, rect::Rect, utils};
+use crate::core::{config, midi, rect::Rect, regex::Match, utils};
 
 use super::{canvas_editor::CanvasEditor, marker::Direction};
 
@@ -25,6 +25,7 @@ pub enum Message {
   SetGridArea(XY<usize>, cursive::CbSink),
   SetActivePos(usize, cursive::CbSink),
   Scale((i32, i32), cursive::CbSink),
+  SetMatcher(Option<HashMap<usize, Match>>, cursive::CbSink),
 }
 
 pub struct MarkerArea {
@@ -35,6 +36,7 @@ pub struct MarkerArea {
   actived_pos: Arc<Mutex<Vec2>>,
   midi_msg_config_list: Arc<Mutex<Vec<midi::MidiMsg>>>,
   regex_indexes: Arc<Mutex<BTreeSet<usize>>>,
+  text_matcher: Arc<Mutex<Option<HashMap<usize, Match>>>>,
 }
 
 impl MarkerArea {
@@ -47,6 +49,7 @@ impl MarkerArea {
       actived_pos: Arc::new(Mutex::new(Vec2::zero())),
       midi_msg_config_list: Arc::new(Mutex::new(Vec::new())),
       regex_indexes: Arc::new(Mutex::new(BTreeSet::new())),
+      text_matcher: Arc::new(Mutex::new(None)),
     }
   }
 
@@ -69,9 +72,7 @@ impl MarkerArea {
     let w = area.width();
     let h = area.height();
 
-    if direction == Direction::Idle {
-      *area = Rect::from_size(next_pos, (w, h));
-    }
+    *area = Rect::from_size(next_pos, (w, h));
   }
 
   pub fn set_current_pos(&self, pos: XY<usize>, offset: XY<usize>) {
@@ -132,10 +133,10 @@ impl MarkerArea {
     );
   }
 
-  // pub fn get_area_size(&self) -> (usize, usize) {
-  //   let area = self.area.lock().unwrap();
-  //   (area.width(), area.height())
-  // }
+  pub fn set_text_matcher(&self, text_matcher: Option<HashMap<usize, Match>>) {
+    let mut tm = self.text_matcher.lock().unwrap();
+    *tm = text_matcher
+  }
 
   fn is_head(&self, curr_pos: Vec2) -> bool {
     let pos = self.pos.lock().unwrap();
@@ -155,9 +156,6 @@ impl MarkerArea {
       for control_message in &rx {
         match control_message {
           Message::Move(direction, canvas_size, cb_sink) => {
-            let dir = direction.clone();
-            let get_dir = dir.get_direction();
-            let direction_cloned = (dir, get_dir);
             self.set_move(direction.clone(), canvas_size);
             let pos_mutex = self.pos.lock().unwrap();
             let pos = *pos_mutex;
@@ -176,21 +174,7 @@ impl MarkerArea {
                   move |canvas: &mut Canvas<CanvasEditor>| {
                     let editor = canvas.state_mut();
                     editor.marker_ui.marker_pos = pos;
-
-                    match direction_cloned.0 {
-                      Direction::Left => {
-                        editor.marker_ui.marker_area.offset_subtract_x();
-                      }
-                      Direction::Up => {
-                        editor.marker_ui.marker_area.offset_subtract_y();
-                      }
-                      Direction::Right | Direction::Down => {
-                        editor.marker_ui.marker_area.offset(direction_cloned.1);
-                      }
-                      Direction::Idle => {
-                        editor.marker_ui.marker_area = area;
-                      }
-                    }
+                    editor.marker_ui.marker_area = area;
                   },
                 );
               }))
@@ -292,6 +276,24 @@ impl MarkerArea {
                   move |canvas: &mut Canvas<CanvasEditor>| {
                     let editor = canvas.state_mut();
                     editor.marker_ui.marker_area = marker_area;
+                  },
+                );
+              }))
+              .unwrap();
+          }
+          Message::SetMatcher(matcher, cb_sink) => {
+            self.set_text_matcher(matcher);
+
+            let text_matcher = self.text_matcher.lock().unwrap();
+            let mm = text_matcher.clone();
+
+            cb_sink
+              .send(Box::new(move |siv| {
+                siv.call_on_name(
+                  config::canvas_editor_section_view,
+                  move |canvas: &mut Canvas<CanvasEditor>| {
+                    let editor = canvas.state_mut();
+                    editor.marker_ui.text_matcher = mm;
                   },
                 );
               }))

@@ -8,7 +8,7 @@ use regex::Regex;
 
 use serde::{Deserialize, Serialize};
 
-use crate::view::common::canvas_editor::CanvasEditor;
+use crate::view::common::{canvas_editor::CanvasEditor, marker};
 
 use super::config;
 
@@ -104,11 +104,16 @@ impl RegExpHandler {
       match control_message {
         Message::Clear => {
           let _ = self.cb_sink.send(Box::new(move |s| {
-            s.call_on_name(
-              config::canvas_editor_section_view,
-              |c: &mut Canvas<CanvasEditor>| c.state_mut().set_text_matcher(None),
-            )
-            .unwrap();
+            let _ = s
+              .call_on_name(
+                config::canvas_editor_section_view,
+                |c: &mut Canvas<CanvasEditor>| {
+                  c.state_mut()
+                    .marker_tx
+                    .send(marker::Message::SetMatcher(None))
+                },
+              )
+              .unwrap();
           }));
         }
         Message::Solve(data) => {
@@ -123,11 +128,16 @@ impl RegExpHandler {
                     Some(matches)
                   };
 
-                  s.call_on_name(
-                    config::canvas_editor_section_view,
-                    |c: &mut Canvas<CanvasEditor>| c.state_mut().set_text_matcher(mm),
-                  )
-                  .unwrap();
+                  let _ = s
+                    .call_on_name(
+                      config::canvas_editor_section_view,
+                      |c: &mut Canvas<CanvasEditor>| {
+                        c.state_mut()
+                          .marker_tx
+                          .send(marker::Message::SetMatcher(mm))
+                      },
+                    )
+                    .unwrap();
 
                   "".to_string()
                 }

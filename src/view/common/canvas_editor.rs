@@ -15,16 +15,15 @@ pub struct MarkerUI {
   pub marker_area: Rect,
   pub marker_pos: Vec2,
   pub actived_pos: Vec2,
+  pub text_matcher: Option<HashMap<usize, Match>>,
 }
 
 pub struct CanvasEditor {
   size: Vec2,
-  marker_tx: Sender<Message>,
+  pub marker_tx: Sender<Message>,
   pub grid: Matrix<char>,
   pub text_contents: Option<String>,
-  pub text_matcher: Option<HashMap<usize, Match>>,
-  pub marker_ui: MarkerUI, // midi_tx: Sender<midi::Message>,
-                           // hold_key: bool,
+  pub marker_ui: MarkerUI,
 }
 
 impl MarkerUI {
@@ -33,6 +32,7 @@ impl MarkerUI {
       marker_area: Rect::from_point(Vec2::zero()),
       marker_pos: Vec2::zero(),
       actived_pos: Vec2::zero(),
+      text_matcher: None,
     }
   }
 }
@@ -44,9 +44,8 @@ impl CanvasEditor {
       marker_tx,
       grid: Matrix::new(0, 0, '\0'),
       text_contents: None,
-      text_matcher: None,
-      marker_ui: MarkerUI::new(), // midi_tx,
-                                  // hold_key: false,
+      // text_matcher: None,
+      marker_ui: MarkerUI::new(),
     }
   }
 
@@ -160,9 +159,9 @@ impl CanvasEditor {
   //   &mut self.marker
   // }
 
-  pub fn set_text_matcher(&mut self, text_matcher: Option<HashMap<usize, Match>>) {
-    self.text_matcher = text_matcher
-  }
+  // pub fn set_text_matcher(&mut self, text_matcher: Option<HashMap<usize, Match>>) {
+  //   self.text_matcher = text_matcher
+  // }
 
   // pub fn clear_marker_midi_msg_config_list(&mut self) {
   //   let mut midi_msg_config_list = self.marker.midi_msg_config_list.lock().unwrap();
@@ -190,10 +189,7 @@ impl CanvasEditor {
 }
 
 fn draw(canvas: &CanvasEditor, printer: &Printer) {
-  canvas
-    .grid
-    .print(printer, &canvas.text_matcher, &canvas.marker_ui);
-  // canvas.marker.print(printer, canvas);
+  canvas.grid.print(printer, &canvas.marker_ui);
 }
 
 fn layout(canvas: &mut CanvasEditor, size: Vec2) {

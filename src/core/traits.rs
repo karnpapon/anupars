@@ -72,16 +72,11 @@ impl Printable for char {
 }
 
 impl<T: Printable + Copy> Matrix<T> {
-  pub fn print(
-    &self,
-    printer: &Printer,
-    highlighter: &Option<HashMap<usize, Match>>,
-    marker_ui: &MarkerUI,
-  ) {
+  pub fn print(&self, printer: &Printer, marker_ui: &MarkerUI) {
     for y in 0..self.width {
       for x in 0..self.height {
-        let style = if highlighter.is_some() {
-          let hl = highlighter.as_ref().unwrap();
+        let style = if marker_ui.text_matcher.is_some() {
+          let hl = marker_ui.text_matcher.as_ref().unwrap();
           if hl.get(&(y + x * self.width)).is_some() {
             Style::highlight()
           } else {
@@ -103,12 +98,15 @@ impl<T: Printable + Copy> Matrix<T> {
           ),
         );
 
+        // draw marker
+        // is_head_pos
         if (y, x) == (marker_ui.marker_pos.x, marker_ui.marker_pos.y) {
           printer.print_styled(
             marker_ui.marker_pos,
             &SpannedString::styled('>', Style::highlight()),
           );
         } else if marker_ui.marker_area.contains((y, x).into()) {
+          // is within marker area
           if marker_ui
             .marker_pos
             .saturating_add(marker_ui.actived_pos)
@@ -116,6 +114,7 @@ impl<T: Printable + Copy> Matrix<T> {
           {
             printer.print_styled((y, x), &SpannedString::styled('>', Style::none()));
           } else {
+            // inside marker area
             printer.print_styled(
               (y, x),
               &SpannedString::styled(
@@ -127,6 +126,21 @@ impl<T: Printable + Copy> Matrix<T> {
                 Style::highlight(),
               ),
             );
+
+            if marker_ui.text_matcher.is_some() {
+              let curr_running_marker = y + x * self.width;
+              let hl = marker_ui.text_matcher.as_ref().unwrap();
+              let hl_item = hl.get(&curr_running_marker);
+              if hl_item.is_some() {
+                // let mut regex_indexes = self.regex_indexes.lock().unwrap();
+                // regex_indexes.insert(curr_running_marker);
+                // regex_indexes.retain(|re_idx: &usize| {
+                //   let dd = editor.index_to_xy(re_idx);
+                //   dd.fits(self.pos) && dd.fits_in(self.pos + self.area.size())
+                // });
+                printer.print_styled((y, x), &SpannedString::styled('*', Style::highlight()));
+              }
+            }
           }
         } else {
           //

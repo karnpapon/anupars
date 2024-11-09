@@ -1,4 +1,5 @@
 use std::{
+  collections::HashMap,
   sync::{
     mpsc::{channel, Receiver, Sender},
     Arc,
@@ -7,6 +8,8 @@ use std::{
 };
 
 use cursive::XY;
+
+use crate::core::regex::Match;
 
 use super::marker_area::{self, MarkerArea};
 
@@ -27,6 +30,7 @@ pub enum Message {
   SetGridArea(XY<usize>),
   SetActivePos(usize),
   Scale((i32, i32)),
+  SetMatcher(Option<HashMap<usize, Match>>),
 }
 
 pub struct Marker {
@@ -105,6 +109,14 @@ impl Marker {
           Message::Scale(dir) => {
             marker_area_tx
               .send(marker_area::Message::Scale(dir, self.cb_sink.clone()))
+              .unwrap();
+          }
+          Message::SetMatcher(matcher) => {
+            marker_area_tx
+              .send(marker_area::Message::SetMatcher(
+                matcher,
+                self.cb_sink.clone(),
+              ))
               .unwrap();
           }
         }
