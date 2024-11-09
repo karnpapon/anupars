@@ -132,10 +132,10 @@ impl MarkerArea {
     );
   }
 
-  pub fn get_area_size(&self) -> (usize, usize) {
-    let area = self.area.lock().unwrap();
-    (area.width(), area.height())
-  }
+  // pub fn get_area_size(&self) -> (usize, usize) {
+  //   let area = self.area.lock().unwrap();
+  //   (area.width(), area.height())
+  // }
 
   fn is_head(&self, curr_pos: Vec2) -> bool {
     let pos = self.pos.lock().unwrap();
@@ -277,12 +277,23 @@ impl MarkerArea {
           }
           Message::Scale(size, cb_sink) => {
             self.scale(size);
-            let area_size = self.get_area_size();
+            let area = self.area.lock().unwrap();
+            let marker_area = *area;
+            let area_size = area.size();
+
             cb_sink
               .send(Box::new(move |siv| {
                 siv.call_on_name(config::len_status_unit_view, move |view: &mut TextView| {
-                  view.set_content(utils::build_len_status_str(area_size));
+                  view.set_content(utils::build_len_status_str((area_size.x, area_size.y)));
                 });
+
+                siv.call_on_name(
+                  config::canvas_editor_section_view,
+                  move |canvas: &mut Canvas<CanvasEditor>| {
+                    let editor = canvas.state_mut();
+                    editor.marker_ui.marker_area = marker_area;
+                  },
+                );
               }))
               .unwrap();
           }
@@ -386,13 +397,5 @@ impl MarkerArea {
         // );
       }
     }
-
-    //   let elapsed = frame_start.elapsed();
-
-    //   if elapsed < frame_duration {
-    //     thread::sleep(frame_duration - elapsed);
-    //   }
-    // }
-    // });
   }
 }
