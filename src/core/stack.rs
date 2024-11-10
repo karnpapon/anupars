@@ -48,10 +48,6 @@ impl Stack {
         {
           let mut st = self.stack.lock().unwrap();
           st.retain_mut(|item| {
-            if !item.is_played {
-              let _ = midi_tx.send(midi::Message::Trigger(item.clone(), true));
-              item.is_played = true;
-            }
             if item.length < 2 {
               let _ = midi_tx.send(midi::Message::Trigger(item.clone(), false));
             }

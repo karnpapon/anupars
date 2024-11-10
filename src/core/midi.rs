@@ -176,7 +176,12 @@ impl Midi {
       .position(|v| v == &curr_running_marker)
       .unwrap_or(0); //TODO: properly handle moving marker while is_playing=true
     let midi_msg_config_list = self.msg_config_list.lock().unwrap();
+
     if midi_msg_config_list.len() > 0 {
+      let _ = self.trigger(
+        &midi_msg_config_list[triggered_index % midi_msg_config_list.len()],
+        true,
+      );
       self
         .tx
         .send(Message::Push(
