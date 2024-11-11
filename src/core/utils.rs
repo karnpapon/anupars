@@ -1,4 +1,5 @@
-use cursive::{XY};
+use cursive::XY;
+use std::time::{Duration, Instant};
 
 use super::config;
 
@@ -35,4 +36,29 @@ pub fn build_len_status_str((w, h): (usize, usize)) -> String {
 
 pub fn build_pos_status_str(pos: XY<usize>) -> String {
   format!("x:{:?},y:{:?}", pos.x, pos.y)
+}
+
+pub struct Throttler {
+  last_call: Instant,
+  interval: Duration,
+}
+
+impl Throttler {
+  pub fn new(interval: Duration) -> Self {
+    Throttler {
+      last_call: Instant::now() - interval, // Start at a time that allows immediate first call
+      interval,
+    }
+  }
+
+  pub fn call<F>(&mut self, func: F)
+  where
+    F: Fn(),
+  {
+    let now = Instant::now();
+    if now.duration_since(self.last_call) >= self.interval {
+      self.last_call = now;
+      func();
+    }
+  }
 }

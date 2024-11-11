@@ -4,8 +4,10 @@ use std::error::Error;
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::{Arc, Mutex};
 use std::thread;
+use std::time::Duration;
 
 use super::stack::{self, Stack};
+use super::utils::Throttler;
 
 #[derive(Clone, Debug)]
 pub enum Message {
@@ -54,12 +56,13 @@ pub struct Midi {
   pub msg_config_list: Arc<Mutex<Vec<MidiMsg>>>,
   pub tx: Sender<Message>,
   pub rx: Receiver<Message>,
+  throttler: Arc<Mutex<Throttler>>,
 }
 
 impl Midi {
   pub fn new() -> Self {
     let (tx, rx) = channel();
-
+    let throttler = Arc::new(Mutex::new(Throttler::new(Duration::from_millis(100))));
     let Ok(midi_out) = MidiOutput::new("client-midi-output") else {
       return Self {
         midi: None.into(),
@@ -69,6 +72,7 @@ impl Midi {
         tx,
         rx,
         msg_config_list: Arc::new(Mutex::new(Vec::new())),
+        throttler,
       };
     };
     Midi {
@@ -79,6 +83,7 @@ impl Midi {
       tx,
       rx,
       msg_config_list: Arc::new(Mutex::new(Vec::new())),
+      throttler,
     }
   }
 }
@@ -143,7 +148,11 @@ impl Midi {
             self.clear_msg_config_list();
           }
           Message::TriggerWithRegexPos(msg) => {
-            self.trigger_w_regex_pos(msg.0, msg.1);
+            self
+              .throttler
+              .lock()
+              .unwrap()
+              .call(|| self.trigger_w_regex_pos(msg.0, msg.1.clone()));
           }
         }
       }
