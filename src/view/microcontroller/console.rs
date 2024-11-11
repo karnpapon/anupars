@@ -88,10 +88,10 @@ impl Console {
           .button(RegexFlag::CaseSensitive, "i ")
           .selected(),
       )
-      .child(app.flag_state.button(RegexFlag::Multiline, "m"))
-      .child(app.flag_state.button(RegexFlag::Newline, "s"))
-      .child(app.flag_state.button(RegexFlag::IgnoreWhiteSpace, "x"))
-      .child(app.flag_state.button(RegexFlag::Lazy, "U"));
+      .child(app.flag_state.button(RegexFlag::Multiline, "m"));
+    // .child(app.flag_state.button(RegexFlag::Newline, "s"))
+    // .child(app.flag_state.button(RegexFlag::IgnoreWhiteSpace, "x"))
+    // .child(app.flag_state.button(RegexFlag::Lazy, "U"));
 
     let mode_view = LinearLayout::horizontal()
       .child(app.mode_state.button(RegexMode::Realtime, "RT").selected())
@@ -105,7 +105,7 @@ impl Console {
       .child("flag: ", flag_view)
       .child("status: ", input_status_unit_view)
       .full_width()
-      .max_width(35)
+      .max_width(30)
       .min_width(10);
 
     let status_controller_section_view = ListView::new()
