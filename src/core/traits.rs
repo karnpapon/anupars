@@ -89,6 +89,29 @@ impl<T: Printable + Copy> Matrix<T> {
 
     for y in 0..self.width {
       for x in 0..self.height {
+        let style = if text_matcher.is_some() {
+          let hl = text_matcher.as_ref().unwrap();
+          if hl.get(&(y + x * self.width)).is_some() {
+            Style::highlight()
+          } else {
+            Style::from_color_style(ColorStyle::front(ColorType::rgb(100, 100, 100)))
+          }
+        } else {
+          Style::from_color_style(ColorStyle::front(ColorType::rgb(100, 100, 100)))
+        };
+
+        printer.print_styled(
+          (y, x),
+          &SpannedString::styled(
+            self
+              .get(y, x)
+              .unwrap()
+              .display_char((x, y).into())
+              .to_string(),
+            style,
+          ),
+        );
+
         // draw marker
         // is_head_pos
         // if (y, x) == (marker_pos.x, marker_pos.y) {
@@ -141,18 +164,6 @@ impl<T: Printable + Copy> Matrix<T> {
               }
             }
           }
-        } else {
-          printer.print_styled(
-            (y, x),
-            &SpannedString::styled(
-              self
-                .get(y, x)
-                .unwrap()
-                .display_char((x, y).into())
-                .to_string(),
-              Style::from_color_style(ColorStyle::front(ColorType::rgb(100, 100, 100))),
-            ),
-          );
         }
       }
     }
