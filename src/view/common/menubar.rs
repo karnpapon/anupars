@@ -251,9 +251,9 @@ fn get_default_database_path() -> Result<PathBuf, Box<dyn Error>> {
     Some(d) => d,
     None => return Err("invalid filename".into()),
   };
+  path.push(config::DEFAULT_APP_FILENAME);
   if !path.is_dir() {
     fs::create_dir_all(&path)?;
   }
-  path.push(config::DEFAULT_APP_FILENAME);
   Ok(path)
 }
