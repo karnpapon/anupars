@@ -3,6 +3,7 @@ pub mod clock;
 pub mod command;
 pub mod commands;
 pub mod config;
+pub mod disspress;
 pub mod midi;
 pub mod parser;
 pub mod rect;
