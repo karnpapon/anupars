@@ -75,26 +75,6 @@ impl Menubar {
     .with_name(config::doc_unit_view)
   }
 
-  pub fn build_file_explorer_view() -> NamedView<HideableView<OnEventView<ResizedView<Dialog>>>> {
-    HideableView::new(Self::dialog_file_explorer()).with_name(config::file_explorer_unit_view)
-  }
-
-  fn dialog_file_explorer() -> OnEventView<ResizedView<Dialog>> {
-    let default_path = get_default_database_path();
-    let paths = fs::read_dir(default_path.unwrap())
-      .unwrap()
-      .map(|res| res.map(|e| e.file_name().into_string()))
-      .collect::<Vec<_>>();
-
-    OnEventView::new(Dialog::around(listed_files_view(paths)).max_width(200)).on_event(
-      Event::Key(Key::Esc),
-      |s| {
-        // Menubar::show_file_explorer_view(s, false)
-        s.pop_layer();
-      },
-    )
-  }
-
   // pub fn show_doc_view(siv: &mut Cursive, show: bool) {
   //   siv
   //     .find_name::<HideableView<OnEventView<Dialog>>>("doc_view")
@@ -112,48 +92,73 @@ impl Menubar {
   pub fn build_menu_app() -> Tree {
     menu::Tree::new()
       .leaf("Generate Text", generate_contents)
-      .leaf("Insert File", |s| {
-        s.add_layer(Self::build_file_explorer_view())
-      })
+      .leaf("Insert File", build_file_explorer_view)
       .delimiter()
-      .subtree(
-        "MIDI",
-        menu::Tree::new().with(|tree| {
-          for (i, (midi, _)) in config::MENU_MIDI.iter().enumerate() {
-            tree.add_item(menu::Item::leaf(format!("{i}: {midi}"), |_| ()))
-          }
-        }),
-      )
-      .subtree(
-        "OSC",
-        menu::Tree::new().with(|tree| {
-          for (osc, port) in config::MENU_OSC.iter() {
-            tree.add_item(menu::Item::leaf(format!("{osc}: {port}"), |_| ()))
-          }
-        }),
-      )
+      .subtree("MIDI", build_midi_menu())
+      .subtree("OSC", build_osc_menu())
       .delimiter()
       .leaf("Reset", move |s| s.reset_default_callbacks())
       .delimiter()
-      .leaf("About", move |s| {
-        s.add_layer(
-          Dialog::info(format!(
-            "{}\n{}\n\nauthor: {}\nversion: {}",
-            config::APP_NAME,
-            env!("CARGO_PKG_DESCRIPTION"),
-            env!("CARGO_PKG_AUTHORS"),
-            env!("CARGO_PKG_VERSION"),
-          ))
-          .padding(Margins::lrtb(2, 2, 0, 0))
-          .max_width(50),
-        );
-      })
+      .leaf("About", build_about_view)
   }
 
   pub fn build_menu_help() -> Tree {
     // menu::Tree::new().leaf("Docs [h]", |s| Self::show_doc_view(s, true))
     menu::Tree::new().leaf("Docs [h]", |s| s.add_layer(Self::build_doc_view()))
   }
+}
+
+// ------------------------------------------------------------
+
+fn build_midi_menu() -> cursive::menu::Tree {
+  menu::Tree::new().with(|tree| {
+    for (i, (midi, _)) in config::MENU_MIDI.iter().enumerate() {
+      tree.add_item(menu::Item::leaf(format!("{i}: {midi}"), |_| ()))
+    }
+  })
+}
+fn build_osc_menu() -> cursive::menu::Tree {
+  menu::Tree::new().with(|tree| {
+    for (osc, port) in config::MENU_OSC.iter() {
+      tree.add_item(menu::Item::leaf(format!("{osc}: {port}"), |_| ()))
+    }
+  })
+}
+
+fn dialog_file_explorer() -> OnEventView<ResizedView<Dialog>> {
+  let default_path = get_default_database_path();
+  let paths = fs::read_dir(default_path.unwrap())
+    .unwrap()
+    .map(|res| res.map(|e| e.file_name().into_string()))
+    .collect::<Vec<_>>();
+
+  OnEventView::new(Dialog::around(listed_files_view(paths)).max_width(200)).on_event(
+    Event::Key(Key::Esc),
+    |s| {
+      // Menubar::show_file_explorer_view(s, false)
+      s.pop_layer();
+    },
+  )
+}
+
+pub fn build_file_explorer_view(siv: &mut Cursive) {
+  siv.add_layer(
+    HideableView::new(dialog_file_explorer()).with_name(config::file_explorer_unit_view),
+  );
+}
+
+fn build_about_view(siv: &mut Cursive) {
+  siv.add_layer(
+    Dialog::info(format!(
+      "{}\n{}\n\nauthor: {}\nversion: {}",
+      config::APP_NAME,
+      env!("CARGO_PKG_DESCRIPTION"),
+      env!("CARGO_PKG_AUTHORS"),
+      env!("CARGO_PKG_VERSION"),
+    ))
+    .padding(Margins::lrtb(2, 2, 0, 0))
+    .max_width(50),
+  );
 }
 
 // ----------------------------------------------------------------
