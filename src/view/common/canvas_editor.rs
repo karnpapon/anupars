@@ -148,6 +148,10 @@ impl CanvasEditor {
     self.size = size;
   }
 
+  pub fn clear_contents(&mut self) {
+    self.grid = Matrix::new(self.size.x, self.size.y, '\0');
+  }
+
   pub fn text_contents(&self) -> String {
     self
       .text_contents

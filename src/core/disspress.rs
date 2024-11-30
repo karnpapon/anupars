@@ -6,10 +6,8 @@ use std::fs;
 pub fn dissociated() -> HashMap<String, HashMap<String, usize>> {
   let mut dissociated: HashMap<String, HashMap<String, usize>> = HashMap::new();
 
-  let file_path = "path/to/war-and-peace.txt";
-  // let content = fs::read_to_string(file_path).expect("Unable to read file");
-  let content = "The algorithm starts by printing a number of consecutive words (or letters) from the source text. Then it searches the source text for an occurrence of the few last words or letters printed out so far. If multiple occurrences are found, it picks a random one, and proceeds with printing the text following the chosen occurrence. After a predetermined length of text is printed out, the search procedure is repeated for the newly printed ending.";
-
+  let file_path = "src/initializer.txt";
+  let content = fs::read_to_string(file_path).expect("Unable to read file");
   let separators = [
     ' ', ',', '.', '!', '?', ':', '—', '-', '$', '%', '=', '(', ')', ';', '/', '*', '#', '[', ']',
     '’', '”', '“', '\n',
@@ -29,10 +27,6 @@ pub fn dissociated() -> HashMap<String, HashMap<String, usize>> {
   }
 
   dissociated
-}
-
-fn join_spaced(words: Vec<String>) -> String {
-  words.join(" ")
 }
 
 fn dissociated_generate(
@@ -68,13 +62,14 @@ fn dissociated_generate(
     }
   }
 
-  join_spaced(words)
+  words.join(" ")
 }
 
-fn run_dissociate_press() {
+pub fn run() -> String {
   let mut _dissociated: HashMap<String, HashMap<String, usize>> = HashMap::new();
   let diss = dissociated();
-  let random_length = rand::thread_rng().gen_range(1..100);
-  let result = dissociated_generate(&diss, Some(random_length));
-  // println!("res::::::::::{:?}", result);
+  let min_content = 40;
+  let max_content = 100;
+  let random_length = rand::thread_rng().gen_range(min_content..max_content);
+  dissociated_generate(&diss, Some(random_length))
 }

@@ -1,0 +1,47 @@
+Dissociated press is a parody generator (a computer program that generates nonsensical text). 
+The generated text is based on another text using the Markov chain technique. 
+The name is a play on "Associated Press" and the psychological term dissociation 
+(although word salad is more typical of conditions like aphasia and schizophrenia – which is, 
+however, frequently confused with dissociative identity disorder by laypeople).
+
+An implementation of the algorithm is available in Emacs. Another implementation is available as a Perl module in CPAN, 
+Games::Dissociate.
+
+The algorithm
+The algorithm starts by printing a number of consecutive words (or letters) from the source text. 
+Then it searches the source text for an occurrence of the few last words or letters printed out so far. 
+If multiple occurrences are found, it picks a random one, and proceeds with printing the text following the chosen occurrence. 
+After a predetermined length of text is printed out, the search procedure is repeated for the newly printed ending.
+
+Considering that words and phrases tend to appear in specific grammatical contexts, 
+the resulting text usually seems correct grammatically, and if the source text is uniform in style, 
+the result appears to be of similar style and subject, and takes some effort on the reader's side to recognize as not genuine. 
+Still, the randomness of the assembly process deprives it of any logical flow - 
+the loosely related parts are connected in a nonsensical way, creating a humorously abstract, random result.
+
+Examples
+Here is a short example of word-based Dissociated Press applied to the Jargon File:
+
+wart: n. A small, crocky feature that sticks out of an array (C has no checks for this). 
+This is relatively benign and easy to spot if the phrase is bent so as to be not worth paying attention to the medium in question.
+Here is a short example of letter-based Dissociated Press applied to the same source:
+
+window sysIWYG: n. A bit was named aften /bee´t@/ prefer to use the other guy's re, 
+especially in every cast a chuckle on neithout getting into useful informash speech makes removing a featuring a move or usage actual abstractionsidered interj. Indeed spectace logic or problem!
+
+History
+The dissociated press algorithm is described in HAKMEM (1972) Item #176. 
+The name "dissociated press" is first known to have been associated with the Emacs implementation.
+
+Brian Hayes discussed a Travesty algorithm in Scientific American in November 1983.
+The article provided a garbled William Faulkner passage:
+
+When he got on the table, he come in. He never come out of my own pocket as a measure of protecting the company against riot and bloodshed. 
+And when he said. "You tell me a bus ticket, let alone write out no case histories. Then the law come back with a knife!"
+
+Hugh Kenner and Joseph O'Rourke of Johns Hopkins University discussed their frequency table-based Travesty generator for microcomputers in BYTE in November 1984. 
+The article included the Turbo Pascal source for two versions of the generator, 
+one using Hayes' algorithm and another using Claude Shannon's Hellbat algorithm. 
+Murray Lesser offered a compiled BASIC version in the magazine in July 1985, 
+in September 1985 Peter Wayner offered a version that used tree data structures instead of frequency tables, 
+and in December 1985 Neil J. Rubenking offered a version written in Turbo Pascal that stored frequency information in a B-tree.
