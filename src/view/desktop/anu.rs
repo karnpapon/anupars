@@ -6,7 +6,7 @@ use std::sync::{mpsc::Sender, Arc, RwLock};
 
 use crate::{
   core::{config, midi, regex},
-  view::common::canvas_section::CanvasSection,
+  view::common::{canvas_section::CanvasSection, marker},
 };
 
 use super::{
@@ -38,11 +38,12 @@ impl Anu {
     &mut self,
     regex_tx: Sender<regex::Message>,
     midi_tx: Sender<midi::Message>,
+    marker_tx: Sender<marker::Message>,
   ) -> NamedView<LinearLayout> {
     let top_section = TopSection::build(self, regex_tx);
     let middle_section = MiddleSection::build();
     let padding_section = DummyView::new().fixed_width(1);
-    let canvas_section = CanvasSection::build(midi_tx);
+    let canvas_section = CanvasSection::build(marker_tx);
 
     LinearLayout::vertical()
       .child(top_section)

@@ -12,7 +12,6 @@ lazy_static! {
     ("TidalCycles", 6010),
     ("SonicPi", 4559),
   ]);
-  pub static ref MENU_MIDI: StaticStrInt = Vec::from([("Default", 9000)]);
   pub static ref APP_DOCS: StaticStrStr = Vec::from([
     ("n", "add new marker"),
     ("f", "focus only marker(s)"),

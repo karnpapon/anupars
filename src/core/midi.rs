@@ -16,6 +16,8 @@ pub enum Message {
   SetMsgConfig(MidiMsg),
   ClearMsgConfig(),
   TriggerWithRegexPos((usize, Arc<Mutex<BTreeSet<usize>>>)),
+  SwitchDevice(usize),
+  Panic(),
 }
 
 #[derive(Clone, Debug)]
@@ -90,7 +92,7 @@ impl Midi {
 
 impl Midi {
   pub fn init(&mut self) -> Result<(), Box<dyn Error>> {
-    let midi_out = MidiOutput::new("My Test Output")?;
+    let midi_out = MidiOutput::new("MIDI Output")?;
 
     let out_ports = midi_out.ports();
     let out_port: &MidiOutputPort = match out_ports.len() {
@@ -154,9 +156,56 @@ impl Midi {
               .unwrap()
               .call(|| self.trigger_w_regex_pos(msg.0, msg.1.clone()));
           }
+          Message::SwitchDevice(port_index) => {
+            if let Err(e) = self.switch_device(port_index) {
+              eprintln!("Error switching MIDI device: {}", e);
+            }
+          }
+          Message::Panic() => {
+            self.send_all_notes_off();
+          }
         }
       }
     });
+  }
+
+  pub fn get_available_devices(&self) -> Vec<(String, usize)> {
+    let midi_lock = self.midi.lock().unwrap();
+    if let Some(midi_out) = midi_lock.as_ref() {
+      let out_ports = midi_out.ports();
+      out_ports
+        .iter()
+        .enumerate()
+        .map(|(i, p)| {
+          let name = midi_out
+            .port_name(p)
+            .unwrap_or_else(|_| format!("Port {}", i));
+          (name, i)
+        })
+        .collect()
+    } else {
+      Vec::new()
+    }
+  }
+
+  pub fn switch_device(&self, port_index: usize) -> Result<(), Box<dyn Error>> {
+    // Close existing connection
+    let mut out_device = self.out_device.lock().unwrap();
+    *out_device = None;
+    drop(out_device);
+
+    // Create new connection
+    let new_midi_out = MidiOutput::new("MIDI Output")?;
+    let new_ports = new_midi_out.ports();
+    let new_port = new_ports.get(port_index).ok_or("Port not found")?;
+
+    let port_name = new_midi_out.port_name(new_port)?;
+    let conn_out = new_midi_out.connect(new_port, "midir-connection")?;
+
+    *self.out_device.lock().unwrap() = Some(conn_out);
+    *self.out_device_name.lock().unwrap() = Some(port_name.clone());
+
+    Ok(())
   }
 
   pub fn out_device_name(&self) -> String {
@@ -223,6 +272,22 @@ impl Midi {
         Ok(())
       }
       _ => Err("send_midi_note_out::error"),
+    }
+  }
+
+  fn send_all_notes_off(&self) {
+    // Send All Notes Off (CC 123) on all 16 MIDI channels
+    if let Ok(mut conn_out) = self.out_device.lock() {
+      if let Some(connection_out) = conn_out.as_mut() {
+        for channel in 0..16 {
+          // CC 123: All Notes Off
+          let all_notes_off = [0xB0 + channel, 123, 0];
+          let _ = connection_out.send(&all_notes_off);
+          // CC 120: All Sound Off (for good measure)
+          let all_sound_off = [0xB0 + channel, 120, 0];
+          let _ = connection_out.send(&all_sound_off);
+        }
+      }
     }
   }
 }

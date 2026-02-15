@@ -4,6 +4,7 @@ use std::{
   fs::{self, File},
   io::{self, Read},
   path::{Path, PathBuf},
+  sync::mpsc::Sender,
 };
 
 use cursive::{
@@ -89,15 +90,27 @@ impl Menubar {
   //     .set_visible(show);
   // }
 
-  pub fn build_menu_app() -> Tree {
+  pub fn build_menu_app(
+    midi_devices: &[(String, usize)],
+    midi_tx: Sender<crate::core::midi::Message>,
+  ) -> Tree {
+    let midi_tx_reset = midi_tx.clone();
     menu::Tree::new()
       .leaf("Generate Text", generate_contents)
       .leaf("Insert File", build_file_explorer_view)
       .delimiter()
-      .subtree("MIDI", build_midi_menu())
+      .subtree(
+        "MIDI",
+        build_midi_menu(midi_devices.to_vec(), midi_tx.clone()),
+      )
       .subtree("OSC", build_osc_menu())
       .delimiter()
-      .leaf("Reset", move |s| s.reset_default_callbacks())
+      .leaf("Reset", move |s| {
+        s.reset_default_callbacks();
+        // Clear MIDI config and stop all notes
+        let _ = midi_tx_reset.send(crate::core::midi::Message::ClearMsgConfig());
+        let _ = midi_tx_reset.send(crate::core::midi::Message::Panic());
+      })
       .delimiter()
       .leaf("About", build_about_view)
   }
@@ -110,10 +123,29 @@ impl Menubar {
 
 // ------------------------------------------------------------
 
-fn build_midi_menu() -> cursive::menu::Tree {
+fn build_midi_menu(
+  devices: Vec<(String, usize)>,
+  midi_tx: Sender<crate::core::midi::Message>,
+) -> cursive::menu::Tree {
   menu::Tree::new().with(|tree| {
-    for (i, (midi, _)) in config::MENU_MIDI.iter().enumerate() {
-      tree.add_item(menu::Item::leaf(format!("{i}: {midi}"), |_| ()))
+    if devices.is_empty() {
+      tree.add_item(menu::Item::leaf("No devices found", |_| ()));
+    } else {
+      for (name, idx) in devices {
+        let midi_tx_clone = midi_tx.clone();
+        let name_clone = name.clone();
+        tree.add_item(menu::Item::leaf(format!("{}: {}", idx, name), move |s| {
+          // Send message to switch MIDI device
+          if let Err(e) = midi_tx_clone.send(crate::core::midi::Message::SwitchDevice(idx)) {
+            s.add_layer(Dialog::info(format!("Failed to switch device: {}", e)));
+          } else {
+            // Update the MIDI status display
+            s.call_on_name(config::midi_status_unit_view, |c: &mut TextView| {
+              c.set_content(&name_clone);
+            });
+          }
+        }));
+      }
     }
   })
 }

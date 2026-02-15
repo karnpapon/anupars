@@ -35,7 +35,6 @@ fn main() {
   let mut siv: Cursive = Cursive::new();
   init_default_style(&mut siv);
 
-  let menu_app = Menubar::build_menu_app();
   let menu_help = Menubar::build_menu_help();
   let mut midi = Midi::new();
   midi.init().unwrap();
@@ -72,7 +71,11 @@ fn main() {
     midi_tx: midi_tx.clone(),
   }));
 
+  let midi_tx_clone = midi_tx.clone();
   let main_views = anu.build(regex.tx.clone(), midi_tx, marker_tx);
+
+  let devices = midi.get_available_devices();
+  let menu_app = Menubar::build_menu_app(&devices, midi_tx_clone);
 
   siv
     .menubar()
