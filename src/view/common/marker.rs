@@ -32,6 +32,7 @@ pub enum Message {
   Scale((i32, i32)),
   SetMatcher(Option<HashMap<usize, Match>>),
   TriggerWithRegexPos((usize, Arc<Mutex<BTreeSet<usize>>>)),
+  SetGridSize(usize),
 }
 
 pub struct Marker {
@@ -66,7 +67,7 @@ impl Marker {
   }
 
   pub fn run(self) {
-    let marker_area = Arc::new(MarkerArea::new());
+    let marker_area = Arc::new(MarkerArea::new(self.midi_tx.clone()));
     let marker_area_tx = marker_area.run();
 
     thread::spawn(move || {
@@ -130,6 +131,11 @@ impl Marker {
             self
               .midi_tx
               .send(midi::Message::TriggerWithRegexPos(msg))
+              .unwrap();
+          }
+          Message::SetGridSize(width) => {
+            marker_area_tx
+              .send(marker_area::Message::SetGridSize(width))
               .unwrap();
           }
         }

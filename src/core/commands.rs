@@ -206,19 +206,19 @@ impl CommandManager {
     kb.insert("Ctrl+h".into(), vec![Command::ShowMenubar]);
     kb.insert("Esc".into(), vec![Command::ToggleInputRegexAndCanvas]);
     kb.insert(
-      "Shift+Right".into(),
+      "Shift+D".into(),
       vec![Command::AdjustMarker(MoveDirection::Right)],
     );
     kb.insert(
-      "Shift+Left".into(),
+      "Shift+A".into(),
       vec![Command::AdjustMarker(MoveDirection::Left)],
     );
     kb.insert(
-      "Shift+Up".into(),
+      "Shift+W".into(),
       vec![Command::AdjustMarker(MoveDirection::Up)],
     );
     kb.insert(
-      "Shift+Down".into(),
+      "Shift+S".into(),
       vec![Command::AdjustMarker(MoveDirection::Down)],
     );
     kb.insert(">".into(), vec![Command::AdjustBPM(Adjustment::Increase)]);

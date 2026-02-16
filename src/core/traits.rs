@@ -1,4 +1,4 @@
-use std::{collections::HashMap, sync::mpsc::Sender};
+use std::sync::mpsc::Sender;
 
 use cursive::{
   theme::{ColorStyle, ColorType, Style},
@@ -8,7 +8,7 @@ use cursive::{
 
 use crate::view::common::{canvas_editor::MarkerUI, marker};
 
-use super::{config, midi, regex::Match};
+use super::config;
 
 #[derive(Clone, Default, Debug)]
 pub struct Matrix<T> {
@@ -78,7 +78,12 @@ impl Printable for char {
 }
 
 impl<T: Printable + Copy> Matrix<T> {
-  pub fn print(&self, printer: &Printer, marker_ui: &MarkerUI, marker_tx: Sender<marker::Message>) {
+  pub fn print(
+    &self,
+    printer: &Printer,
+    marker_ui: &MarkerUI,
+    _marker_tx: Sender<marker::Message>,
+  ) {
     let MarkerUI {
       regex_indexes,
       text_matcher,
@@ -127,11 +132,6 @@ impl<T: Printable + Copy> Matrix<T> {
               let curr_running_marker = y + x * self.width;
               let hl = text_matcher.as_ref().unwrap();
               if hl.get(&curr_running_marker).is_some() {
-                let _ = marker_tx.send(marker::Message::TriggerWithRegexPos((
-                  curr_running_marker,
-                  regex_indexes.clone(),
-                )));
-
                 printer.print_styled((y, x), &SpannedString::styled('@', Style::none()));
               }
             }

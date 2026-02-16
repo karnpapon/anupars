@@ -146,6 +146,8 @@ impl CanvasEditor {
   pub fn resize(&mut self, size: Vec2) {
     self.grid = Matrix::new(size.x, size.y, '\0');
     self.size = size;
+    // Update grid width for precise timing calculations
+    let _ = self.marker_tx.send(Message::SetGridSize(size.x));
   }
 
   pub fn clear_contents(&mut self) {

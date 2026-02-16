@@ -26,6 +26,7 @@ pub enum Message {
   SetActivePos(usize, cursive::CbSink),
   Scale((i32, i32), cursive::CbSink),
   SetMatcher(Option<HashMap<usize, Match>>, cursive::CbSink),
+  SetGridSize(usize),
 }
 
 pub struct MarkerArea {
@@ -36,10 +37,12 @@ pub struct MarkerArea {
   actived_pos: Arc<Mutex<Vec2>>,
   regex_indexes: Arc<Mutex<BTreeSet<usize>>>,
   text_matcher: Arc<Mutex<Option<HashMap<usize, Match>>>>,
+  midi_tx: Sender<midi::Message>,
+  grid_width: Arc<Mutex<usize>>,
 }
 
 impl MarkerArea {
-  pub fn new() -> Self {
+  pub fn new(midi_tx: Sender<midi::Message>) -> Self {
     MarkerArea {
       pos: Arc::new(Mutex::new(Vec2::zero())),
       area: Arc::new(Mutex::new(Rect::from_point(Vec2::zero()))),
@@ -48,6 +51,8 @@ impl MarkerArea {
       actived_pos: Arc::new(Mutex::new(Vec2::zero())),
       regex_indexes: Arc::new(Mutex::new(BTreeSet::new())),
       text_matcher: Arc::new(Mutex::new(None)),
+      midi_tx,
+      grid_width: Arc::new(Mutex::new(0)),
     }
   }
 
@@ -245,6 +250,26 @@ impl MarkerArea {
             let active_pos_mutex = self.actived_pos.lock().unwrap();
             let active_pos = *active_pos_mutex;
 
+            // Calculate current running marker position
+            let pos = self.pos.lock().unwrap();
+            let grid_width = *self.grid_width.lock().unwrap();
+            let abs_y = pos.y + active_pos.y;
+            let abs_x = pos.x + active_pos.x;
+            let curr_running_marker = (abs_y * grid_width) + abs_x;
+
+            // Check if current position has a regex match and trigger immediately
+            if let Some(matcher) = self.text_matcher.lock().unwrap().as_ref() {
+              if matcher.get(&curr_running_marker).is_some() {
+                let regex_indexes = Arc::clone(&self.regex_indexes);
+
+                // Trigger MIDI from clock thread
+                let _ = self.midi_tx.send(midi::Message::TriggerWithRegexPos((
+                  curr_running_marker,
+                  regex_indexes,
+                )));
+              }
+            }
+
             cb_sink
               .send(Box::new(move |siv| {
                 siv.call_on_name(
@@ -299,6 +324,10 @@ impl MarkerArea {
                 );
               }))
               .unwrap();
+          }
+          Message::SetGridSize(width) => {
+            let mut grid_width = self.grid_width.lock().unwrap();
+            *grid_width = width;
           }
         }
       }
