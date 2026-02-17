@@ -3,6 +3,12 @@ use rand::Rng;
 use std::collections::HashMap;
 use std::fs;
 
+#[cfg(feature = "desktop")]
+const disspress_length: usize = 800;
+
+#[cfg(feature = "microcontroller")]
+const disspress_length: usize = 200;
+
 pub fn dissociated() -> HashMap<String, HashMap<String, usize>> {
   let mut dissociated: HashMap<String, HashMap<String, usize>> = HashMap::new();
 
@@ -69,7 +75,7 @@ pub fn run() -> String {
   let mut _dissociated: HashMap<String, HashMap<String, usize>> = HashMap::new();
   let diss = dissociated();
   let min_content = 40;
-  let max_content = 100;
+  let max_content = disspress_length;
   let random_length = rand::thread_rng().gen_range(min_content..max_content);
   dissociated_generate(&diss, Some(random_length))
 }

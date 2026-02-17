@@ -67,7 +67,9 @@ impl CanvasEditor {
   }
 
   pub fn update_text_contents(&mut self, contents: &str) {
-    self.text_contents = Some(String::from(contents));
+    // remove all newline characters to simplify grid indexing logic
+    let contents = contents.replace("\n", "").replace("\r", "");
+    self.text_contents = Some(contents);
   }
 
   pub fn update_grid_src(&mut self) {
@@ -75,19 +77,21 @@ impl CanvasEditor {
       return;
     };
 
-    let rows: usize = self.grid.width;
-    let cols: usize = self.grid.height;
+    let cols: usize = self.grid.width;
+    let rows: usize = self.grid.height;
 
-    for row in 0..rows {
-      for col in 0..cols {
+    // Standard row-major order: iterate rows (y) then columns (x)
+    for y in 0..rows {
+      for x in 0..cols {
+        // Text is stored in row-major order (left-to-right, top-to-bottom)
         if let Some(char) = self
           .text_contents
           .as_ref()
           .unwrap()
           .chars()
-          .nth(col + (row * cols))
+          .nth(x + (y * cols))
         {
-          self.grid.set(col, row, char);
+          self.grid.set(x, y, char);
         }
       }
     }

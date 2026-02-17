@@ -14,7 +14,6 @@ pub struct Matrix<T> {
   pub data: Vec<T>,
   pub width: usize,
   pub height: usize,
-  // pub
 }
 
 impl<T: Copy> Matrix<T> {
@@ -35,13 +34,14 @@ impl<T: Copy> Matrix<T> {
   }
 
   pub fn set(&mut self, x: usize, y: usize, item: T) {
-    self.data[x + y * self.height] = item;
+    self.data[x + y * self.width] = item;
   }
 
+  #[allow(dead_code)]
   pub fn set_rect(&mut self, width: usize, height: usize, item: T) {
-    for i in 0..height {
-      for j in 0..width {
-        self.set(j, i, item);
+    for y in 0..height {
+      for x in 0..width {
+        self.set(x, y, item);
       }
     }
   }
@@ -94,7 +94,7 @@ impl<T: Printable + Copy> Matrix<T> {
   /// Get the display character for a cell
   fn get_display_char(&self, x: usize, y: usize) -> String {
     self
-      .get(y, x)
+      .get(x, y)
       .unwrap()
       .display_char((x, y).into())
       .to_string()
@@ -128,7 +128,7 @@ impl<T: Printable + Copy> Matrix<T> {
   ) {
     let display_char = self.get_display_char(x, y);
     printer.print_styled(
-      (y, x),
+      (x, y),
       &SpannedString::styled(display_char, Style::highlight()),
     );
 
@@ -145,7 +145,7 @@ impl<T: Printable + Copy> Matrix<T> {
           index_pos.fits(marker_pos) && index_pos.fits_in(marker_end)
         });
 
-        printer.print_styled((y, x), &SpannedString::styled('*', Style::highlight()));
+        printer.print_styled((x, y), &SpannedString::styled('*', Style::highlight()));
       }
     }
   }
@@ -160,10 +160,11 @@ impl<T: Printable + Copy> Matrix<T> {
       ..
     } = marker_ui;
 
-    for y in 0..self.width {
-      for x in 0..self.height {
-        let cell_index = y + x * self.width;
-        let pos = (y, x);
+    // Standard row-major order: iterate rows (y) then columns (x)
+    for y in 0..self.height {
+      for x in 0..self.width {
+        let cell_index = x + y * self.width;
+        let pos = (x, y);
         let is_in_marker_area = marker_area.contains(pos.into());
         let is_active_pos = marker_pos.saturating_add(actived_pos).eq(&pos);
 
