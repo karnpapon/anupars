@@ -107,11 +107,9 @@ pub fn setup_ui(components: &mut AppComponents) {
   }));
 
   // Build main view
-  let main_view = components.anu.build(
-    components.regex_handler.tx.clone(),
-    midi_tx.clone(),
-    marker_tx,
-  );
+  let main_view = components
+    .anu
+    .build(components.regex_handler.tx.clone(), marker_tx);
 
   // Build menu system
   let devices = components.midi.get_available_devices();

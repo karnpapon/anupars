@@ -37,7 +37,6 @@ impl Anu {
   pub fn build(
     &mut self,
     regex_tx: Sender<regex::Message>,
-    midi_tx: Sender<midi::Message>,
     marker_tx: Sender<marker::Message>,
   ) -> NamedView<LinearLayout> {
     let top_section = TopSection::build(self, regex_tx);

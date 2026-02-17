@@ -1,14 +1,13 @@
-use std::sync::mpsc::Sender;
-
 use cursive::{
   theme::{ColorStyle, ColorType, Style},
   utils::span::SpannedString,
   Printer, Vec2,
 };
 
-use crate::view::common::{canvas_editor::MarkerUI, marker};
+use crate::view::common::canvas_editor::MarkerUI;
 
-use super::config;
+use super::{config, regex::Match};
+use std::collections::HashMap;
 
 #[derive(Clone, Default, Debug)]
 pub struct Matrix<T> {
@@ -63,7 +62,7 @@ pub trait Printable {
 
 impl Printable for char {
   fn should_rest(&self, pos: cursive::XY<usize>) -> bool {
-    pos.x % config::GRID_ROW_SPACING == 0 && pos.y % config::GRID_COL_SPACING == 0
+    pos.x.is_multiple_of(config::GRID_ROW_SPACING) && pos.y.is_multiple_of(config::GRID_COL_SPACING)
   }
 
   fn display_char(&self, pos: cursive::XY<usize>) -> char {
@@ -78,91 +77,107 @@ impl Printable for char {
 }
 
 impl<T: Printable + Copy> Matrix<T> {
-  pub fn print(
+  /// Calculate the style for a cell based on text matching
+  fn calculate_cell_style(
+    &self,
+    cell_index: usize,
+    text_matcher: &Option<HashMap<usize, Match>>,
+  ) -> Style {
+    if let Some(matcher) = text_matcher {
+      if matcher.contains_key(&cell_index) {
+        return Style::highlight();
+      }
+    }
+    Style::from_color_style(ColorStyle::front(ColorType::rgb(100, 100, 100)))
+  }
+
+  /// Get the display character for a cell
+  fn get_display_char(&self, x: usize, y: usize) -> String {
+    self
+      .get(y, x)
+      .unwrap()
+      .display_char((x, y).into())
+      .to_string()
+  }
+
+  /// Render the active marker position
+  fn render_active_marker(
     &self,
     printer: &Printer,
-    marker_ui: &MarkerUI,
-    _marker_tx: Sender<marker::Message>,
+    pos: (usize, usize),
+    cell_index: usize,
+    text_matcher: &Option<HashMap<usize, Match>>,
   ) {
+    printer.print_styled(pos, &SpannedString::styled('>', Style::none()));
+
+    if let Some(matcher) = text_matcher {
+      if matcher.contains_key(&cell_index) {
+        printer.print_styled(pos, &SpannedString::styled('@', Style::none()));
+      }
+    }
+  }
+
+  /// Render a cell inside the marker area
+  fn render_marker_area_cell(
+    &self,
+    printer: &Printer,
+    x: usize,
+    y: usize,
+    cell_index: usize,
+    marker_ui: &MarkerUI,
+  ) {
+    let display_char = self.get_display_char(x, y);
+    printer.print_styled(
+      (y, x),
+      &SpannedString::styled(display_char, Style::highlight()),
+    );
+
+    if let Some(matcher) = &marker_ui.text_matcher {
+      if matcher.contains_key(&cell_index) {
+        let mut regex_indexes = marker_ui.regex_indexes.lock().unwrap();
+        regex_indexes.insert(cell_index);
+
+        // Retain only indexes within marker bounds
+        let marker_pos = marker_ui.marker_pos;
+        let marker_end = marker_pos + marker_ui.marker_area.size();
+        regex_indexes.retain(|&index| {
+          let index_pos = self.index_to_xy(&index);
+          index_pos.fits(marker_pos) && index_pos.fits_in(marker_end)
+        });
+
+        printer.print_styled((y, x), &SpannedString::styled('*', Style::highlight()));
+      }
+    }
+  }
+
+  /// Print the matrix to the given printer with marker UI highlighting
+  pub fn print(&self, printer: &Printer, marker_ui: &MarkerUI) {
     let MarkerUI {
-      regex_indexes,
       text_matcher,
       marker_pos,
       marker_area,
       actived_pos,
-    } = &marker_ui;
+      ..
+    } = marker_ui;
 
     for y in 0..self.width {
       for x in 0..self.height {
-        let style = if text_matcher.is_some() {
-          let hl = text_matcher.as_ref().unwrap();
-          if hl.get(&(y + x * self.width)).is_some() {
-            Style::highlight()
+        let cell_index = y + x * self.width;
+        let pos = (y, x);
+        let is_in_marker_area = marker_area.contains(pos.into());
+        let is_active_pos = marker_pos.saturating_add(actived_pos).eq(&pos);
+
+        // Render default cell with style
+        let style = self.calculate_cell_style(cell_index, text_matcher);
+        let display_char = self.get_display_char(x, y);
+        printer.print_styled(pos, &SpannedString::styled(display_char, style));
+
+        // Render marker-specific overlays
+        if is_in_marker_area {
+          if is_active_pos {
+            self.render_active_marker(printer, pos, cell_index, text_matcher);
           } else {
-            Style::from_color_style(ColorStyle::front(ColorType::rgb(100, 100, 100)))
-          }
-        } else {
-          Style::from_color_style(ColorStyle::front(ColorType::rgb(100, 100, 100)))
-        };
-
-        printer.print_styled(
-          (y, x),
-          &SpannedString::styled(
-            self
-              .get(y, x)
-              .unwrap()
-              .display_char((x, y).into())
-              .to_string(),
-            style,
-          ),
-        );
-
-        // draw marker
-        // is_head_pos
-        // if (y, x) == (marker_pos.x, marker_pos.y) {
-        //   printer.print_styled(marker_pos, &SpannedString::styled('>', Style::highlight()));
-        // }
-
-        // is within marker area
-        if marker_area.contains((y, x).into()) {
-          if marker_pos.saturating_add(actived_pos).eq(&(y, x)) {
-            printer.print_styled((y, x), &SpannedString::styled('>', Style::none()));
-
-            if text_matcher.is_some() {
-              let curr_running_marker = y + x * self.width;
-              let hl = text_matcher.as_ref().unwrap();
-              if hl.get(&curr_running_marker).is_some() {
-                printer.print_styled((y, x), &SpannedString::styled('@', Style::none()));
-              }
-            }
-          } else {
-            // inside marker area
-            printer.print_styled(
-              (y, x),
-              &SpannedString::styled(
-                self
-                  .get(y, x)
-                  .unwrap()
-                  .display_char((x, y).into())
-                  .to_string(),
-                Style::highlight(),
-              ),
-            );
-
-            if text_matcher.is_some() {
-              let curr_running_marker = y + x * self.width;
-              let hl = text_matcher.as_ref().unwrap();
-              if hl.get(&curr_running_marker).is_some() {
-                let mut regex_idx = regex_indexes.lock().unwrap();
-                regex_idx.insert(curr_running_marker);
-                regex_idx.retain(|re_idx: &usize| {
-                  let dd = self.index_to_xy(re_idx);
-                  dd.fits(marker_pos) && dd.fits_in(*marker_pos + marker_area.size())
-                });
-
-                printer.print_styled((y, x), &SpannedString::styled('*', Style::highlight()));
-              }
-            }
+            self.render_marker_area_cell(printer, x, y, cell_index, marker_ui);
           }
         }
       }
