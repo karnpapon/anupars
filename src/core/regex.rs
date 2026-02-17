@@ -56,6 +56,21 @@ impl RegExpHandler {
     let (tx, rx) = channel();
     Self { tx, rx, cb_sink }
   }
+
+  // example case:
+  // without this conversion,
+  // a matches position will be incorrect for multi-byte char eg. "naïve"
+  // UTF-8 bytes:  [n][a][ï=2bytes][v][e]
+  // Byte indices:   0  1  2   3    4  5
+  // Char indices:   0  1  2        3  4
+  /// Convert byte index to character index for proper Unicode handling
+  fn byte_to_char_index(text: &str, byte_index: usize) -> usize {
+    text
+      .char_indices()
+      .position(|(i, _)| i == byte_index)
+      .unwrap_or(0)
+  }
+
   fn process_event(data: &EventData) -> Result<HashMap<usize, Match>, RegexError> {
     match Regex::new(&data.pattern.to_string()) {
       Ok(regex) => {
@@ -78,11 +93,15 @@ impl RegExpHandler {
             })
             .collect();
 
+          let byte_start = cap.get(0).unwrap().start();
+          // Convert byte index to character index for multi-byte Unicode support
+          let char_index = Self::byte_to_char_index(text, byte_start);
+
           matches.insert(
-            cap.get(0).unwrap().start(),
+            char_index,
             Match {
-              i: cap.get(0).unwrap().start(),
-              l: cap.get(0).unwrap().as_str().len(),
+              i: char_index,
+              l: cap.get(0).unwrap().as_str().chars().count(), // Character length, not byte length
               groups,
             },
           );
