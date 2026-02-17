@@ -1,7 +1,6 @@
 use std::{
   collections::{BTreeSet, HashMap},
   sync::{mpsc::Sender, Arc, Mutex},
-  usize,
 };
 
 use cursive::{
@@ -148,6 +147,8 @@ impl CanvasEditor {
     self.size = size;
     // Update grid width for precise timing calculations
     let _ = self.marker_tx.send(Message::SetGridSize(size.x));
+    // Ensure marker stays within new bounds
+    let _ = self.marker_tx.send(Message::Move(Direction::Idle, size));
   }
 
   pub fn clear_contents(&mut self) {
@@ -164,14 +165,17 @@ impl CanvasEditor {
 }
 
 fn draw(canvas: &CanvasEditor, printer: &Printer) {
-  canvas
-    .grid
-    .print(printer, &canvas.marker_ui, canvas.marker_tx.clone());
+  canvas.grid.print(printer, &canvas.marker_ui);
 }
 
 fn layout(canvas: &mut CanvasEditor, size: Vec2) {
-  if canvas.size == Vec2::ZERO {
-    canvas.resize(size)
+  // Resize canvas when size changes (initialization or terminal resize)
+  if canvas.size != size {
+    canvas.resize(size);
+    // Update grid content if text is already loaded
+    if canvas.text_contents.is_some() {
+      canvas.update_grid_src();
+    }
   }
 }
 
