@@ -4,8 +4,12 @@ use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 use crate::view::common::marker;
+
+#[cfg(feature = "desktop")]
+use crate::view::desktop::anu::Anu;
+
+#[cfg(feature = "microcontroller")]
 use crate::view::microcontroller::anu::Anu;
-// use crate::view::desktop::anu::Anu;
 
 use super::application::UserData;
 use super::clock::metronome::Message;

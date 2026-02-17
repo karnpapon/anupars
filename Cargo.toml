@@ -9,6 +9,11 @@ repository = "https://github.com/karnpapon/anu-rs"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[features]
+default = ["desktop"]
+desktop = []
+microcontroller = []
+
 [dependencies]
 cursive = "*"
 cursive-tabs = "^0"

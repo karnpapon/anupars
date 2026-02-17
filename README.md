@@ -15,3 +15,14 @@ purposely to run on low-powered machine or embedded system
 # credits
 
 - font-face: [Departure Mono](https://departuremono.com/)
+
+
+
+# run
+
+desktop (default): `cargo run`
+microcontroller: `cargo run --no-default-features --features microcontroller`
+
+# build
+desktop (default): `cargo build --release`
+microcontroller: `cargo build --release --no-default-features --features microcontroller`
