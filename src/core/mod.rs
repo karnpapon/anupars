@@ -2,7 +2,7 @@ pub mod application;
 pub mod clock;
 pub mod command;
 pub mod commands;
-pub mod config;
+pub mod consts;
 pub mod disspress;
 pub mod midi;
 pub mod parser;

@@ -1,10 +1,10 @@
 use cursive::XY;
 use std::time::{Duration, Instant};
 
-use super::config;
+use super::consts;
 
 /// build documentation to string splitted by newline.
-pub fn build_doc_string(src: &config::StaticStrStr) -> String {
+pub fn build_doc_string(src: &consts::StaticStrStr) -> String {
   let mut doc_str = String::new();
   for (command, desc) in src.iter() {
     if command.is_empty() && desc.is_empty() {

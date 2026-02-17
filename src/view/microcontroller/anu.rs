@@ -5,7 +5,7 @@ use cursive::{
 use std::sync::{mpsc::Sender, Arc, RwLock};
 
 use crate::{
-  core::{config, midi, regex},
+  core::{consts, midi, regex},
   view::common::{canvas_section::CanvasSection, marker},
 };
 
@@ -44,7 +44,7 @@ impl Anu {
       .child(top_section)
       .child(padding_section)
       .child(canvas_section)
-      .with_name(config::main_section_view)
+      .with_name(consts::main_section_view)
   }
 
   pub fn set_toggle_regex_input(&self) {

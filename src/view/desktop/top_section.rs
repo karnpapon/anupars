@@ -11,7 +11,7 @@ use cursive::{
 };
 
 use crate::{
-  core::{config, regex, utils},
+  core::{consts, regex, utils},
   view::common::canvas_editor::CanvasEditor,
 };
 
@@ -66,7 +66,7 @@ impl TopSection {
       .on_submit(move |siv: &mut Cursive, texts: &str| {
         input_submit(siv, texts, regex_tx_on_submit.clone())
       })
-      .with_name(config::regex_input_unit_view)
+      .with_name(consts::regex_input_unit_view)
       .fixed_width(25);
 
     let flag_view = LinearLayout::horizontal()
@@ -96,7 +96,7 @@ impl TopSection {
       .child(app.mode_state.button(RegexMode::OnEval, "On-Eval "));
 
     let input_status_unit_view = TextView::new("-")
-      .with_name(config::input_status_unit_view)
+      .with_name(consts::input_status_unit_view)
       .max_width(25);
 
     let input_controller_section_view = ListView::new()
@@ -110,22 +110,22 @@ impl TopSection {
       .child(
         "BPM: ",
         TextView::new(utils::build_bpm_status_str(app.top_section.bpm))
-          .with_name(config::bpm_status_unit_view),
+          .with_name(consts::bpm_status_unit_view),
       )
       .child(
         "RTO: ",
         TextView::new(utils::build_ratio_status_str(app.top_section.ratio, ""))
-          .with_name(config::ratio_status_unit_view),
+          .with_name(consts::ratio_status_unit_view),
       )
       .child(
         "LEN: ",
         TextView::new(utils::build_len_status_str(app.top_section.len))
-          .with_name(config::len_status_unit_view),
+          .with_name(consts::len_status_unit_view),
       )
       .child(
         "POS: ",
         TextView::new(utils::build_pos_status_str(app.top_section.pos))
-          .with_name(config::pos_status_unit_view),
+          .with_name(consts::pos_status_unit_view),
       )
       .full_width();
 
@@ -133,30 +133,30 @@ impl TopSection {
       .child(
         "OSC: ",
         TextView::new("-")
-          .with_name(config::osc_status_unit_view)
+          .with_name(consts::osc_status_unit_view)
           .fixed_width(8),
       )
       .child(
         "MIDI: ",
-        TextView::new("-").with_name(config::midi_status_unit_view),
+        TextView::new("-").with_name(consts::midi_status_unit_view),
       )
       .full_width();
 
     FocusTracker::new(
       Dialog::around(
         LinearLayout::horizontal()
-          .child(input_controller_section_view.with_name(config::input_controller_section_view))
-          .child(status_controller_section_view.with_name(config::status_controller_section_view))
+          .child(input_controller_section_view.with_name(consts::input_controller_section_view))
+          .child(status_controller_section_view.with_name(consts::status_controller_section_view))
           .child(
-            protocol_controller_section_view.with_name(config::protocol_controller_section_view),
+            protocol_controller_section_view.with_name(consts::protocol_controller_section_view),
           ),
       )
       .title_position(cursive::align::HAlign::Right)
-      .with_name(config::control_section_view),
+      .with_name(consts::control_section_view),
     )
     .on_focus(|this| {
       this.get_mut().set_title(SpannedString::styled(
-        format!(" {} ", config::control_section_view),
+        format!(" {} ", consts::control_section_view),
         Style::highlight(),
       ));
       EventResult::consumed()
@@ -170,7 +170,7 @@ impl TopSection {
 
 fn solve_regex(siv: &mut Cursive, texts: &str, regex_tx: Sender<regex::Message>) {
   let mut canvas_editor_section_view = siv
-    .find_name::<Canvas<CanvasEditor>>(config::canvas_editor_section_view)
+    .find_name::<Canvas<CanvasEditor>>(consts::canvas_editor_section_view)
     .unwrap();
   let text = canvas_editor_section_view.state_mut().text_contents();
   let input_regex = regex::EventData {
@@ -187,10 +187,10 @@ fn input_submit(siv: &mut Cursive, texts: &str, regex_tx: Sender<regex::Message>
 }
 
 fn input_edit(siv: &mut Cursive, texts: &str, _cursor: usize, regex_tx: Sender<regex::Message>) {
-  let mut display_view = siv.find_name::<TextView>(config::display_view).unwrap();
+  let mut display_view = siv.find_name::<TextView>(consts::display_view).unwrap();
 
   if texts.is_empty() {
-    display_view.set_content(utils::build_doc_string(&config::APP_WELCOME_MSG));
+    display_view.set_content(utils::build_doc_string(&consts::APP_WELCOME_MSG));
     regex_tx.send(regex::Message::Clear).unwrap();
     return;
   }

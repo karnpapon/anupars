@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::view::common::{canvas_editor::CanvasEditor, marker};
 
-use super::config;
+use super::consts;
 
 #[derive(Debug, Serialize, Deserialize)]
 struct RegexError {
@@ -125,7 +125,7 @@ impl RegExpHandler {
           let _ = self.cb_sink.send(Box::new(move |s| {
             let _ = s
               .call_on_name(
-                config::canvas_editor_section_view,
+                consts::canvas_editor_section_view,
                 |c: &mut Canvas<CanvasEditor>| {
                   c.state_mut()
                     .marker_tx
@@ -149,7 +149,7 @@ impl RegExpHandler {
 
                   let _ = s
                     .call_on_name(
-                      config::canvas_editor_section_view,
+                      consts::canvas_editor_section_view,
                       |c: &mut Canvas<CanvasEditor>| {
                         c.state_mut()
                           .marker_tx
@@ -164,7 +164,7 @@ impl RegExpHandler {
               };
 
               if !res.is_empty() {
-                s.call_on_name(config::display_view, |c: &mut TextView| c.set_content(res))
+                s.call_on_name(consts::display_view, |c: &mut TextView| c.set_content(res))
                   .unwrap();
               }
             }))

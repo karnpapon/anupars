@@ -1,10 +1,10 @@
 use crate::core::{
-    application::UserData,
-    config,
-    midi::{self, MidiMsg},
-    parser::{self},
-    utils,
-  };
+  application::UserData,
+  consts,
+  midi::{self, MidiMsg},
+  parser::{self},
+  utils,
+};
 use cursive::{
   theme::Style,
   view::{Nameable, Resizable},
@@ -25,9 +25,9 @@ impl MiddleSection {
   }
 
   fn build_welcome_msg() -> NamedView<TextView> {
-    TextView::new(utils::build_doc_string(&config::APP_WELCOME_MSG))
+    TextView::new(utils::build_doc_string(&consts::APP_WELCOME_MSG))
       .center()
-      .with_name(config::display_view)
+      .with_name(consts::display_view)
   }
 
   fn build_osc_input() -> NamedView<PaddedView<LinearLayout>> {
@@ -193,11 +193,11 @@ impl MiddleSection {
       .with_tab(Self::build_midi_input())
       // .with_tab(Self::build_osc_input())
       .with_bar_alignment(Align::End)
-      .with_name(config::interactive_display_section_view);
+      .with_name(consts::interactive_display_section_view);
 
     tab
       .get_mut()
-      .set_active_tab(config::display_view)
+      .set_active_tab(consts::display_view)
       .expect("View not found");
 
     tab

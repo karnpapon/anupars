@@ -13,7 +13,7 @@ use cursive::{
   Vec2, XY,
 };
 
-use crate::core::{config, midi, rect::Rect, regex::Match, utils};
+use crate::core::{consts, midi, rect::Rect, regex::Match, utils};
 
 use super::{canvas_editor::CanvasEditor, marker::Direction};
 
@@ -168,12 +168,12 @@ impl MarkerArea {
 
             cb_sink
               .send(Box::new(move |siv| {
-                siv.call_on_name(config::pos_status_unit_view, move |view: &mut TextView| {
+                siv.call_on_name(consts::pos_status_unit_view, move |view: &mut TextView| {
                   view.set_content(utils::build_pos_status_str(pos));
                 });
 
                 siv.call_on_name(
-                  config::canvas_editor_section_view,
+                  consts::canvas_editor_section_view,
                   move |canvas: &mut Canvas<CanvasEditor>| {
                     let editor = canvas.state_mut();
                     editor.marker_ui.marker_pos = pos;
@@ -190,7 +190,7 @@ impl MarkerArea {
             cb_sink
               .send(Box::new(move |siv| {
                 siv.call_on_name(
-                  config::canvas_editor_section_view,
+                  consts::canvas_editor_section_view,
                   move |canvas: &mut Canvas<CanvasEditor>| {
                     let editor = canvas.state_mut();
                     editor.marker_ui.marker_pos = pos;
@@ -209,11 +209,11 @@ impl MarkerArea {
 
             cb_sink
               .send(Box::new(move |siv| {
-                siv.call_on_name(config::pos_status_unit_view, move |view: &mut TextView| {
+                siv.call_on_name(consts::pos_status_unit_view, move |view: &mut TextView| {
                   view.set_content(utils::build_pos_status_str((pos_x, pos_y).into()))
                 });
 
-                siv.call_on_name(config::len_status_unit_view, move |view: &mut TextView| {
+                siv.call_on_name(consts::len_status_unit_view, move |view: &mut TextView| {
                   view.set_content(utils::build_len_status_str((w, h)));
                 });
               }))
@@ -229,12 +229,12 @@ impl MarkerArea {
 
             cb_sink
               .send(Box::new(move |siv| {
-                siv.call_on_name(config::len_status_unit_view, move |view: &mut TextView| {
+                siv.call_on_name(consts::len_status_unit_view, move |view: &mut TextView| {
                   view.set_content(utils::build_len_status_str((w, h)));
                 });
 
                 siv.call_on_name(
-                  config::canvas_editor_section_view,
+                  consts::canvas_editor_section_view,
                   move |canvas: &mut Canvas<CanvasEditor>| {
                     let editor = canvas.state_mut();
 
@@ -273,7 +273,7 @@ impl MarkerArea {
             cb_sink
               .send(Box::new(move |siv| {
                 siv.call_on_name(
-                  config::canvas_editor_section_view,
+                  consts::canvas_editor_section_view,
                   move |canvas: &mut Canvas<CanvasEditor>| {
                     let editor = canvas.state_mut();
                     editor.marker_ui.actived_pos = active_pos;
@@ -290,12 +290,12 @@ impl MarkerArea {
 
             cb_sink
               .send(Box::new(move |siv| {
-                siv.call_on_name(config::len_status_unit_view, move |view: &mut TextView| {
+                siv.call_on_name(consts::len_status_unit_view, move |view: &mut TextView| {
                   view.set_content(utils::build_len_status_str((area_size.x, area_size.y)));
                 });
 
                 siv.call_on_name(
-                  config::canvas_editor_section_view,
+                  consts::canvas_editor_section_view,
                   move |canvas: &mut Canvas<CanvasEditor>| {
                     let editor = canvas.state_mut();
                     editor.marker_ui.marker_area = marker_area;
@@ -315,7 +315,7 @@ impl MarkerArea {
             cb_sink
               .send(Box::new(move |siv| {
                 siv.call_on_name(
-                  config::canvas_editor_section_view,
+                  consts::canvas_editor_section_view,
                   move |canvas: &mut Canvas<CanvasEditor>| {
                     let editor = canvas.state_mut();
                     editor.marker_ui.text_matcher = mm;

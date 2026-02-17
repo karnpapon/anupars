@@ -10,7 +10,7 @@ use cursive::{
   Printer, Vec2,
 };
 
-use crate::core::{config, rect::Rect, regex::Match, traits::Matrix};
+use crate::core::{consts, rect::Rect, regex::Match, traits::Matrix};
 
 use super::marker::{self, Direction, Message};
 
@@ -61,7 +61,7 @@ impl CanvasEditor {
       .with_layout(layout)
       .with_on_event(on_event)
       .with_take_focus(take_focus)
-      .with_name(config::canvas_editor_section_view)
+      .with_name(consts::canvas_editor_section_view)
       .full_height()
       .full_width()
   }

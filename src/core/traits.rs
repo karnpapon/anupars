@@ -6,7 +6,7 @@ use cursive::{
 
 use crate::view::common::canvas_editor::MarkerUI;
 
-use super::{config, regex::Match};
+use super::{consts, regex::Match};
 use std::collections::HashMap;
 
 #[derive(Clone, Default, Debug)]
@@ -62,7 +62,7 @@ pub trait Printable {
 
 impl Printable for char {
   fn should_rest(&self, pos: cursive::XY<usize>) -> bool {
-    pos.x.is_multiple_of(config::GRID_ROW_SPACING) && pos.y.is_multiple_of(config::GRID_COL_SPACING)
+    pos.x.is_multiple_of(consts::GRID_ROW_SPACING) && pos.y.is_multiple_of(consts::GRID_COL_SPACING)
   }
 
   fn display_char(&self, pos: cursive::XY<usize>) -> char {

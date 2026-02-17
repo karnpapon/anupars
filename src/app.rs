@@ -1,7 +1,7 @@
 use crate::core::application::UserDataInner;
 use crate::core::clock::metronome::{Message, Metronome};
 use crate::core::commands::CommandManager;
-use crate::core::config;
+use crate::core::consts;
 use crate::core::midi::Midi;
 use crate::core::regex::RegExpHandler;
 use crate::view::common::marker::Marker;
@@ -129,7 +129,7 @@ pub fn setup_ui(components: &mut AppComponents) {
   // Update MIDI status display
   components
     .cursive
-    .call_on_name(config::midi_status_unit_view, |view: &mut TextView| {
+    .call_on_name(consts::midi_status_unit_view, |view: &mut TextView| {
       view.set_content(components.midi.out_device_name());
     })
     .unwrap();

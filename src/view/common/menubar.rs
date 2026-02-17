@@ -20,7 +20,7 @@ use cursive::{
 };
 
 use super::canvas_editor::CanvasEditor;
-use crate::core::{config, disspress, utils};
+use crate::core::{consts, disspress, utils};
 
 #[derive(Clone, Copy)]
 pub struct Menubar {
@@ -66,14 +66,14 @@ impl Menubar {
       OnEventView::new(Dialog::text(format!(
         "{}\n\n{}",
         "DOCUMENTATION",
-        utils::build_doc_string(&config::APP_DOCS)
+        utils::build_doc_string(&consts::APP_DOCS)
       )))
       .on_event(Event::Key(Key::Esc), |s| {
         // Menubar::show_doc_view(s, false);
         s.pop_layer();
       }),
     )
-    .with_name(config::doc_unit_view)
+    .with_name(consts::doc_unit_view)
   }
 
   // pub fn show_doc_view(siv: &mut Cursive, show: bool) {
@@ -140,7 +140,7 @@ fn build_midi_menu(
             s.add_layer(Dialog::info(format!("Failed to switch device: {}", e)));
           } else {
             // Update the MIDI status display
-            s.call_on_name(config::midi_status_unit_view, |c: &mut TextView| {
+            s.call_on_name(consts::midi_status_unit_view, |c: &mut TextView| {
               c.set_content(&name_clone);
             });
           }
@@ -151,7 +151,7 @@ fn build_midi_menu(
 }
 fn build_osc_menu() -> cursive::menu::Tree {
   menu::Tree::new().with(|tree| {
-    for (osc, port) in config::MENU_OSC.iter() {
+    for (osc, port) in consts::MENU_OSC.iter() {
       tree.add_item(menu::Item::leaf(format!("{osc}: {port}"), |_| ()))
     }
   })
@@ -175,7 +175,7 @@ fn dialog_file_explorer() -> OnEventView<ResizedView<Dialog>> {
 
 pub fn build_file_explorer_view(siv: &mut Cursive) {
   siv.add_layer(
-    HideableView::new(dialog_file_explorer()).with_name(config::file_explorer_unit_view),
+    HideableView::new(dialog_file_explorer()).with_name(consts::file_explorer_unit_view),
   );
 }
 
@@ -183,7 +183,7 @@ fn build_about_view(siv: &mut Cursive) {
   siv.add_layer(
     Dialog::info(format!(
       "{}\n{}\n\nauthor: {}\nversion: {}",
-      config::APP_NAME,
+      consts::APP_NAME,
       env!("CARGO_PKG_DESCRIPTION"),
       env!("CARGO_PKG_AUTHORS"),
       env!("CARGO_PKG_VERSION"),
@@ -205,7 +205,7 @@ pub fn generate_contents(siv: &mut Cursive) {
 fn set_contents(siv: &mut Cursive, contents: String) {
   siv
     .call_on_name(
-      config::canvas_editor_section_view,
+      consts::canvas_editor_section_view,
       move |c: &mut Canvas<CanvasEditor>| {
         c.state_mut().clear_contents();
         c.state_mut().update_text_contents(&contents);
@@ -217,7 +217,7 @@ fn set_contents(siv: &mut Cursive, contents: String) {
 
 pub fn set_preview_contents(siv: &mut Cursive, file: &PathBuf) {
   let mut text_view = siv
-    .find_name::<TextView>(config::file_contents_unit_view)
+    .find_name::<TextView>(consts::file_contents_unit_view)
     .unwrap();
   if let Ok(contents) = read_file(Path::new(file)) {
     text_view.set_content(contents);
@@ -237,7 +237,7 @@ pub fn listed_files_view(dir: Vec<Result<Result<String, OsString>, io::Error>>) 
   let mut panes = LinearLayout::horizontal();
 
   if dir.is_empty() {
-    let empty_dialog = Dialog::info(config::app_empty_dir()).fixed_size((50, 10));
+    let empty_dialog = Dialog::info(consts::app_empty_dir()).fixed_size((50, 10));
     panes.add_child(empty_dialog);
     return panes;
   }
@@ -250,8 +250,8 @@ pub fn listed_files_view(dir: Vec<Result<Result<String, OsString>, io::Error>>) 
     let title_str = list_cloned.as_ref().unwrap().clone();
     let select_value = dirs::home_dir()
       .map(|p| {
-        p.join(config::DEFAULT_APP_DIRECTORY)
-          .join(config::DEFAULT_APP_FILENAME)
+        p.join(consts::DEFAULT_APP_DIRECTORY)
+          .join(consts::DEFAULT_APP_FILENAME)
           .join(list_cloned.unwrap())
       })
       .unwrap();
@@ -265,7 +265,7 @@ pub fn listed_files_view(dir: Vec<Result<Result<String, OsString>, io::Error>>) 
     read_file(first_file_path.as_path()).unwrap_or("empty content".to_string());
 
   let file_contents_unit_view = TextView::new(init_file_details)
-    .with_name(config::file_contents_unit_view)
+    .with_name(consts::file_contents_unit_view)
     .fixed_size((50, 15));
 
   let padding_view = DummyView::new().fixed_width(2);
@@ -297,11 +297,11 @@ fn read_file(path: &Path) -> Result<String, Box<dyn Error>> {
 
 /// Return the path to the default location (~/.anu_rs/contents)
 fn get_default_database_path() -> Result<PathBuf, Box<dyn Error>> {
-  let mut path = match dirs::home_dir().map(|p| p.join(config::DEFAULT_APP_DIRECTORY)) {
+  let mut path = match dirs::home_dir().map(|p| p.join(consts::DEFAULT_APP_DIRECTORY)) {
     Some(d) => d,
     None => return Err("invalid filename".into()),
   };
-  path.push(config::DEFAULT_APP_FILENAME);
+  path.push(consts::DEFAULT_APP_FILENAME);
   if !path.is_dir() {
     fs::create_dir_all(&path)?;
   }
