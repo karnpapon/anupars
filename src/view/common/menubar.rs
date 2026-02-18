@@ -104,6 +104,7 @@ impl Menubar {
         build_midi_menu(midi_devices.to_vec(), midi_tx.clone()),
       )
       .subtree("OSC", build_osc_menu())
+      .subtree("Scale", build_scale_menu())
       .delimiter()
       .leaf("Reset", move |s| {
         s.reset_default_callbacks();
@@ -153,6 +154,30 @@ fn build_osc_menu() -> cursive::menu::Tree {
   menu::Tree::new().with(|tree| {
     for (osc, port) in consts::MENU_OSC.iter() {
       tree.add_item(menu::Item::leaf(format!("{osc}: {port}"), |_| ()))
+    }
+  })
+}
+
+// ------------------------------------------------------------
+
+fn build_scale_menu() -> cursive::menu::Tree {
+  use crate::core::scale::ScaleMode;
+
+  menu::Tree::new().with(|tree| {
+    for scale in ScaleMode::all() {
+      let scale_clone = *scale;
+      tree.add_item(menu::Item::leaf(scale.name(), move |s| {
+        s.call_on_name(
+          consts::canvas_editor_section_view,
+          |canvas: &mut Canvas<CanvasEditor>| {
+            canvas
+              .state_mut()
+              .marker_tx
+              .send(super::marker::Message::SetScaleMode(scale_clone))
+              .unwrap();
+          },
+        );
+      }));
     }
   })
 }

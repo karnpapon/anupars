@@ -16,9 +16,9 @@ use crate::core::{consts, rect::Rect, regex::Match, traits::Matrix};
 use super::marker::{self, Direction, Message};
 
 // Keyboard visualization constants
-const KEYBOARD_MARGIN_TOP: usize = 3; // Space for keyboard labels on the top (3 rows for vertical text)
-const KEYBOARD_MARGIN_LEFT: usize = 3; // Space for keyboard labels on the left
-const BASE_OCTAVE: u8 = 3; // Starting octave (C3 = MIDI 60)
+const KEYBOARD_MARGIN_TOP: usize = 3; // Space for keyboard labels on the top (3 rows for vertical text + 1 padding)
+const KEYBOARD_MARGIN_LEFT: usize = 4; // Space for keyboard labels on the left (3 columns + 1 padding)
+const BASE_OCTAVE: u8 = 2; // Starting octave (C2 = MIDI 48)
 const NOTE_NAMES: [&str; 12] = [
   "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B",
 ];
@@ -38,6 +38,7 @@ pub struct CanvasEditor {
   pub text_contents: Option<String>,
   pub marker_ui: MarkerUI,
   pub show_keyboard: bool,
+  pub scale_mode: crate::core::scale::ScaleMode,
 }
 
 impl MarkerUI {
@@ -61,6 +62,7 @@ impl CanvasEditor {
       text_contents: None,
       marker_ui: MarkerUI::new(),
       show_keyboard: true,
+      scale_mode: crate::core::scale::ScaleMode::default(),
     }
   }
 
@@ -72,14 +74,10 @@ impl CanvasEditor {
       return (0, BASE_OCTAVE, "C");
     }
 
-    // Invert Y so top = higher notes, bottom = lower notes
-    let inverted_y = total_rows.saturating_sub(1).saturating_sub(y);
+    // Use scale mode to map position to note
+    let (note_index, octave) = self.scale_mode.y_to_scale_note(y, total_rows, BASE_OCTAVE);
 
-    // Calculate note within chromatic scale
-    let note_index = inverted_y % 12;
-    let octave = BASE_OCTAVE + ((inverted_y / 12) as u8);
-
-    (note_index as u8, octave, NOTE_NAMES[note_index])
+    (note_index, octave, NOTE_NAMES[note_index as usize])
   }
 
   /// Draw the keyboard visualization on the top margin
@@ -97,7 +95,6 @@ impl CanvasEditor {
 
       let text_color = ColorType::rgb(50, 50, 50);
 
-      // C notes get highlighted background
       let style = if note_name == "C" {
         Style::from(ColorStyle::new(
           ColorType::rgb(0, 0, 0),
@@ -382,9 +379,26 @@ fn on_event(canvas: &mut CanvasEditor, event: Event) -> EventResult {
       position,
       event: MouseEvent::Press(_btn),
     } => {
+      // Adjust position to account for keyboard margins
+      let x_offset = if canvas.show_keyboard {
+        KEYBOARD_MARGIN_LEFT
+      } else {
+        0
+      };
+      let y_offset = if canvas.show_keyboard {
+        KEYBOARD_MARGIN_TOP
+      } else {
+        0
+      };
+
+      let adjusted_position = Vec2::new(
+        position.x.saturating_sub(x_offset),
+        position.y.saturating_sub(y_offset),
+      );
+
       canvas
         .marker_tx
-        .send(Message::SetCurrentPos(position, offset))
+        .send(Message::SetCurrentPos(adjusted_position, offset))
         .unwrap();
       canvas
         .marker_tx
@@ -405,8 +419,20 @@ fn on_event(canvas: &mut CanvasEditor, event: Event) -> EventResult {
       // TODO: not sure why these (`MouseEvent::Hold`) sometimes being called twice (bug?) !?
       // need more investigate on this
 
-      let pos_x = position.x.abs_diff(1);
-      let pos_y = position.y.abs_diff(offset.y);
+      // Adjust position to account for keyboard margins
+      let x_offset = if canvas.show_keyboard {
+        KEYBOARD_MARGIN_LEFT
+      } else {
+        0
+      };
+      let y_offset = if canvas.show_keyboard {
+        KEYBOARD_MARGIN_TOP
+      } else {
+        0
+      };
+
+      let pos_x = position.x.saturating_sub(x_offset + 1);
+      let pos_y = position.y.saturating_sub(offset.y + y_offset);
 
       canvas
         .marker_tx

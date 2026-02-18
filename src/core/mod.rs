@@ -8,6 +8,7 @@ pub mod midi;
 pub mod parser;
 pub mod rect;
 pub mod regex;
+pub mod scale;
 pub mod stack;
 pub mod traits;
 pub mod utils;

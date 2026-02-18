@@ -27,6 +27,7 @@ pub enum Message {
   Scale((i32, i32), cursive::CbSink),
   SetMatcher(Option<HashMap<usize, Match>>, cursive::CbSink),
   SetGridSize(usize, usize),
+  SetScaleMode(crate::core::scale::ScaleMode),
 }
 
 pub struct MarkerArea {
@@ -41,6 +42,7 @@ pub struct MarkerArea {
   grid_width: Arc<Mutex<usize>>,
   grid_height: Arc<Mutex<usize>>,
   prev_active_pos: Arc<Mutex<Vec2>>,
+  scale_mode: Arc<Mutex<crate::core::scale::ScaleMode>>,
 }
 
 impl MarkerArea {
@@ -57,6 +59,7 @@ impl MarkerArea {
       grid_width: Arc::new(Mutex::new(0)),
       grid_height: Arc::new(Mutex::new(0)),
       prev_active_pos: Arc::new(Mutex::new(Vec2::zero())),
+      scale_mode: Arc::new(Mutex::new(crate::core::scale::ScaleMode::default())),
     }
   }
 
@@ -290,12 +293,16 @@ impl MarkerArea {
             // Check if current position has a regex match and trigger with position-based note
             if let Some(matcher) = self.text_matcher.lock().unwrap().as_ref() {
               if matcher.get(&curr_running_marker).is_some() {
+                // Get current scale mode
+                let scale_mode = *self.scale_mode.lock().unwrap();
+
                 // Trigger MIDI with position-based note mapping
                 let _ = self.midi_tx.send(midi::Message::TriggerWithPosition((
                   curr_running_marker,
                   note_position, // Note position based on movement direction
                   grid_width,
                   grid_height,
+                  scale_mode,
                 )));
               }
             }
@@ -360,6 +367,10 @@ impl MarkerArea {
             *grid_width = width;
             let mut grid_height = self.grid_height.lock().unwrap();
             *grid_height = height;
+          }
+          Message::SetScaleMode(scale_mode) => {
+            let mut mode = self.scale_mode.lock().unwrap();
+            *mode = scale_mode;
           }
         }
       }

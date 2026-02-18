@@ -7,11 +7,14 @@ use std::{
   thread, usize,
 };
 
-use cursive::XY;
+use cursive::{views::Canvas, XY};
 
-use crate::core::{midi, regex::Match};
+use crate::core::{consts, midi, regex::Match};
 
-use super::marker_area::{self, MarkerArea};
+use super::{
+  canvas_editor::CanvasEditor,
+  marker_area::{self, MarkerArea},
+};
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Direction {
@@ -33,6 +36,7 @@ pub enum Message {
   SetMatcher(Option<HashMap<usize, Match>>),
   TriggerWithRegexPos((usize, Arc<Mutex<BTreeSet<usize>>>)),
   SetGridSize(usize, usize),
+  SetScaleMode(crate::core::scale::ScaleMode),
 }
 
 pub struct Marker {
@@ -136,6 +140,27 @@ impl Marker {
           Message::SetGridSize(width, height) => {
             marker_area_tx
               .send(marker_area::Message::SetGridSize(width, height))
+              .unwrap();
+          }
+          Message::SetScaleMode(scale_mode) => {
+            let cb_sink = self.cb_sink.clone();
+
+            // Send to marker_area
+            marker_area_tx
+              .send(marker_area::Message::SetScaleMode(scale_mode))
+              .unwrap();
+
+            // Update canvas_editor
+            cb_sink
+              .send(Box::new(move |siv| {
+                siv.call_on_name(
+                  consts::canvas_editor_section_view,
+                  move |canvas: &mut Canvas<CanvasEditor>| {
+                    let editor = canvas.state_mut();
+                    editor.scale_mode = scale_mode;
+                  },
+                );
+              }))
               .unwrap();
           }
         }

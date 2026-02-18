@@ -16,7 +16,7 @@ pub enum Message {
   SetMsgConfig(MidiMsg),
   ClearMsgConfig(),
   TriggerWithRegexPos((usize, Arc<Mutex<BTreeSet<usize>>>)),
-  TriggerWithPosition((usize, usize, usize, usize)), // (grid_index, y_position, grid_width, grid_height)
+  TriggerWithPosition((usize, usize, usize, usize, crate::core::scale::ScaleMode)), // (grid_index, y_position, grid_width, grid_height, scale_mode)
   SwitchDevice(usize),
   Panic(),
 }
@@ -157,12 +157,16 @@ impl Midi {
               .unwrap()
               .call(|| self.trigger_w_regex_pos(msg.0, msg.1.clone()));
           }
-          Message::TriggerWithPosition((grid_index, y_position, grid_width, grid_height)) => {
-            self
-              .throttler
-              .lock()
-              .unwrap()
-              .call(|| self.trigger_w_position(grid_index, y_position, grid_width, grid_height));
+          Message::TriggerWithPosition((
+            grid_index,
+            y_position,
+            grid_width,
+            grid_height,
+            scale_mode,
+          )) => {
+            self.throttler.lock().unwrap().call(|| {
+              self.trigger_w_position(grid_index, y_position, grid_width, grid_height, scale_mode)
+            });
           }
           Message::SwitchDevice(port_index) => {
             if let Err(e) = self.switch_device(port_index) {
@@ -262,9 +266,9 @@ impl Midi {
     y_position: usize,
     _grid_width: usize,
     grid_height: usize,
+    scale_mode: crate::core::scale::ScaleMode,
   ) {
-    // Map Y position to MIDI note (same logic as canvas_editor)
-    // Y increases downward, so we invert to make top = higher notes
+    // Map Y position to MIDI note using scale mode
     const BASE_OCTAVE: u8 = 3;
 
     // Use the actual grid height passed as parameter
@@ -272,9 +276,8 @@ impl Midi {
       return; // Avoid division by zero
     }
 
-    let inverted_y = grid_height.saturating_sub(1).saturating_sub(y_position);
-    let note_index = (inverted_y % 12) as u8;
-    let octave = BASE_OCTAVE + ((inverted_y / 12) as u8);
+    // Use scale mode to map position to note
+    let (note_index, octave) = scale_mode.y_to_scale_note(y_position, grid_height, BASE_OCTAVE);
 
     // Create a MIDI message based on position
     let midi_msg = MidiMsg::from(
