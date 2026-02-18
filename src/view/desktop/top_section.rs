@@ -172,11 +172,14 @@ fn solve_regex(siv: &mut Cursive, texts: &str, regex_tx: Sender<regex::Message>)
   let mut canvas_editor_section_view = siv
     .find_name::<Canvas<CanvasEditor>>(consts::canvas_editor_section_view)
     .unwrap();
-  let text = canvas_editor_section_view.state_mut().text_contents();
+  let state = canvas_editor_section_view.state_mut();
+  let text = state.text_contents();
+  let grid_width = state.grid.width;
   let input_regex = regex::EventData {
     text,
     pattern: texts.to_string(),
     flags: String::new(),
+    grid_width,
   };
 
   regex_tx.send(regex::Message::Solve(input_regex)).unwrap()

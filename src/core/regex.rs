@@ -43,6 +43,7 @@ pub struct EventData {
   pub text: String,
   pub pattern: String,
   pub flags: String,
+  pub grid_width: usize,
 }
 
 pub struct RegExpHandler {
@@ -71,6 +72,37 @@ impl RegExpHandler {
       .unwrap_or(0)
   }
 
+  /// Convert text character index to grid index, accounting for newlines
+  /// When a newline is encountered, the rest of that row is filled with '\0',
+  /// so we need to skip those positions in the grid index calculation
+  fn text_index_to_grid_index(text: &str, text_index: usize, grid_width: usize) -> usize {
+    let mut grid_index = 0;
+    let mut current_row_position = 0;
+
+    for (idx, ch) in text.chars().enumerate() {
+      if idx >= text_index {
+        break;
+      }
+
+      if ch == '\n' {
+        // Skip to the end of current row (padding with '\0')
+        let padding = grid_width - current_row_position;
+        grid_index += padding;
+        current_row_position = 0;
+      } else {
+        grid_index += 1;
+        current_row_position += 1;
+
+        // If we've reached the end of a row, move to next row
+        if current_row_position >= grid_width {
+          current_row_position = 0;
+        }
+      }
+    }
+
+    grid_index
+  }
+
   fn process_event(data: &EventData) -> Result<HashMap<usize, Match>, RegexError> {
     match Regex::new(&data.pattern.to_string()) {
       Ok(regex) => {
@@ -95,13 +127,20 @@ impl RegExpHandler {
 
           let byte_start = cap.get(0).unwrap().start();
           // Convert byte index to character index for multi-byte Unicode support
-          let char_index = Self::byte_to_char_index(text, byte_start);
+          let text_char_index = Self::byte_to_char_index(text, byte_start);
+
+          // Convert text character index to grid index (accounting for newlines)
+          let grid_index = Self::text_index_to_grid_index(text, text_char_index, data.grid_width);
+
+          // Calculate the grid length (excluding newlines from the match)
+          let match_str = cap.get(0).unwrap().as_str();
+          let grid_length = match_str.chars().filter(|&c| c != '\n').count();
 
           matches.insert(
-            char_index,
+            grid_index,
             Match {
-              i: char_index,
-              l: cap.get(0).unwrap().as_str().chars().count(), // Character length, not byte length
+              i: grid_index,
+              l: grid_length,
               groups,
             },
           );

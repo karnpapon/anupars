@@ -67,8 +67,8 @@ impl CanvasEditor {
   }
 
   pub fn update_text_contents(&mut self, contents: &str) {
-    // remove all newline characters to simplify grid indexing logic
-    let contents = contents.replace("\n", "").replace("\r", "");
+    // Normalize newlines to \n only
+    let contents = contents.replace("\r\n", "\n").replace("\r", "\n");
     self.text_contents = Some(contents);
   }
 
@@ -80,18 +80,42 @@ impl CanvasEditor {
     let cols: usize = self.grid.width;
     let rows: usize = self.grid.height;
 
-    // Standard row-major order: iterate rows (y) then columns (x)
+    // Clear the grid first
     for y in 0..rows {
       for x in 0..cols {
-        // Text is stored in row-major order (left-to-right, top-to-bottom)
-        if let Some(char) = self
-          .text_contents
-          .as_ref()
-          .unwrap()
-          .chars()
-          .nth(x + (y * cols))
-        {
-          self.grid.set(x, y, char);
+        self.grid.set(x, y, '\0');
+      }
+    }
+
+    let mut x = 0;
+    let mut y = 0;
+
+    // Iterate through characters, preserving newlines
+    for ch in self.text_contents.as_ref().unwrap().chars() {
+      if y >= rows {
+        break; // Stop if we've filled all rows
+      }
+
+      if ch == '\n' {
+        // Fill rest of current row with '\0' (will render as rest/dot)
+        while x < cols {
+          self.grid.set(x, y, '\0');
+          x += 1;
+        }
+        // Move to next row
+        x = 0;
+        y += 1;
+      } else {
+        // Place character at current position
+        if x < cols {
+          self.grid.set(x, y, ch);
+          x += 1;
+
+          // If we've reached end of row, move to next row
+          if x >= cols {
+            x = 0;
+            y += 1;
+          }
         }
       }
     }
