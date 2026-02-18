@@ -32,7 +32,7 @@ pub enum Message {
   Scale((i32, i32)),
   SetMatcher(Option<HashMap<usize, Match>>),
   TriggerWithRegexPos((usize, Arc<Mutex<BTreeSet<usize>>>)),
-  SetGridSize(usize),
+  SetGridSize(usize, usize),
 }
 
 pub struct Marker {
@@ -133,9 +133,9 @@ impl Marker {
               .send(midi::Message::TriggerWithRegexPos(msg))
               .unwrap();
           }
-          Message::SetGridSize(width) => {
+          Message::SetGridSize(width, height) => {
             marker_area_tx
-              .send(marker_area::Message::SetGridSize(width))
+              .send(marker_area::Message::SetGridSize(width, height))
               .unwrap();
           }
         }

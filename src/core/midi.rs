@@ -16,6 +16,7 @@ pub enum Message {
   SetMsgConfig(MidiMsg),
   ClearMsgConfig(),
   TriggerWithRegexPos((usize, Arc<Mutex<BTreeSet<usize>>>)),
+  TriggerWithPosition((usize, usize, usize, usize)), // (grid_index, y_position, grid_width, grid_height)
   SwitchDevice(usize),
   Panic(),
 }
@@ -156,6 +157,13 @@ impl Midi {
               .unwrap()
               .call(|| self.trigger_w_regex_pos(msg.0, msg.1.clone()));
           }
+          Message::TriggerWithPosition((grid_index, y_position, grid_width, grid_height)) => {
+            self
+              .throttler
+              .lock()
+              .unwrap()
+              .call(|| self.trigger_w_position(grid_index, y_position, grid_width, grid_height));
+          }
           Message::SwitchDevice(port_index) => {
             if let Err(e) = self.switch_device(port_index) {
               eprintln!("Error switching MIDI device: {}", e);
@@ -246,6 +254,39 @@ impl Midi {
         ))
         .unwrap();
     }
+  }
+
+  fn trigger_w_position(
+    &self,
+    _grid_index: usize,
+    y_position: usize,
+    _grid_width: usize,
+    grid_height: usize,
+  ) {
+    // Map Y position to MIDI note (same logic as canvas_editor)
+    // Y increases downward, so we invert to make top = higher notes
+    const BASE_OCTAVE: u8 = 3;
+
+    // Use the actual grid height passed as parameter
+    if grid_height == 0 {
+      return; // Avoid division by zero
+    }
+
+    let inverted_y = grid_height.saturating_sub(1).saturating_sub(y_position);
+    let note_index = (inverted_y % 12) as u8;
+    let octave = BASE_OCTAVE + ((inverted_y / 12) as u8);
+
+    // Create a MIDI message based on position
+    let midi_msg = MidiMsg::from(
+      note_index, octave, 4,   // Default length
+      100, // Default velocity
+      0,   // Channel 1
+      false,
+    );
+
+    // Trigger the note
+    let _ = self.trigger(&midi_msg, true);
+    self.tx.send(Message::Push(midi_msg)).unwrap();
   }
 
   fn build_midi_msg(&self, midi_msg: &MidiMsg, down: bool) -> [u8; 3] {

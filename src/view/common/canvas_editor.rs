@@ -5,6 +5,7 @@ use std::{
 
 use cursive::{
   event::{Event, EventResult, Key, MouseButton, MouseEvent},
+  theme::{ColorStyle, ColorType, Style},
   view::{CannotFocus, Nameable, Resizable},
   views::{Canvas, NamedView, ResizedView},
   Printer, Vec2,
@@ -13,6 +14,14 @@ use cursive::{
 use crate::core::{consts, rect::Rect, regex::Match, traits::Matrix};
 
 use super::marker::{self, Direction, Message};
+
+// Keyboard visualization constants
+const KEYBOARD_MARGIN_TOP: usize = 3; // Space for keyboard labels on the top (3 rows for vertical text)
+const KEYBOARD_MARGIN_LEFT: usize = 3; // Space for keyboard labels on the left
+const BASE_OCTAVE: u8 = 3; // Starting octave (C3 = MIDI 60)
+const NOTE_NAMES: [&str; 12] = [
+  "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B",
+];
 
 pub struct MarkerUI {
   pub marker_area: Rect,
@@ -28,6 +37,7 @@ pub struct CanvasEditor {
   pub grid: Matrix<char>,
   pub text_contents: Option<String>,
   pub marker_ui: MarkerUI,
+  pub show_keyboard: bool,
 }
 
 impl MarkerUI {
@@ -50,6 +60,99 @@ impl CanvasEditor {
       grid: Matrix::new(0, 0, '\0'),
       text_contents: None,
       marker_ui: MarkerUI::new(),
+      show_keyboard: true,
+    }
+  }
+
+  /// Map Y position to MIDI note information
+  /// Y increases downward, so higher Y = lower note (inverted keyboard)
+  pub fn y_to_note(&self, y: usize) -> (u8, u8, &'static str) {
+    let total_rows = self.grid.height;
+    if total_rows == 0 {
+      return (0, BASE_OCTAVE, "C");
+    }
+
+    // Invert Y so top = higher notes, bottom = lower notes
+    let inverted_y = total_rows.saturating_sub(1).saturating_sub(y);
+
+    // Calculate note within chromatic scale
+    let note_index = inverted_y % 12;
+    let octave = BASE_OCTAVE + ((inverted_y / 12) as u8);
+
+    (note_index as u8, octave, NOTE_NAMES[note_index])
+  }
+
+  /// Draw the keyboard visualization on the top margin
+  fn draw_keyboard_top(&self, printer: &Printer) {
+    if !self.show_keyboard || self.grid.height == 0 || self.grid.width == 0 {
+      return;
+    }
+
+    // Draw note names vertically across 3 rows
+    for x in 0..self.grid.width {
+      let y_pos = x % self.grid.height;
+      let (note_index, octave, note_name) = self.y_to_note(y_pos);
+
+      let is_black_key = matches!(note_index, 1 | 3 | 6 | 8 | 10); // C#, D#, F#, G#, A#
+
+      let text_color = ColorType::rgb(50, 50, 50);
+
+      // C notes get highlighted background
+      let style = if note_name == "C" {
+        Style::from(ColorStyle::new(
+          ColorType::rgb(0, 0, 0),
+          ColorType::rgb(100, 100, 100),
+        ))
+      } else {
+        Style::from(ColorStyle::front(text_color))
+      };
+
+      printer.with_style(style, |printer| {
+        if is_black_key {
+          printer.print((x, 1), "#");
+        } else if note_name == "C" {
+          printer.print((x, 0), " ");
+          printer.print((x, 1), " ");
+          printer.print((x, 2), &octave.to_string());
+        } else {
+          printer.print((x, 0), note_name);
+          printer.print((x, 1), ":");
+        }
+      });
+    }
+  }
+
+  /// Draw the keyboard visualization on the left margin
+  fn draw_keyboard_left(&self, printer: &Printer) {
+    if !self.show_keyboard || self.grid.height == 0 {
+      return;
+    }
+
+    // Draw note names vertically
+    for y in 0..self.grid.height {
+      let (note_index, octave, note_name) = self.y_to_note(y);
+
+      // Determine text color based on note (white/black keys)
+      let is_black_key = matches!(note_index, 1 | 3 | 6 | 8 | 10); // C#, D#, F#, G#, A#
+
+      let text_color = if is_black_key {
+        ColorType::rgb(50, 50, 50)
+      } else {
+        ColorType::rgb(100, 100, 100)
+      };
+
+      let style = Style::from(ColorStyle::front(text_color));
+
+      // Format note label (e.g., "C3", "D#4")
+      let label = format!("{}{}", note_name, octave);
+
+      // Use ┣ for C notes to mark octaves, otherwise use ┃
+      let symbol = if note_name == "C" { "┣" } else { "┃" };
+
+      printer.with_style(style, |printer| {
+        printer.print((0, y), &label);
+        printer.print((2, y), symbol);
+      });
     }
   }
 
@@ -173,8 +276,8 @@ impl CanvasEditor {
   pub fn resize(&mut self, size: Vec2) {
     self.grid = Matrix::new(size.x, size.y, '\0');
     self.size = size;
-    // Update grid width for precise timing calculations
-    let _ = self.marker_tx.send(Message::SetGridSize(size.x));
+    // Update grid width and height for precise timing calculations and note mapping
+    let _ = self.marker_tx.send(Message::SetGridSize(size.x, size.y));
     // Ensure marker stays within new bounds
     let _ = self.marker_tx.send(Message::Move(Direction::Idle, size));
   }
@@ -193,7 +296,36 @@ impl CanvasEditor {
 }
 
 fn draw(canvas: &CanvasEditor, printer: &Printer) {
-  canvas.grid.print(printer, &canvas.marker_ui);
+  if canvas.show_keyboard {
+    // Draw top keyboard visualization
+    let top_keyboard_printer = printer.offset((KEYBOARD_MARGIN_LEFT, 0));
+    canvas.draw_keyboard_top(&top_keyboard_printer);
+
+    // Draw left keyboard visualization
+    let left_keyboard_printer = printer.offset((0, KEYBOARD_MARGIN_TOP));
+    canvas.draw_keyboard_left(&left_keyboard_printer);
+
+    // Draw corner symbol where keyboards meet
+    let style = Style::from(ColorStyle::front(ColorType::rgb(200, 200, 200)));
+    printer.with_style(style, |printer| {
+      printer.print((0, 0), "");
+    });
+  }
+
+  // Offset the grid to make room for both keyboards
+  let x_offset = if canvas.show_keyboard {
+    KEYBOARD_MARGIN_LEFT
+  } else {
+    0
+  };
+  let y_offset = if canvas.show_keyboard {
+    KEYBOARD_MARGIN_TOP
+  } else {
+    0
+  };
+  let grid_printer = printer.offset((x_offset, y_offset));
+
+  canvas.grid.print(&grid_printer, &canvas.marker_ui);
 }
 
 fn layout(canvas: &mut CanvasEditor, size: Vec2) {

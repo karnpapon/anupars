@@ -26,7 +26,7 @@ pub enum Message {
   SetActivePos(usize, cursive::CbSink),
   Scale((i32, i32), cursive::CbSink),
   SetMatcher(Option<HashMap<usize, Match>>, cursive::CbSink),
-  SetGridSize(usize),
+  SetGridSize(usize, usize),
 }
 
 pub struct MarkerArea {
@@ -39,6 +39,8 @@ pub struct MarkerArea {
   text_matcher: Arc<Mutex<Option<HashMap<usize, Match>>>>,
   midi_tx: Sender<midi::Message>,
   grid_width: Arc<Mutex<usize>>,
+  grid_height: Arc<Mutex<usize>>,
+  prev_active_pos: Arc<Mutex<Vec2>>,
 }
 
 impl MarkerArea {
@@ -53,6 +55,8 @@ impl MarkerArea {
       text_matcher: Arc::new(Mutex::new(None)),
       midi_tx,
       grid_width: Arc::new(Mutex::new(0)),
+      grid_height: Arc::new(Mutex::new(0)),
+      prev_active_pos: Arc::new(Mutex::new(Vec2::zero())),
     }
   }
 
@@ -253,19 +257,45 @@ impl MarkerArea {
             // Calculate current running marker position
             let pos = self.pos.lock().unwrap();
             let grid_width = *self.grid_width.lock().unwrap();
+            let grid_height = *self.grid_height.lock().unwrap();
             let abs_y = pos.y + active_pos.y;
             let abs_x = pos.x + active_pos.x;
             let curr_running_marker = (abs_y * grid_width) + abs_x;
 
-            // Check if current position has a regex match and trigger immediately
+            // Get previous active_pos and determine movement direction
+            let mut prev_active = self.prev_active_pos.lock().unwrap();
+            let prev_active_pos = *prev_active;
+
+            // Calculate which axis of active_pos changed more (horizontal vs vertical movement)
+            let x_diff = active_pos.x.abs_diff(prev_active_pos.x);
+            let y_diff = active_pos.y.abs_diff(prev_active_pos.y);
+
+            // Determine note position based on movement direction
+            let note_position = if x_diff > y_diff {
+              // Horizontal movement (active_pos.x changed): use top keyboard mapping (x % grid_height)
+              if grid_height > 0 {
+                abs_x % grid_height
+              } else {
+                abs_y
+              }
+            } else {
+              // Vertical movement (active_pos.y changed): use left keyboard mapping (y position directly)
+              abs_y
+            };
+
+            // Store current active_pos for next comparison
+            *prev_active = active_pos;
+            drop(prev_active); // Release lock
+
+            // Check if current position has a regex match and trigger with position-based note
             if let Some(matcher) = self.text_matcher.lock().unwrap().as_ref() {
               if matcher.get(&curr_running_marker).is_some() {
-                let regex_indexes = Arc::clone(&self.regex_indexes);
-
-                // Trigger MIDI from clock thread
-                let _ = self.midi_tx.send(midi::Message::TriggerWithRegexPos((
+                // Trigger MIDI with position-based note mapping
+                let _ = self.midi_tx.send(midi::Message::TriggerWithPosition((
                   curr_running_marker,
-                  regex_indexes,
+                  note_position, // Note position based on movement direction
+                  grid_width,
+                  grid_height,
                 )));
               }
             }
@@ -325,9 +355,11 @@ impl MarkerArea {
               }))
               .unwrap();
           }
-          Message::SetGridSize(width) => {
+          Message::SetGridSize(width, height) => {
             let mut grid_width = self.grid_width.lock().unwrap();
             *grid_width = width;
+            let mut grid_height = self.grid_height.lock().unwrap();
+            *grid_height = height;
           }
         }
       }
