@@ -17,16 +17,13 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 
+use consts::{DEFAULT_TEMPO, TEMPO_CHECK_INTERVAL_MS, TEMPO_RESET_DELAY_MS};
+
 #[cfg(feature = "desktop")]
 use crate::view::desktop::anu::Anu;
 
 #[cfg(feature = "microcontroller")]
 use crate::view::microcontroller::anu::Anu;
-
-// Timing constants
-const TEMPO_CHECK_INTERVAL_MS: u64 = 100;
-const TEMPO_RESET_DELAY_MS: u64 = 500;
-const DEFAULT_TEMPO: i64 = 120;
 
 /// Application components bundle
 pub struct AppComponents {

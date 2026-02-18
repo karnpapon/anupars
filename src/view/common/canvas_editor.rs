@@ -13,15 +13,9 @@ use cursive::{
 
 use crate::core::{consts, rect::Rect, regex::Match, traits::Matrix};
 
-use super::marker::{self, Direction, Message};
+use consts::{BASE_OCTAVE, KEYBOARD_MARGIN_LEFT, KEYBOARD_MARGIN_TOP, NOTE_NAMES};
 
-// Keyboard visualization constants
-const KEYBOARD_MARGIN_TOP: usize = 3; // Space for keyboard labels on the top (3 rows for vertical text + 1 padding)
-const KEYBOARD_MARGIN_LEFT: usize = 4; // Space for keyboard labels on the left (3 columns + 1 padding)
-const BASE_OCTAVE: u8 = 2; // Starting octave (C2 = MIDI 48)
-const NOTE_NAMES: [&str; 12] = [
-  "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B",
-];
+use super::marker::{self, Direction, Message};
 
 pub struct MarkerUI {
   pub marker_area: Rect,

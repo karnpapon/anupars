@@ -107,3 +107,16 @@ pub static display_view: &str = "display_view";
 // canvas
 pub static GRID_ROW_SPACING: usize = 9;
 pub static GRID_COL_SPACING: usize = 9;
+
+// Timing constants
+pub const TEMPO_CHECK_INTERVAL_MS: u64 = 100;
+pub const TEMPO_RESET_DELAY_MS: u64 = 500;
+pub const DEFAULT_TEMPO: i64 = 120;
+
+// Keyboard visualization constants
+pub const KEYBOARD_MARGIN_TOP: usize = 3;
+pub const KEYBOARD_MARGIN_LEFT: usize = 4;
+pub const BASE_OCTAVE: u8 = 2; // Starting octave (C2 = MIDI 48)
+pub const NOTE_NAMES: [&str; 12] = [
+  "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B",
+];
