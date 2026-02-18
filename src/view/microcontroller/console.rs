@@ -275,19 +275,23 @@ impl Console {
 
                   match parser::midi::parser::parse_midi_msg(&midi_msg_str) {
                     Ok((_remaining, (note_n_oct, length, velocity, channel))) => {
-                      for (note, octave) in note_n_oct {
+                      for (i, (note, octave)) in note_n_oct.iter().enumerate() {
                         let note_idx = [
                           "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B",
                         ]
                         .iter()
-                        .position(|nte| nte == &note)
+                        .position(|nte| nte == note)
                         .unwrap();
+
+                        // Cycle through length and velocity arrays if they're shorter than notes
+                        let len = length[i % length.len()];
+                        let vel = velocity[i % velocity.len()];
 
                         let midi_msg = MidiMsg::from(
                           note_idx.try_into().unwrap(),
-                          octave,
-                          length,
-                          velocity,
+                          *octave,
+                          len,
+                          vel,
                           channel,
                           false,
                         );
