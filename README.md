@@ -1,28 +1,31 @@
-# [ WIP ]
+# anu-rs
 
-an attempts for porting `anu` to pure `Rust` language
-purposely to run on low-powered machine or embedded system
+A Rust-based reimplementation of `anu`, designed to operate on resource-constrained devices.
+
+> [!WARNING]
+> This project is a **work in progress**. Features and APIs are subject to change anytime.
 
 <img src="ss.png" />
 
-# building
-
-- for now only `Microcontroller - Raspberry Pi 4B` (64Bit OS) is supported.
-- before building you will need to install `Docker` first
-- then just run `sh ./build`
+# Building
+- Docker must be installed before proceeding
+- Execute: `sh ./build`
 - finger-crossed
 
-# credits
+**Supported Platforms:**
+- Desktop: Linux, macOS, Windows (x86_64, ARM64)
+- Embedded: Raspberry Pi 4B (aarch64-unknown-linux-gnu)
 
-- font-face: [Departure Mono](https://departuremono.com/)
+# Running
+
+- Desktop mode (default): `cargo run`
+- Microcontroller mode: `cargo run --no-default-features --features microcontroller`
+
+# Compilation
+- Desktop mode (default): `cargo build --release`
+- Microcontroller mode: `cargo build --release --no-default-features --features microcontroller`
 
 
+# Credits
 
-# run
-
-desktop (default): `cargo run`
-microcontroller: `cargo run --no-default-features --features microcontroller`
-
-# build
-desktop (default): `cargo build --release`
-microcontroller: `cargo build --release --no-default-features --features microcontroller`
+- Typography: [Departure Mono](https://departuremono.com/)
