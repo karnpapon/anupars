@@ -194,7 +194,7 @@ impl MiddleSection {
   pub fn build_tab() -> NamedView<TabPanel> {
     let mut tab = TabPanel::new()
       .with_tab(Self::build_welcome_msg())
-      .with_tab(Self::build_midi_input())
+      // .with_tab(Self::build_midi_input())
       // .with_tab(Self::build_osc_input())
       .with_bar_alignment(Align::End)
       .with_name(consts::interactive_display_section_view);

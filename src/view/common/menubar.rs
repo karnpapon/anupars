@@ -103,7 +103,8 @@ impl Menubar {
         "MIDI",
         build_midi_menu(midi_devices.to_vec(), midi_tx.clone()),
       )
-      .subtree("OSC", build_osc_menu())
+      // .subtree("OSC", build_osc_menu())
+      .delimiter()
       .subtree("Scale", build_scale_menu())
       .delimiter()
       .leaf("Reset", move |s| {

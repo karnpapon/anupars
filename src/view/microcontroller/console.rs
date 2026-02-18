@@ -323,7 +323,7 @@ impl Console {
 
   pub fn build_tab(app: &mut Anu, regex_tx: Sender<regex::Message>) -> NamedView<TabPanel> {
     let mut tab = TabPanel::new()
-      .with_tab(Self::build_midi_input())
+      // .with_tab(Self::build_midi_input())
       .with_tab(Self::build_main(app, regex_tx))
       .with_bar_alignment(Align::End)
       .with_name(consts::interactive_display_section_view);
