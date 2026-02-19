@@ -160,18 +160,32 @@ impl<T: Printable + Copy> Matrix<T> {
       ..
     } = marker_ui;
 
+    // Calculate absolute active position for crosshair
+    let active_absolute_pos = marker_pos.saturating_add(actived_pos);
+
     // Standard row-major order: iterate rows (y) then columns (x)
     for y in 0..self.height {
       for x in 0..self.width {
         let cell_index = x + y * self.width;
         let pos = (x, y);
         let is_in_marker_area = marker_area.contains(pos.into());
-        let is_active_pos = marker_pos.saturating_add(actived_pos).eq(&pos);
+        let is_active_pos = active_absolute_pos.eq(&pos);
+        let is_on_crosshair_vertical = x == active_absolute_pos.x && !is_active_pos;
+        let is_on_crosshair_horizontal = y == active_absolute_pos.y && !is_active_pos;
 
         // Render default cell with style
         let style = self.calculate_cell_style(cell_index, text_matcher);
         let display_char = self.get_display_char(x, y);
         printer.print_styled(pos, &SpannedString::styled(display_char, style));
+
+        // Render crosshair lines at active position
+        // if is_on_crosshair_vertical {
+        //   let crosshair_style = Style::from(ColorStyle::front(ColorType::rgb(80, 80, 80)));
+        //   printer.print_styled(pos, &SpannedString::styled("|", crosshair_style));
+        // } else if is_on_crosshair_horizontal {
+        //   let crosshair_style = Style::from(ColorStyle::front(ColorType::rgb(80, 80, 80)));
+        //   printer.print_styled(pos, &SpannedString::styled("-", crosshair_style));
+        // }
 
         // Render marker-specific overlays
         if is_in_marker_area {

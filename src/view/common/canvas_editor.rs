@@ -13,7 +13,9 @@ use cursive::{
 
 use crate::core::{consts, rect::Rect, regex::Match, traits::Matrix};
 
-use consts::{BASE_OCTAVE, KEYBOARD_MARGIN_LEFT, KEYBOARD_MARGIN_TOP, NOTE_NAMES};
+use consts::{
+  BASE_OCTAVE, KEYBOARD_MARGIN_BOTTOM, KEYBOARD_MARGIN_LEFT, KEYBOARD_MARGIN_TOP, NOTE_NAMES,
+};
 
 use super::marker::{self, Direction, Message};
 
@@ -162,6 +164,43 @@ impl CanvasEditor {
     }
   }
 
+  /// Draw stack operators at the bottom margin
+  fn draw_stack_operators_bottom(&self, printer: &Printer) {
+    if !self.show_keyboard || self.grid.width == 0 {
+      return;
+    }
+
+    let operators = ['P', 'S', 'O']; // Push, Swap, pOp
+    let spacing = 10; // Space between operators
+    let pattern_width = spacing + 1; // operator + spaces
+
+    let style = Style::from(ColorStyle::front(ColorType::rgb(100, 100, 100)));
+
+    // Draw separator line
+    printer.with_style(style, |printer| {
+      for x in 0..self.grid.width {
+        printer.print((x, 0), "─");
+      }
+    });
+
+    // Draw operators spread across the entire width with spacing
+    let op_style = Style::from(ColorStyle::front(ColorType::rgb(100, 100, 100)));
+    printer.with_style(op_style, |printer| {
+      let mut x = 0;
+      let mut op_index = 0;
+
+      while x < self.grid.width {
+        // Print the operator at the current position
+        let op = operators[op_index % operators.len()];
+        printer.print((x, 1), &op.to_string());
+
+        // Move to next operator position
+        x += pattern_width;
+        op_index += 1;
+      }
+    });
+  }
+
   pub fn build(
     marker_tx: Sender<marker::Message>,
   ) -> ResizedView<ResizedView<NamedView<Canvas<CanvasEditor>>>> {
@@ -229,16 +268,36 @@ impl CanvasEditor {
   }
 
   pub fn resize(&mut self, size: Vec2) {
-    self.grid = Matrix::new(size.x, size.y, '\0');
+    // Adjust size to account for keyboard margins when show_keyboard is true
+    let grid_width = if self.show_keyboard {
+      size.x.saturating_sub(KEYBOARD_MARGIN_LEFT)
+    } else {
+      size.x
+    };
+
+    let grid_height = if self.show_keyboard {
+      size
+        .y
+        .saturating_sub(KEYBOARD_MARGIN_TOP + KEYBOARD_MARGIN_BOTTOM)
+    } else {
+      size.y
+    };
+
+    self.grid = Matrix::new(grid_width, grid_height, '\0');
     self.size = size;
     // Update grid width and height for precise timing calculations and note mapping
-    let _ = self.marker_tx.send(Message::SetGridSize(size.x, size.y));
+    let _ = self
+      .marker_tx
+      .send(Message::SetGridSize(grid_width, grid_height));
     // Ensure marker stays within new bounds
-    let _ = self.marker_tx.send(Message::Move(Direction::Idle, size));
+    let _ = self.marker_tx.send(Message::Move(
+      Direction::Idle,
+      (grid_width, grid_height).into(),
+    ));
   }
 
   pub fn clear_contents(&mut self) {
-    self.grid = Matrix::new(self.size.x, self.size.y, '\0');
+    self.grid = Matrix::new(self.grid.width, self.grid.height, '\0');
   }
 
   pub fn text_contents(&self) -> String {
@@ -259,6 +318,11 @@ fn draw(canvas: &CanvasEditor, printer: &Printer) {
     // Draw left keyboard visualization
     let left_keyboard_printer = printer.offset((0, KEYBOARD_MARGIN_TOP));
     canvas.draw_keyboard_left(&left_keyboard_printer);
+
+    // Draw bottom stack operators
+    let bottom_y = KEYBOARD_MARGIN_TOP + canvas.grid.height;
+    let bottom_operators_printer = printer.offset((KEYBOARD_MARGIN_LEFT, bottom_y));
+    canvas.draw_stack_operators_bottom(&bottom_operators_printer);
 
     // Draw corner symbol where keyboards meet
     let style = Style::from(ColorStyle::front(ColorType::rgb(200, 200, 200)));
@@ -305,30 +369,34 @@ fn on_event(canvas: &mut CanvasEditor, event: Event) -> EventResult {
   match event {
     Event::Refresh => EventResult::consumed(),
     Event::Key(Key::Left) => {
+      let grid_size = (canvas.grid.width, canvas.grid.height).into();
       canvas
         .marker_tx
-        .send(Message::Move(Direction::Left, canvas.size))
+        .send(Message::Move(Direction::Left, grid_size))
         .unwrap();
       EventResult::Ignored
     }
     Event::Key(Key::Right) => {
+      let grid_size = (canvas.grid.width, canvas.grid.height).into();
       canvas
         .marker_tx
-        .send(Message::Move(Direction::Right, canvas.size))
+        .send(Message::Move(Direction::Right, grid_size))
         .unwrap();
       EventResult::Ignored
     }
     Event::Key(Key::Up) => {
+      let grid_size = (canvas.grid.width, canvas.grid.height).into();
       canvas
         .marker_tx
-        .send(Message::Move(Direction::Up, canvas.size))
+        .send(Message::Move(Direction::Up, grid_size))
         .unwrap();
       EventResult::consumed()
     }
     Event::Key(Key::Down) => {
+      let grid_size = (canvas.grid.width, canvas.grid.height).into();
       canvas
         .marker_tx
-        .send(Message::Move(Direction::Down, canvas.size))
+        .send(Message::Move(Direction::Down, grid_size))
         .unwrap();
       EventResult::Ignored
     }
@@ -358,9 +426,10 @@ fn on_event(canvas: &mut CanvasEditor, event: Event) -> EventResult {
         .marker_tx
         .send(Message::SetCurrentPos(adjusted_position, offset))
         .unwrap();
+      let grid_size = (canvas.grid.width, canvas.grid.height).into();
       canvas
         .marker_tx
-        .send(Message::Move(Direction::Idle, canvas.size))
+        .send(Message::Move(Direction::Idle, grid_size))
         .unwrap();
       canvas
         .marker_tx
