@@ -70,7 +70,6 @@ impl CanvasEditor {
       return (0, BASE_OCTAVE, "C");
     }
 
-    // Use left keyboard scale mode to map position to note
     let (note_index, octave) = self
       .scale_mode_left
       .y_to_scale_note(y, total_rows, BASE_OCTAVE);
@@ -86,7 +85,6 @@ impl CanvasEditor {
       return (0, BASE_OCTAVE, "C");
     }
 
-    // Use top keyboard scale mode to map position to note
     let (note_index, octave) = self
       .scale_mode_top
       .y_to_scale_note(y, total_rows, BASE_OCTAVE);
@@ -100,7 +98,6 @@ impl CanvasEditor {
       return;
     }
 
-    // Draw note names vertically across 3 rows
     for x in 0..self.grid.width {
       let y_pos = x % self.grid.height;
       let (note_index, octave, note_name) = self.y_to_note_top(y_pos);
@@ -120,14 +117,12 @@ impl CanvasEditor {
 
       printer.with_style(style, |printer| {
         if is_black_key {
-          printer.print((x, 1), "#");
+          printer.print((x, 0), "#");
         } else if note_name == "C" {
           printer.print((x, 0), " ");
-          printer.print((x, 1), " ");
-          printer.print((x, 2), &octave.to_string());
+          printer.print((x, 1), &octave.to_string());
         } else {
-          printer.print((x, 0), note_name);
-          printer.print((x, 1), ":");
+          printer.print((x, 0), "━");
         }
       });
     }
@@ -181,7 +176,6 @@ impl CanvasEditor {
   }
 
   pub fn update_text_contents(&mut self, contents: &str) {
-    // Normalize newlines to \n only
     let contents = contents.replace("\r\n", "\n").replace("\r", "\n");
     self.text_contents = Some(contents);
   }
@@ -194,7 +188,6 @@ impl CanvasEditor {
     let cols: usize = self.grid.width;
     let rows: usize = self.grid.height;
 
-    // Clear the grid first
     for y in 0..rows {
       for x in 0..cols {
         self.grid.set(x, y, '\0');
