@@ -32,7 +32,8 @@ pub struct CanvasEditor {
   pub text_contents: Option<String>,
   pub marker_ui: MarkerUI,
   pub show_keyboard: bool,
-  pub scale_mode: crate::core::scale::ScaleMode,
+  pub scale_mode_left: crate::core::scale::ScaleMode,
+  pub scale_mode_top: crate::core::scale::ScaleMode,
 }
 
 impl MarkerUI {
@@ -56,20 +57,39 @@ impl CanvasEditor {
       text_contents: None,
       marker_ui: MarkerUI::new(),
       show_keyboard: true,
-      scale_mode: crate::core::scale::ScaleMode::default(),
+      scale_mode_left: crate::core::scale::ScaleMode::default(),
+      scale_mode_top: crate::core::scale::ScaleMode::default(),
     }
   }
 
-  /// Map Y position to MIDI note information
+  /// Map Y position to MIDI note information (for left keyboard)
   /// Y increases downward, so higher Y = lower note (inverted keyboard)
-  pub fn y_to_note(&self, y: usize) -> (u8, u8, &'static str) {
+  pub fn y_to_note_left(&self, y: usize) -> (u8, u8, &'static str) {
     let total_rows = self.grid.height;
     if total_rows == 0 {
       return (0, BASE_OCTAVE, "C");
     }
 
-    // Use scale mode to map position to note
-    let (note_index, octave) = self.scale_mode.y_to_scale_note(y, total_rows, BASE_OCTAVE);
+    // Use left keyboard scale mode to map position to note
+    let (note_index, octave) = self
+      .scale_mode_left
+      .y_to_scale_note(y, total_rows, BASE_OCTAVE);
+
+    (note_index, octave, NOTE_NAMES[note_index as usize])
+  }
+
+  /// Map Y position to MIDI note information (for top keyboard)
+  /// Y increases downward, so higher Y = lower note (inverted keyboard)
+  pub fn y_to_note_top(&self, y: usize) -> (u8, u8, &'static str) {
+    let total_rows = self.grid.height;
+    if total_rows == 0 {
+      return (0, BASE_OCTAVE, "C");
+    }
+
+    // Use top keyboard scale mode to map position to note
+    let (note_index, octave) = self
+      .scale_mode_top
+      .y_to_scale_note(y, total_rows, BASE_OCTAVE);
 
     (note_index, octave, NOTE_NAMES[note_index as usize])
   }
@@ -83,11 +103,11 @@ impl CanvasEditor {
     // Draw note names vertically across 3 rows
     for x in 0..self.grid.width {
       let y_pos = x % self.grid.height;
-      let (note_index, octave, note_name) = self.y_to_note(y_pos);
+      let (note_index, octave, note_name) = self.y_to_note_top(y_pos);
 
       let is_black_key = matches!(note_index, 1 | 3 | 6 | 8 | 10); // C#, D#, F#, G#, A#
 
-      let text_color = ColorType::rgb(50, 50, 50);
+      let text_color = ColorType::rgb(100, 100, 100);
 
       let style = if note_name == "C" {
         Style::from(ColorStyle::new(
@@ -121,7 +141,7 @@ impl CanvasEditor {
 
     // Draw note names vertically
     for y in 0..self.grid.height {
-      let (note_index, octave, note_name) = self.y_to_note(y);
+      let (note_index, octave, note_name) = self.y_to_note_left(y);
 
       // Determine text color based on note (white/black keys)
       let is_black_key = matches!(note_index, 1 | 3 | 6 | 8 | 10); // C#, D#, F#, G#, A#

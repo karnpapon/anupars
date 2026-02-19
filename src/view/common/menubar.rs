@@ -105,7 +105,21 @@ impl Menubar {
       )
       // .subtree("OSC", build_osc_menu())
       .delimiter()
-      .subtree("Scale", build_scale_menu())
+      .subtree("Scale (Left)", build_scale_menu_left())
+      .subtree("Scale (Top)", build_scale_menu_top())
+      .delimiter()
+      .leaf("Toggle Accumulation Mode", |s| {
+        s.call_on_name(
+          consts::canvas_editor_section_view,
+          |canvas: &mut Canvas<CanvasEditor>| {
+            canvas
+              .state_mut()
+              .marker_tx
+              .send(super::marker::Message::ToggleAccumulationMode())
+              .unwrap();
+          },
+        );
+      })
       .delimiter()
       .leaf("Reset", move |s| {
         s.reset_default_callbacks();
@@ -161,7 +175,7 @@ fn build_osc_menu() -> cursive::menu::Tree {
 
 // ------------------------------------------------------------
 
-fn build_scale_menu() -> cursive::menu::Tree {
+fn build_scale_menu_left() -> cursive::menu::Tree {
   use crate::core::scale::ScaleMode;
 
   menu::Tree::new().with(|tree| {
@@ -174,7 +188,29 @@ fn build_scale_menu() -> cursive::menu::Tree {
             canvas
               .state_mut()
               .marker_tx
-              .send(super::marker::Message::SetScaleMode(scale_clone))
+              .send(super::marker::Message::SetScaleModeLeft(scale_clone))
+              .unwrap();
+          },
+        );
+      }));
+    }
+  })
+}
+
+fn build_scale_menu_top() -> cursive::menu::Tree {
+  use crate::core::scale::ScaleMode;
+
+  menu::Tree::new().with(|tree| {
+    for scale in ScaleMode::all() {
+      let scale_clone = *scale;
+      tree.add_item(menu::Item::leaf(scale.name(), move |s| {
+        s.call_on_name(
+          consts::canvas_editor_section_view,
+          |canvas: &mut Canvas<CanvasEditor>| {
+            canvas
+              .state_mut()
+              .marker_tx
+              .send(super::marker::Message::SetScaleModeTop(scale_clone))
               .unwrap();
           },
         );

@@ -27,7 +27,9 @@ pub enum Message {
   Scale((i32, i32), cursive::CbSink),
   SetMatcher(Option<HashMap<usize, Match>>, cursive::CbSink),
   SetGridSize(usize, usize),
-  SetScaleMode(crate::core::scale::ScaleMode),
+  SetScaleModeLeft(crate::core::scale::ScaleMode),
+  SetScaleModeTop(crate::core::scale::ScaleMode),
+  ToggleAccumulationMode(cursive::CbSink),
 }
 
 pub struct MarkerArea {
@@ -42,7 +44,10 @@ pub struct MarkerArea {
   grid_width: Arc<Mutex<usize>>,
   grid_height: Arc<Mutex<usize>>,
   prev_active_pos: Arc<Mutex<Vec2>>,
-  scale_mode: Arc<Mutex<crate::core::scale::ScaleMode>>,
+  scale_mode_left: Arc<Mutex<crate::core::scale::ScaleMode>>,
+  scale_mode_top: Arc<Mutex<crate::core::scale::ScaleMode>>,
+  accumulation_counter: Arc<Mutex<usize>>,
+  accumulation_mode: Arc<Mutex<bool>>,
 }
 
 impl MarkerArea {
@@ -59,7 +64,10 @@ impl MarkerArea {
       grid_width: Arc::new(Mutex::new(0)),
       grid_height: Arc::new(Mutex::new(0)),
       prev_active_pos: Arc::new(Mutex::new(Vec2::zero())),
-      scale_mode: Arc::new(Mutex::new(crate::core::scale::ScaleMode::default())),
+      scale_mode_left: Arc::new(Mutex::new(crate::core::scale::ScaleMode::default())),
+      scale_mode_top: Arc::new(Mutex::new(crate::core::scale::ScaleMode::default())),
+      accumulation_counter: Arc::new(Mutex::new(0)),
+      accumulation_mode: Arc::new(Mutex::new(false)),
     }
   }
 
@@ -167,6 +175,12 @@ impl MarkerArea {
         match control_message {
           Message::Move(direction, canvas_size, cb_sink) => {
             self.set_move(direction.clone(), canvas_size);
+
+            // Reset accumulation counter on user interaction
+            let mut counter = self.accumulation_counter.lock().unwrap();
+            *counter = 0;
+            drop(counter);
+
             let pos_mutex = self.pos.lock().unwrap();
             let pos = *pos_mutex;
 
@@ -177,6 +191,10 @@ impl MarkerArea {
               .send(Box::new(move |siv| {
                 siv.call_on_name(consts::pos_status_unit_view, move |view: &mut TextView| {
                   view.set_content(utils::build_pos_status_str(pos));
+                });
+
+                siv.call_on_name(consts::input_status_unit_view, |view: &mut TextView| {
+                  view.set_content("-");
                 });
 
                 siv.call_on_name(
@@ -192,10 +210,20 @@ impl MarkerArea {
           }
           Message::SetCurrentPos(position, offset, cb_sink) => {
             self.set_current_pos(position, offset);
+
+            // Reset accumulation counter on user interaction
+            let mut counter = self.accumulation_counter.lock().unwrap();
+            *counter = 0;
+            drop(counter);
+
             let mutex_pos = self.pos.lock().unwrap();
             let pos = *mutex_pos;
             cb_sink
               .send(Box::new(move |siv| {
+                siv.call_on_name(consts::input_status_unit_view, |view: &mut TextView| {
+                  view.set_content("-");
+                });
+
                 siv.call_on_name(
                   consts::canvas_editor_section_view,
                   move |canvas: &mut Canvas<CanvasEditor>| {
@@ -229,6 +257,11 @@ impl MarkerArea {
           Message::SetGridArea(current_pos, cb_sink) => {
             self.set_grid_area(current_pos);
 
+            // Reset accumulation counter on user interaction
+            let mut counter = self.accumulation_counter.lock().unwrap();
+            *counter = 0;
+            drop(counter);
+
             let area = self.area.lock().unwrap();
             let w = area.width();
             let h = area.height();
@@ -236,6 +269,10 @@ impl MarkerArea {
 
             cb_sink
               .send(Box::new(move |siv| {
+                siv.call_on_name(consts::input_status_unit_view, |view: &mut TextView| {
+                  view.set_content("-");
+                });
+
                 siv.call_on_name(consts::len_status_unit_view, move |view: &mut TextView| {
                   view.set_content(utils::build_len_status_str((w, h)));
                 });
@@ -255,7 +292,8 @@ impl MarkerArea {
             self.set_actived_pos(tick);
 
             let active_pos_mutex = self.actived_pos.lock().unwrap();
-            let active_pos = *active_pos_mutex;
+            let mut active_pos = *active_pos_mutex;
+            drop(active_pos_mutex);
 
             // Calculate current running marker position
             let pos = self.pos.lock().unwrap();
@@ -264,6 +302,7 @@ impl MarkerArea {
             let abs_y = pos.y + active_pos.y;
             let abs_x = pos.x + active_pos.x;
             let curr_running_marker = (abs_y * grid_width) + abs_x;
+            drop(pos);
 
             // Get previous active_pos and determine movement direction
             let mut prev_active = self.prev_active_pos.lock().unwrap();
@@ -273,17 +312,20 @@ impl MarkerArea {
             let x_diff = active_pos.x.abs_diff(prev_active_pos.x);
             let y_diff = active_pos.y.abs_diff(prev_active_pos.y);
 
-            // Determine note position based on movement direction
-            let note_position = if x_diff > y_diff {
+            // Determine note position and scale mode based on movement direction
+            let (note_position, scale_mode) = if x_diff > y_diff {
               // Horizontal movement (active_pos.x changed): use top keyboard mapping (x % grid_height)
-              if grid_height > 0 {
+              let pos = if grid_height > 0 {
                 abs_x % grid_height
               } else {
                 abs_y
-              }
+              };
+              let scale = *self.scale_mode_top.lock().unwrap();
+              (pos, scale)
             } else {
               // Vertical movement (active_pos.y changed): use left keyboard mapping (y position directly)
-              abs_y
+              let scale = *self.scale_mode_left.lock().unwrap();
+              (abs_y, scale)
             };
 
             // Store current active_pos for next comparison
@@ -293,9 +335,6 @@ impl MarkerArea {
             // Check if current position has a regex match and trigger with position-based note
             if let Some(matcher) = self.text_matcher.lock().unwrap().as_ref() {
               if matcher.get(&curr_running_marker).is_some() {
-                // Get current scale mode
-                let scale_mode = *self.scale_mode.lock().unwrap();
-
                 // Trigger MIDI with position-based note mapping
                 let _ = self.midi_tx.send(midi::Message::TriggerWithPosition((
                   curr_running_marker,
@@ -304,9 +343,107 @@ impl MarkerArea {
                   grid_height,
                   scale_mode,
                 )));
+
+                // Handle accumulation mode
+                if *self.accumulation_mode.lock().unwrap() {
+                  let area = self.area.lock().unwrap();
+                  let marker_area_size = area.width() * area.height();
+                  drop(area);
+
+                  let mut counter = self.accumulation_counter.lock().unwrap();
+                  *counter += 1;
+                  let current_count = *counter;
+
+                  // When counter reaches marker area size, randomly jump to new position
+                  if *counter >= marker_area_size {
+                    *counter = 0; // Reset counter
+                    drop(counter);
+
+                    // Update UI to show reset counter
+                    let cb_sink_update = cb_sink.clone();
+                    cb_sink_update
+                      .send(Box::new(move |siv| {
+                        siv.call_on_name(
+                          consts::input_status_unit_view,
+                          move |view: &mut TextView| {
+                            view.set_content(format!("acc: 0/{}", marker_area_size));
+                          },
+                        );
+                      }))
+                      .unwrap();
+
+                    // Generate random position within canvas_editor bounds
+                    use rand::Rng;
+                    let mut rng = rand::thread_rng();
+
+                    let area = self.area.lock().unwrap();
+                    let marker_width = area.width();
+                    let marker_height = area.height();
+                    drop(area);
+
+                    // Ensure random position keeps marker within grid bounds
+                    let max_x = grid_width.saturating_sub(marker_width);
+                    let max_y = grid_height.saturating_sub(marker_height);
+
+                    if max_x > 0 && max_y > 0 {
+                      let new_x = rng.gen_range(0..=max_x);
+                      let new_y = rng.gen_range(0..=max_y);
+
+                      // Update marker position
+                      let mut pos = self.pos.lock().unwrap();
+                      pos.x = new_x;
+                      pos.y = new_y;
+                      let new_pos = *pos;
+                      drop(pos);
+
+                      // Update marker area
+                      let mut area = self.area.lock().unwrap();
+                      *area = Rect::from_size((new_x, new_y), (marker_width, marker_height));
+                      let new_area = *area;
+                      drop(area);
+
+                      // Reset active position to start
+                      let mut actived = self.actived_pos.lock().unwrap();
+                      *actived = Vec2::zero();
+                      active_pos = Vec2::zero(); // Update local variable for UI update
+                      drop(actived);
+
+                      // Update UI with new marker position and area immediately
+                      let cb_sink_clone = cb_sink.clone();
+                      cb_sink_clone
+                        .send(Box::new(move |siv| {
+                          siv.call_on_name(
+                            consts::canvas_editor_section_view,
+                            move |canvas: &mut Canvas<CanvasEditor>| {
+                              let editor = canvas.state_mut();
+                              editor.marker_ui.marker_pos = new_pos;
+                              editor.marker_ui.marker_area = new_area;
+                            },
+                          );
+                        }))
+                        .unwrap();
+                    }
+                  } else {
+                    // Update UI to show current counter progress
+                    drop(counter);
+                    let cb_sink_update = cb_sink.clone();
+                    cb_sink_update
+                      .send(Box::new(move |siv| {
+                        siv.call_on_name(
+                          consts::input_status_unit_view,
+                          move |view: &mut TextView| {
+                            view
+                              .set_content(format!("acc: {}/{}", current_count, marker_area_size));
+                          },
+                        );
+                      }))
+                      .unwrap();
+                  }
+                }
               }
             }
 
+            // Always update active_pos in UI (will be Vec2::zero() if we just jumped)
             cb_sink
               .send(Box::new(move |siv| {
                 siv.call_on_name(
@@ -321,12 +458,22 @@ impl MarkerArea {
           }
           Message::Scale(size, cb_sink) => {
             self.scale(size);
+
+            // Reset accumulation counter on user interaction
+            let mut counter = self.accumulation_counter.lock().unwrap();
+            *counter = 0;
+            drop(counter);
+
             let area = self.area.lock().unwrap();
             let marker_area = *area;
             let area_size = area.size();
 
             cb_sink
               .send(Box::new(move |siv| {
+                siv.call_on_name(consts::input_status_unit_view, |view: &mut TextView| {
+                  view.set_content("-");
+                });
+
                 siv.call_on_name(consts::len_status_unit_view, move |view: &mut TextView| {
                   view.set_content(utils::build_len_status_str((area_size.x, area_size.y)));
                 });
@@ -368,9 +515,32 @@ impl MarkerArea {
             let mut grid_height = self.grid_height.lock().unwrap();
             *grid_height = height;
           }
-          Message::SetScaleMode(scale_mode) => {
-            let mut mode = self.scale_mode.lock().unwrap();
+          Message::SetScaleModeLeft(scale_mode) => {
+            let mut mode = self.scale_mode_left.lock().unwrap();
             *mode = scale_mode;
+          }
+          Message::SetScaleModeTop(scale_mode) => {
+            let mut mode = self.scale_mode_top.lock().unwrap();
+            *mode = scale_mode;
+          }
+          Message::ToggleAccumulationMode(cb_sink) => {
+            let mut mode = self.accumulation_mode.lock().unwrap();
+            *mode = !*mode;
+
+            // Reset counter when toggling mode
+            let mut counter = self.accumulation_counter.lock().unwrap();
+            *counter = 0;
+            drop(counter);
+            drop(mode);
+
+            // Update UI to clear accumulation display
+            cb_sink
+              .send(Box::new(move |siv| {
+                siv.call_on_name(consts::input_status_unit_view, |view: &mut TextView| {
+                  view.set_content("-");
+                });
+              }))
+              .unwrap();
           }
         }
       }

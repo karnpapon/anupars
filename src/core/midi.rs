@@ -269,7 +269,7 @@ impl Midi {
     scale_mode: crate::core::scale::ScaleMode,
   ) {
     // Map Y position to MIDI note using scale mode
-    const BASE_OCTAVE: u8 = 3;
+    use crate::core::consts::BASE_OCTAVE;
 
     // Use the actual grid height passed as parameter
     if grid_height == 0 {

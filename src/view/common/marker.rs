@@ -36,7 +36,9 @@ pub enum Message {
   SetMatcher(Option<HashMap<usize, Match>>),
   TriggerWithRegexPos((usize, Arc<Mutex<BTreeSet<usize>>>)),
   SetGridSize(usize, usize),
-  SetScaleMode(crate::core::scale::ScaleMode),
+  SetScaleModeLeft(crate::core::scale::ScaleMode),
+  SetScaleModeTop(crate::core::scale::ScaleMode),
+  ToggleAccumulationMode(),
 }
 
 pub struct Marker {
@@ -142,12 +144,12 @@ impl Marker {
               .send(marker_area::Message::SetGridSize(width, height))
               .unwrap();
           }
-          Message::SetScaleMode(scale_mode) => {
+          Message::SetScaleModeLeft(scale_mode) => {
             let cb_sink = self.cb_sink.clone();
 
             // Send to marker_area
             marker_area_tx
-              .send(marker_area::Message::SetScaleMode(scale_mode))
+              .send(marker_area::Message::SetScaleModeLeft(scale_mode))
               .unwrap();
 
             // Update canvas_editor
@@ -157,10 +159,38 @@ impl Marker {
                   consts::canvas_editor_section_view,
                   move |canvas: &mut Canvas<CanvasEditor>| {
                     let editor = canvas.state_mut();
-                    editor.scale_mode = scale_mode;
+                    editor.scale_mode_left = scale_mode;
                   },
                 );
               }))
+              .unwrap();
+          }
+          Message::SetScaleModeTop(scale_mode) => {
+            let cb_sink = self.cb_sink.clone();
+
+            // Send to marker_area
+            marker_area_tx
+              .send(marker_area::Message::SetScaleModeTop(scale_mode))
+              .unwrap();
+
+            // Update canvas_editor
+            cb_sink
+              .send(Box::new(move |siv| {
+                siv.call_on_name(
+                  consts::canvas_editor_section_view,
+                  move |canvas: &mut Canvas<CanvasEditor>| {
+                    let editor = canvas.state_mut();
+                    editor.scale_mode_top = scale_mode;
+                  },
+                );
+              }))
+              .unwrap();
+          }
+          Message::ToggleAccumulationMode() => {
+            let cb_sink = self.cb_sink.clone();
+            // Forward to marker_area
+            marker_area_tx
+              .send(marker_area::Message::ToggleAccumulationMode(cb_sink))
               .unwrap();
           }
         }
