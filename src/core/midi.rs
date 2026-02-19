@@ -16,9 +16,19 @@ pub enum Message {
   SetMsgConfig(MidiMsg),
   ClearMsgConfig(),
   TriggerWithRegexPos((usize, Arc<Mutex<BTreeSet<usize>>>)),
-  TriggerWithPosition((usize, usize, usize, usize, crate::core::scale::ScaleMode)), // (grid_index, y_position, grid_width, grid_height, scale_mode)
+  TriggerWithPosition(
+    (
+      usize,
+      usize,
+      usize,
+      usize,
+      crate::core::scale::ScaleMode,
+      usize,
+    ),
+  ), // (grid_index, y_position, grid_width, grid_height, scale_mode, bpm)
   SwitchDevice(usize),
   Panic(),
+  SetTempo(usize),
 }
 
 #[derive(Clone, Debug)]
@@ -60,12 +70,14 @@ pub struct Midi {
   pub tx: Sender<Message>,
   pub rx: Receiver<Message>,
   throttler: Arc<Mutex<Throttler>>,
+  tempo: Arc<Mutex<usize>>,
 }
 
 impl Midi {
   pub fn new() -> Self {
     let (tx, rx) = channel();
     let throttler = Arc::new(Mutex::new(Throttler::new(Duration::from_millis(100))));
+    let tempo = Arc::new(Mutex::new(120)); // Default 120 BPM
     let Ok(midi_out) = MidiOutput::new("client-midi-output") else {
       return Self {
         midi: None.into(),
@@ -76,6 +88,7 @@ impl Midi {
         rx,
         msg_config_list: Arc::new(Mutex::new(Vec::new())),
         throttler,
+        tempo,
       };
     };
     Midi {
@@ -87,6 +100,7 @@ impl Midi {
       rx,
       msg_config_list: Arc::new(Mutex::new(Vec::new())),
       throttler,
+      tempo,
     }
   }
 }
@@ -163,10 +177,21 @@ impl Midi {
             grid_width,
             grid_height,
             scale_mode,
+            bpm,
           )) => {
-            self.throttler.lock().unwrap().call(|| {
-              self.trigger_w_position(grid_index, y_position, grid_width, grid_height, scale_mode)
-            });
+            // No throttling for position-based triggers - clock/metronome provides timing control
+            self.trigger_w_position(
+              grid_index,
+              y_position,
+              grid_width,
+              grid_height,
+              scale_mode,
+              bpm,
+            );
+          }
+          Message::SetTempo(bpm) => {
+            let mut tempo = self.tempo.lock().unwrap();
+            *tempo = bpm;
           }
           Message::SwitchDevice(port_index) => {
             if let Err(e) = self.switch_device(port_index) {
@@ -267,6 +292,7 @@ impl Midi {
     _grid_width: usize,
     grid_height: usize,
     scale_mode: crate::core::scale::ScaleMode,
+    bpm: usize,
   ) {
     // Map Y position to MIDI note using scale mode
     use crate::core::consts::BASE_OCTAVE;
@@ -279,9 +305,23 @@ impl Midi {
     // Use scale mode to map position to note
     let (note_index, octave) = scale_mode.y_to_scale_note(y_position, grid_height, BASE_OCTAVE);
 
+    // Calculate dynamic note length based on BPM
+    // Higher BPM = shorter notes, minimum length is 1
+    // Formula: length = max(1, base_length * (base_bpm / current_bpm))
+    let base_bpm = 120;
+    let base_length = 4;
+    let calculated_length = if bpm > 0 {
+      ((base_length * base_bpm) / bpm).max(1)
+    } else {
+      base_length
+    };
+    let note_length = (calculated_length as u8).min(127); // Ensure it fits in u8 and MIDI range
+
     // Create a MIDI message based on position
     let midi_msg = MidiMsg::from(
-      note_index, octave, 4,   // Default length
+      note_index,
+      octave,
+      note_length,
       100, // Default velocity
       0,   // Channel 1
       false,

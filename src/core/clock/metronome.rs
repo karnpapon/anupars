@@ -73,6 +73,13 @@ impl Metronome {
         // sent by clock
         Message::Tempo(tempo) => {
           clock_tx.send(clock::Message::Tempo(tempo)).unwrap();
+          
+          // Forward tempo to marker as BPM (convert from Ratio to usize)
+          let bpm = tempo.to_integer() as usize;
+          self
+            .marker_tx
+            .send(marker::Message::SetTempo(bpm))
+            .unwrap();
         }
         Message::Time(time) => {
           let tick = time.ticks().to_usize().unwrap();

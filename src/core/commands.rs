@@ -135,6 +135,12 @@ impl CommandManager {
         *tempo += nudge;
         let temp = *tempo as usize;
 
+        // Send tempo update to marker (which forwards to marker_area and MIDI)
+        self
+          .marker_tx_cloned
+          .send(marker::Message::SetTempo(temp))
+          .unwrap();
+
         self
           .cb_sink
           .send(Box::new(move |s| {

@@ -39,6 +39,7 @@ pub enum Message {
   SetScaleModeLeft(crate::core::scale::ScaleMode),
   SetScaleModeTop(crate::core::scale::ScaleMode),
   ToggleAccumulationMode(),
+  SetTempo(usize),
 }
 
 pub struct Marker {
@@ -191,6 +192,18 @@ impl Marker {
             // Forward to marker_area
             marker_area_tx
               .send(marker_area::Message::ToggleAccumulationMode(cb_sink))
+              .unwrap();
+          }
+          Message::SetTempo(bpm) => {
+            // Forward to marker_area
+            marker_area_tx
+              .send(marker_area::Message::SetTempo(bpm))
+              .unwrap();
+            
+            // Also forward to MIDI
+            self
+              .midi_tx
+              .send(midi::Message::SetTempo(bpm))
               .unwrap();
           }
         }

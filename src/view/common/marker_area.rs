@@ -30,6 +30,7 @@ pub enum Message {
   SetScaleModeLeft(crate::core::scale::ScaleMode),
   SetScaleModeTop(crate::core::scale::ScaleMode),
   ToggleAccumulationMode(cursive::CbSink),
+  SetTempo(usize),
 }
 
 pub struct MarkerArea {
@@ -48,6 +49,7 @@ pub struct MarkerArea {
   scale_mode_top: Arc<Mutex<crate::core::scale::ScaleMode>>,
   accumulation_counter: Arc<Mutex<usize>>,
   accumulation_mode: Arc<Mutex<bool>>,
+  tempo: Arc<Mutex<usize>>,
 }
 
 impl MarkerArea {
@@ -68,6 +70,7 @@ impl MarkerArea {
       scale_mode_top: Arc::new(Mutex::new(crate::core::scale::ScaleMode::default())),
       accumulation_counter: Arc::new(Mutex::new(0)),
       accumulation_mode: Arc::new(Mutex::new(false)),
+      tempo: Arc::new(Mutex::new(120)), // Default 120 BPM
     }
   }
 
@@ -335,6 +338,9 @@ impl MarkerArea {
             // Check if current position has a regex match and trigger with position-based note
             if let Some(matcher) = self.text_matcher.lock().unwrap().as_ref() {
               if matcher.get(&curr_running_marker).is_some() {
+                // Get current tempo
+                let current_tempo = *self.tempo.lock().unwrap();
+
                 // Trigger MIDI with position-based note mapping
                 let _ = self.midi_tx.send(midi::Message::TriggerWithPosition((
                   curr_running_marker,
@@ -342,6 +348,7 @@ impl MarkerArea {
                   grid_width,
                   grid_height,
                   scale_mode,
+                  current_tempo,
                 )));
 
                 // Handle accumulation mode
@@ -541,6 +548,10 @@ impl MarkerArea {
                 });
               }))
               .unwrap();
+          }
+          Message::SetTempo(bpm) => {
+            let mut tempo = self.tempo.lock().unwrap();
+            *tempo = bpm;
           }
         }
       }
