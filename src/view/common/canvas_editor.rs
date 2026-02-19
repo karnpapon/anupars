@@ -183,6 +183,15 @@ impl CanvasEditor {
       }
     });
 
+    // Draw active_pos indicator arrow at the absolute active x position
+    let abs_active_x = self.marker_ui.marker_pos.x + self.marker_ui.actived_pos.x;
+    if abs_active_x < self.grid.width {
+      let arrow_style = Style::from(ColorStyle::front(ColorType::rgb(255, 255, 255)));
+      printer.with_style(arrow_style, |printer| {
+        printer.print((abs_active_x, 0), "v");
+      });
+    }
+
     // Draw operators spread across the entire width with spacing
     let op_style = Style::from(ColorStyle::front(ColorType::rgb(100, 100, 100)));
     printer.with_style(op_style, |printer| {

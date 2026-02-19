@@ -142,7 +142,11 @@ impl Console {
         "MIDI:",
         TextView::new("-").with_name(consts::midi_status_unit_view),
       )
-      .fixed_width(10);
+      .child(
+        "Stack:",
+        TextView::new("[]").with_name(consts::stack_status_unit_view),
+      )
+      .fixed_width(100);
 
     let padding_section_1 = DummyView::new().fixed_width(2);
     let padding_section_2 = DummyView::new().fixed_width(2);

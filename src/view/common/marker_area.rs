@@ -50,6 +50,8 @@ pub struct MarkerArea {
   accumulation_counter: Arc<Mutex<usize>>,
   accumulation_mode: Arc<Mutex<bool>>,
   tempo: Arc<Mutex<usize>>,
+  position_stack: Arc<Mutex<Vec<(usize, usize)>>>,
+  pushed_positions: Arc<Mutex<HashMap<(usize, usize), bool>>>,
 }
 
 impl MarkerArea {
@@ -71,6 +73,8 @@ impl MarkerArea {
       accumulation_counter: Arc::new(Mutex::new(0)),
       accumulation_mode: Arc::new(Mutex::new(false)),
       tempo: Arc::new(Mutex::new(120)), // Default 120 BPM
+      position_stack: Arc::new(Mutex::new(Vec::new())),
+      pushed_positions: Arc::new(Mutex::new(HashMap::new())),
     }
   }
 
@@ -157,6 +161,94 @@ impl MarkerArea {
   pub fn set_text_matcher(&self, text_matcher: Option<HashMap<usize, Match>>) {
     let mut tm = self.text_matcher.lock().unwrap();
     *tm = text_matcher
+  }
+
+  fn check_stack_operator(&self, abs_x: usize, cb_sink: &cursive::CbSink) {
+    // Stack operators: P (Push), S (Swap), O (pOp) with spacing of 11 (10 spaces + 1 char)
+    // Only active when accumulation mode is enabled
+    let is_accumulation_mode = *self.accumulation_mode.lock().unwrap();
+    if !is_accumulation_mode {
+      return;
+    }
+
+    let spacing = 11;
+    let operators = ['P', 'S', 'O'];
+
+    // Check if abs_x aligns with an operator position
+    if abs_x % spacing == 0 {
+      let operator_index = (abs_x / spacing) % operators.len();
+      let operator = operators[operator_index];
+
+      match operator {
+        'P' => {
+          // Push: Add marker area starting position to stack
+          let marker_pos = self.pos.lock().unwrap();
+          let push_pos = (marker_pos.x, marker_pos.y);
+          drop(marker_pos);
+
+          let mut pushed = self.pushed_positions.lock().unwrap();
+          if !pushed.contains_key(&push_pos) {
+            pushed.insert(push_pos, true);
+            drop(pushed);
+
+            let mut stack = self.position_stack.lock().unwrap();
+            stack.push(push_pos);
+            let stack_display = format!("{:?}", *stack);
+            drop(stack);
+
+            // Update UI
+            cb_sink
+              .send(Box::new(move |siv| {
+                siv.call_on_name(consts::stack_status_unit_view, |view: &mut TextView| {
+                  view.set_content(stack_display);
+                });
+              }))
+              .unwrap();
+          }
+        }
+        'S' => {
+          // Swap: Swap top two positions in stack
+          let mut stack = self.position_stack.lock().unwrap();
+          let len = stack.len();
+          if len >= 2 {
+            stack.swap(len - 1, len - 2);
+          }
+          let stack_display = format!("{:?}", *stack);
+          drop(stack);
+
+          // Update UI
+          cb_sink
+            .send(Box::new(move |siv| {
+              siv.call_on_name(consts::stack_status_unit_view, |view: &mut TextView| {
+                view.set_content(stack_display);
+              });
+            }))
+            .unwrap();
+        }
+        'O' => {
+          // pOp: Remove last position from stack
+          let mut stack = self.position_stack.lock().unwrap();
+          if let Some(pos) = stack.pop() {
+            let stack_display = format!("{:?}", *stack);
+            drop(stack);
+
+            let mut pushed = self.pushed_positions.lock().unwrap();
+            pushed.remove(&pos);
+            drop(pushed);
+
+            // Update UI
+            cb_sink
+              .send(Box::new(move |siv| {
+                siv.call_on_name(consts::stack_status_unit_view, |view: &mut TextView| {
+                  view.set_content(stack_display);
+                });
+              }))
+              .unwrap();
+          }
+        }
+        _ => {}
+      }
+    }
   }
 
   fn is_head(&self, curr_pos: Vec2) -> bool {
@@ -353,6 +445,9 @@ impl MarkerArea {
 
                 // Handle accumulation mode
                 if *self.accumulation_mode.lock().unwrap() {
+                  // Check stack operator at current abs_x position (only when accumulation mode is on)
+                  self.check_stack_operator(abs_x, &cb_sink);
+
                   let area = self.area.lock().unwrap();
                   let marker_area_size = area.width() * area.height();
                   drop(area);
@@ -388,48 +483,102 @@ impl MarkerArea {
                     let marker_height = area.height();
                     drop(area);
 
-                    // Ensure random position keeps marker within grid bounds
-                    let max_x = grid_width.saturating_sub(marker_width);
-                    let max_y = grid_height.saturating_sub(marker_height);
+                    // Get current marker position to check against stack
+                    let current_marker_pos = {
+                      let pos = self.pos.lock().unwrap();
+                      (pos.x, pos.y)
+                    };
 
-                    if max_x > 0 && max_y > 0 {
-                      let new_x = rng.gen_range(0..=max_x);
-                      let new_y = rng.gen_range(0..=max_y);
+                    // Determine jump position: check stack first, otherwise random
+                    let mut stack = self.position_stack.lock().unwrap();
+                    let (new_x, new_y) = if let Some(&top_pos) = stack.last() {
+                      // Check if stack position is the same as current position
+                      if top_pos == current_marker_pos {
+                        // Same position, jump randomly but keep position in stack for next time
+                        drop(stack);
 
-                      // Update marker position
-                      let mut pos = self.pos.lock().unwrap();
-                      pos.x = new_x;
-                      pos.y = new_y;
-                      let new_pos = *pos;
-                      drop(pos);
+                        // Generate random position
+                        let max_x = grid_width.saturating_sub(marker_width);
+                        let max_y = grid_height.saturating_sub(marker_height);
 
-                      // Update marker area
-                      let mut area = self.area.lock().unwrap();
-                      *area = Rect::from_size((new_x, new_y), (marker_width, marker_height));
-                      let new_area = *area;
-                      drop(area);
+                        if max_x > 0 && max_y > 0 {
+                          (rng.gen_range(0..=max_x), rng.gen_range(0..=max_y))
+                        } else {
+                          (0, 0)
+                        }
+                      } else {
+                        // Use position from stack (pop it since we're jumping to it)
+                        let pos = stack.pop().unwrap();
+                        let stack_display = format!("{:?}", *stack);
+                        drop(stack);
 
-                      // Reset active position to start
-                      let mut actived = self.actived_pos.lock().unwrap();
-                      *actived = Vec2::zero();
-                      active_pos = Vec2::zero(); // Update local variable for UI update
-                      drop(actived);
+                        // Remove from pushed_positions
+                        let mut pushed = self.pushed_positions.lock().unwrap();
+                        pushed.remove(&pos);
+                        drop(pushed);
 
-                      // Update UI with new marker position and area immediately
-                      let cb_sink_clone = cb_sink.clone();
-                      cb_sink_clone
-                        .send(Box::new(move |siv| {
-                          siv.call_on_name(
-                            consts::canvas_editor_section_view,
-                            move |canvas: &mut Canvas<CanvasEditor>| {
-                              let editor = canvas.state_mut();
-                              editor.marker_ui.marker_pos = new_pos;
-                              editor.marker_ui.marker_area = new_area;
-                            },
-                          );
-                        }))
-                        .unwrap();
-                    }
+                        // Update stack UI
+                        let cb_sink_stack = cb_sink.clone();
+                        cb_sink_stack
+                          .send(Box::new(move |siv| {
+                            siv.call_on_name(
+                              consts::stack_status_unit_view,
+                              |view: &mut TextView| {
+                                view.set_content(stack_display);
+                              },
+                            );
+                          }))
+                          .unwrap();
+
+                        pos
+                      }
+                    } else {
+                      drop(stack);
+
+                      // No position in stack, jump randomly
+                      let max_x = grid_width.saturating_sub(marker_width);
+                      let max_y = grid_height.saturating_sub(marker_height);
+
+                      if max_x > 0 && max_y > 0 {
+                        (rng.gen_range(0..=max_x), rng.gen_range(0..=max_y))
+                      } else {
+                        (0, 0)
+                      }
+                    };
+
+                    // Update marker position
+                    let mut pos = self.pos.lock().unwrap();
+                    pos.x = new_x;
+                    pos.y = new_y;
+                    let new_pos = *pos;
+                    drop(pos);
+
+                    // Update marker area
+                    let mut area = self.area.lock().unwrap();
+                    *area = Rect::from_size((new_x, new_y), (marker_width, marker_height));
+                    let new_area = *area;
+                    drop(area);
+
+                    // Reset active position to start
+                    let mut actived = self.actived_pos.lock().unwrap();
+                    *actived = Vec2::zero();
+                    active_pos = Vec2::zero(); // Update local variable for UI update
+                    drop(actived);
+
+                    // Update UI with new marker position and area immediately
+                    let cb_sink_clone = cb_sink.clone();
+                    cb_sink_clone
+                      .send(Box::new(move |siv| {
+                        siv.call_on_name(
+                          consts::canvas_editor_section_view,
+                          move |canvas: &mut Canvas<CanvasEditor>| {
+                            let editor = canvas.state_mut();
+                            editor.marker_ui.marker_pos = new_pos;
+                            editor.marker_ui.marker_area = new_area;
+                          },
+                        );
+                      }))
+                      .unwrap();
                   } else {
                     // Update UI to show current counter progress
                     drop(counter);
@@ -533,6 +682,7 @@ impl MarkerArea {
           Message::ToggleAccumulationMode(cb_sink) => {
             let mut mode = self.accumulation_mode.lock().unwrap();
             *mode = !*mode;
+            let is_enabled = *mode;
 
             // Reset counter when toggling mode
             let mut counter = self.accumulation_counter.lock().unwrap();
@@ -540,12 +690,29 @@ impl MarkerArea {
             drop(counter);
             drop(mode);
 
-            // Update UI to clear accumulation display
+            // Clear stack when disabling accumulation mode
+            if !is_enabled {
+              let mut stack = self.position_stack.lock().unwrap();
+              stack.clear();
+              drop(stack);
+
+              let mut pushed = self.pushed_positions.lock().unwrap();
+              pushed.clear();
+              drop(pushed);
+            }
+
+            // Update UI to clear accumulation display and stack display
             cb_sink
               .send(Box::new(move |siv| {
                 siv.call_on_name(consts::input_status_unit_view, |view: &mut TextView| {
                   view.set_content("-");
                 });
+
+                if !is_enabled {
+                  siv.call_on_name(consts::stack_status_unit_view, |view: &mut TextView| {
+                    view.set_content("[]");
+                  });
+                }
               }))
               .unwrap();
           }

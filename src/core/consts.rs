@@ -82,6 +82,7 @@ pub static len_status_unit_view: &str = "len_status_unit_view";
 pub static pos_status_unit_view: &str = "pos_status_unit_view";
 pub static osc_status_unit_view: &str = "osc_status_unit_view";
 pub static midi_status_unit_view: &str = "midi_status_unit_view";
+pub static stack_status_unit_view: &str = "stack_status_unit_view";
 
 pub static input_controller_section_view: &str = "input_controller_section_view";
 pub static status_controller_section_view: &str = "status_controller_section_view";

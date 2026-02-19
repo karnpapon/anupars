@@ -182,9 +182,9 @@ impl<T: Printable + Copy> Matrix<T> {
         // if is_on_crosshair_vertical {
         //   let crosshair_style = Style::from(ColorStyle::front(ColorType::rgb(80, 80, 80)));
         //   printer.print_styled(pos, &SpannedString::styled("|", crosshair_style));
-        // } else if is_on_crosshair_horizontal {
-        //   let crosshair_style = Style::from(ColorStyle::front(ColorType::rgb(80, 80, 80)));
-        //   printer.print_styled(pos, &SpannedString::styled("-", crosshair_style));
+        //   // } else if is_on_crosshair_horizontal {
+        //   //   let crosshair_style = Style::from(ColorStyle::front(ColorType::rgb(80, 80, 80)));
+        //   //   printer.print_styled(pos, &SpannedString::styled("-", crosshair_style));
         // }
 
         // Render marker-specific overlays
