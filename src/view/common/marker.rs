@@ -42,6 +42,7 @@ pub enum Message {
   ToggleReverseMode(),
   ToggleArpeggiatorMode(),
   SetTempo(usize),
+  SetRatio((i64, usize)),
 }
 
 pub struct Marker {
@@ -203,6 +204,12 @@ impl Marker {
               .unwrap();
 
             self.midi_tx.send(midi::Message::SetTempo(bpm)).unwrap();
+          }
+          Message::SetRatio(ratio) => {
+            let cb_sink = self.cb_sink.clone();
+            marker_area_tx
+              .send(marker_area::Message::SetRatio(ratio, cb_sink))
+              .unwrap();
           }
           Message::ToggleArpeggiatorMode() => {
             let cb_sink = self.cb_sink.clone();

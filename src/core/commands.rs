@@ -29,6 +29,7 @@ pub struct CommandManager {
   metronome_sender: Sender<Message>,
   cb_sink: cursive::CbSink,
   temp_tempo: Arc<Mutex<i64>>,
+  temp_ratio: Arc<Mutex<(i64, usize)>>,
   pub last_key_time: Arc<Mutex<Option<Instant>>>,
   marker_tx_cloned: Sender<marker::Message>,
 }
@@ -50,6 +51,7 @@ impl CommandManager {
       metronome_sender: m_tx,
       cb_sink,
       temp_tempo,
+      temp_ratio: Arc::new(Mutex::new((1, 16))),
       last_key_time,
       marker_tx_cloned,
     }
@@ -148,6 +150,44 @@ impl CommandManager {
             })
             .unwrap();
           }))
+          .unwrap();
+
+        Ok(None)
+      }
+      Command::AdjustRatio(direction) => {
+        let ratios = [1, 2, 4, 8, 16, 32, 64];
+
+        let current_ratio = *self.temp_ratio.lock().unwrap();
+        let current_denom = current_ratio.1;
+
+        let current_idx = ratios.iter().position(|&d| d == current_denom).unwrap_or(4); // Default to 16 if not found
+
+        let new_idx = match direction {
+          Adjustment::Increase => {
+            if current_idx < ratios.len() - 1 {
+              current_idx + 1
+            } else {
+              current_idx
+            }
+          }
+          Adjustment::Decrease => {
+            if current_idx > 0 {
+              current_idx - 1
+            } else {
+              current_idx
+            }
+          }
+        };
+
+        let new_ratio = (1, ratios[new_idx]);
+
+        let mut ratio = self.temp_ratio.lock().unwrap();
+        *ratio = new_ratio;
+        drop(ratio);
+
+        self
+          .marker_tx_cloned
+          .send(marker::Message::SetRatio(new_ratio))
           .unwrap();
 
         Ok(None)
@@ -253,6 +293,8 @@ impl CommandManager {
     );
     kb.insert(">".into(), vec![Command::AdjustBPM(Adjustment::Increase)]);
     kb.insert("<".into(), vec![Command::AdjustBPM(Adjustment::Decrease)]);
+    kb.insert("}".into(), vec![Command::AdjustRatio(Adjustment::Increase)]);
+    kb.insert("{".into(), vec![Command::AdjustRatio(Adjustment::Decrease)]);
     kb.insert("Ctrl+r".into(), vec![Command::ToggleReverse]);
     kb.insert("Ctrl+a".into(), vec![Command::ToggleArpeggiator]);
     kb.insert("Ctrl+u".into(), vec![Command::ToggleAccumulation]);

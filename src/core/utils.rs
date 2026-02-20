@@ -27,7 +27,9 @@ pub fn build_bpm_status_str(bpm: usize) -> String {
 }
 
 pub fn build_ratio_status_str((numerator, denominator): (i64, usize), tick_str: &str) -> String {
-  format!("{numerator}/{denominator}, {tick_str}")
+  // Cap display at 1/16 since clock resolution is 4 ticks per beat (sixteenth note)
+  let display_denominator = std::cmp::min(denominator, 16);
+  format!("{numerator}/{display_denominator}, {tick_str}")
 }
 
 pub fn build_len_status_str((w, h): (usize, usize)) -> String {

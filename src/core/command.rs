@@ -23,6 +23,7 @@ pub enum Command {
   ToggleInputRegexAndCanvas,
   AdjustMarker(MoveDirection),
   AdjustBPM(Adjustment),
+  AdjustRatio(Adjustment),
   ToggleReverse,
   ToggleArpeggiator,
   ToggleAccumulation,
@@ -37,6 +38,7 @@ impl fmt::Display for Command {
       | Self::ShowMenubar
       | Self::TogglePlay
       | Self::AdjustBPM(_)
+      | Self::AdjustRatio(_)
       | Self::AdjustMarker(_)
       | Self::ToggleReverse
       | Self::ToggleArpeggiator
@@ -56,6 +58,7 @@ impl Command {
       Self::ToggleInputRegexAndCanvas => "toggleinputregexandcanvas",
       Self::AdjustMarker(_) => "adjustmarker",
       Self::AdjustBPM(_) => "adjustbpm",
+      Self::AdjustRatio(_) => "adjustratio",
       Self::ToggleReverse => "togglereverse",
       Self::ToggleArpeggiator => "togglearpeggiator",
       Self::ToggleAccumulation => "toggleaccumulation",

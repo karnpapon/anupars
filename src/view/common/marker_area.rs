@@ -31,6 +31,7 @@ pub enum Message {
   SetScaleModeTop(crate::core::scale::ScaleMode),
   ToggleAccumulationMode(cursive::CbSink),
   SetTempo(usize),
+  SetRatio((i64, usize), cursive::CbSink),
   ToggleReverseMode(cursive::CbSink),
   ToggleArpeggiatorMode(cursive::CbSink),
 }
@@ -52,6 +53,7 @@ pub struct MarkerArea {
   accumulation_counter: Arc<Mutex<usize>>,
   accumulation_mode: Arc<Mutex<bool>>,
   tempo: Arc<Mutex<usize>>,
+  ratio: Arc<Mutex<(i64, usize)>>,
   position_stack: Arc<Mutex<Vec<(usize, usize)>>>,
   pushed_positions: Arc<Mutex<HashMap<(usize, usize), bool>>>,
   reverse_mode: Arc<Mutex<bool>>,
@@ -76,7 +78,8 @@ impl MarkerArea {
       scale_mode_top: Arc::new(Mutex::new(crate::core::scale::ScaleMode::default())),
       accumulation_counter: Arc::new(Mutex::new(0)),
       accumulation_mode: Arc::new(Mutex::new(false)),
-      tempo: Arc::new(Mutex::new(120)), // Default 120 BPM
+      tempo: Arc::new(Mutex::new(120)),
+      ratio: Arc::new(Mutex::new((1, 16))),
       position_stack: Arc::new(Mutex::new(Vec::new())),
       pushed_positions: Arc::new(Mutex::new(HashMap::new())),
       reverse_mode: Arc::new(Mutex::new(false)),
@@ -196,6 +199,13 @@ impl MarkerArea {
     let marker_y = area.top();
     let canvas_w = *self.grid_width.lock().unwrap();
 
+    // Adjust pos based on ratio: higher denominators = faster, lower = slower
+    // Clock ticks at 4 per beat (sixteenth note resolution)
+    // 1/16 = every tick, 1/8 = every 2 ticks, 1/4 = every 4 ticks, etc.
+    let ratio = *self.ratio.lock().unwrap();
+    let divisor = std::cmp::max(1, 16 / ratio.1);
+    let adjusted_pos = pos / divisor;
+
     if arpeggiator {
       let regex_indexes = self.regex_indexes.lock().unwrap();
       let mut matches: Vec<(usize, usize)> = regex_indexes
@@ -216,20 +226,20 @@ impl MarkerArea {
         matches.reverse();
       }
       if !matches.is_empty() {
-        let step = pos % matches.len();
+        let step = adjusted_pos % matches.len();
         let (x, y) = matches[step];
         actived_pos.x = x;
         actived_pos.y = y;
       } else {
         // No matches, fallback to normal running
         if !reverse {
-          actived_pos.x = pos % marker_w;
+          actived_pos.x = adjusted_pos % marker_w;
           if actived_pos.x == 0 {
             actived_pos.y += 1;
             actived_pos.y %= marker_h;
           }
         } else {
-          actived_pos.x = marker_w - 1 - (pos % marker_w);
+          actived_pos.x = marker_w - 1 - (adjusted_pos % marker_w);
           if actived_pos.x == marker_w - 1 {
             if actived_pos.y == 0 {
               actived_pos.y = marker_h - 1;
@@ -242,13 +252,13 @@ impl MarkerArea {
     } else {
       // Normal running
       if !reverse {
-        actived_pos.x = pos % marker_w;
+        actived_pos.x = adjusted_pos % marker_w;
         if actived_pos.x == 0 {
           actived_pos.y += 1;
           actived_pos.y %= marker_h;
         }
       } else {
-        actived_pos.x = marker_w - 1 - (pos % marker_w);
+        actived_pos.x = marker_w - 1 - (adjusted_pos % marker_w);
         if actived_pos.x == marker_w - 1 {
           if actived_pos.y == 0 {
             actived_pos.y = marker_h - 1;
@@ -863,6 +873,19 @@ impl MarkerArea {
           Message::SetTempo(bpm) => {
             let mut tempo = self.tempo.lock().unwrap();
             *tempo = bpm;
+          }
+          Message::SetRatio(new_ratio, cb_sink) => {
+            let mut ratio = self.ratio.lock().unwrap();
+            *ratio = new_ratio;
+            drop(ratio);
+
+            cb_sink
+              .send(Box::new(move |siv| {
+                siv.call_on_name(consts::ratio_status_unit_view, |view: &mut TextView| {
+                  view.set_content(utils::build_ratio_status_str(new_ratio, ""));
+                });
+              }))
+              .unwrap();
           }
           Message::ToggleReverseMode(cb_sink) => {
             self.toggle_reverse_mode(cb_sink);
