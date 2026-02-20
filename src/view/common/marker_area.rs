@@ -101,10 +101,10 @@ impl MarkerArea {
 
     format!(
       "{}{}{}{}",
-      if reverse { "R" } else { "-" },
-      if arpeggiator { "A" } else { "-" },
-      if accumulation { "U" } else { "-" },
-      if random { "D" } else { "-" }
+      if reverse { "R" } else { "r" },
+      if arpeggiator { "A" } else { "a" },
+      if accumulation { "U" } else { "u" },
+      if random { "D" } else { "d" }
     )
   }
 

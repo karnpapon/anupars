@@ -137,7 +137,7 @@ impl Console {
     let protocol_controller_section_view = ListView::new()
       .child(
         "Mode:",
-        TextView::new("---").with_name(consts::osc_status_unit_view), // R=Reverse, A=Arpeggiator, C=Accumulation
+        TextView::new("raud").with_name(consts::osc_status_unit_view), // R=Reverse, A=Arpeggiator, U=Accumulation, D=Random
       )
       .child("State: ", input_status_unit_view)
       .child(
