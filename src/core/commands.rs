@@ -213,6 +213,13 @@ impl CommandManager {
           .unwrap();
         Ok(None)
       }
+      Command::ToggleRandom => {
+        self
+          .marker_tx_cloned
+          .send(marker::Message::ToggleRandomMode())
+          .unwrap();
+        Ok(None)
+      }
     }
   }
 
@@ -298,6 +305,7 @@ impl CommandManager {
     kb.insert("Ctrl+r".into(), vec![Command::ToggleReverse]);
     kb.insert("Ctrl+a".into(), vec![Command::ToggleArpeggiator]);
     kb.insert("Ctrl+u".into(), vec![Command::ToggleAccumulation]);
+    kb.insert("Ctrl+d".into(), vec![Command::ToggleRandom]);
 
     kb
   }

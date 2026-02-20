@@ -41,6 +41,7 @@ pub enum Message {
   ToggleAccumulationMode(),
   ToggleReverseMode(),
   ToggleArpeggiatorMode(),
+  ToggleRandomMode(),
   SetTempo(usize),
   SetRatio((i64, usize)),
 }
@@ -215,6 +216,12 @@ impl Marker {
             let cb_sink = self.cb_sink.clone();
             marker_area_tx
               .send(marker_area::Message::ToggleArpeggiatorMode(cb_sink))
+              .unwrap();
+          }
+          Message::ToggleRandomMode() => {
+            let cb_sink = self.cb_sink.clone();
+            marker_area_tx
+              .send(marker_area::Message::ToggleRandomMode(cb_sink))
               .unwrap();
           }
         }

@@ -1,3 +1,6 @@
+use std::collections::hash_map::DefaultHasher;
+use std::collections::hash_map::Entry;
+use std::hash::{Hash, Hasher};
 use std::{
   collections::{BTreeSet, HashMap},
   sync::{
@@ -34,6 +37,7 @@ pub enum Message {
   SetRatio((i64, usize), cursive::CbSink),
   ToggleReverseMode(cursive::CbSink),
   ToggleArpeggiatorMode(cursive::CbSink),
+  ToggleRandomMode(cursive::CbSink),
 }
 
 pub struct MarkerArea {
@@ -58,6 +62,7 @@ pub struct MarkerArea {
   pushed_positions: Arc<Mutex<HashMap<(usize, usize), bool>>>,
   reverse_mode: Arc<Mutex<bool>>,
   arpeggiator_mode: Arc<Mutex<bool>>,
+  random_mode: Arc<Mutex<bool>>,
 }
 
 impl MarkerArea {
@@ -84,6 +89,7 @@ impl MarkerArea {
       pushed_positions: Arc::new(Mutex::new(HashMap::new())),
       reverse_mode: Arc::new(Mutex::new(false)),
       arpeggiator_mode: Arc::new(Mutex::new(false)),
+      random_mode: Arc::new(Mutex::new(false)),
     }
   }
 
@@ -91,12 +97,14 @@ impl MarkerArea {
     let reverse = *self.reverse_mode.lock().unwrap();
     let arpeggiator = *self.arpeggiator_mode.lock().unwrap();
     let accumulation = *self.accumulation_mode.lock().unwrap();
+    let random = *self.random_mode.lock().unwrap();
 
     format!(
-      "{}{}{}",
+      "{}{}{}{}",
       if reverse { "R" } else { "-" },
       if arpeggiator { "A" } else { "-" },
-      if accumulation { "U" } else { "-" }
+      if accumulation { "U" } else { "-" },
+      if random { "D" } else { "-" }
     )
   }
 
@@ -193,6 +201,7 @@ impl MarkerArea {
     let mut actived_pos = self.actived_pos.lock().unwrap();
     let reverse = *self.reverse_mode.lock().unwrap();
     let arpeggiator = *self.arpeggiator_mode.lock().unwrap();
+    let random = *self.random_mode.lock().unwrap();
     let marker_w = area.width();
     let marker_h = area.height();
     let marker_x = area.left();
@@ -226,13 +235,25 @@ impl MarkerArea {
         matches.reverse();
       }
       if !matches.is_empty() {
-        let step = adjusted_pos % matches.len();
+        let step = if random {
+          let mut hasher = DefaultHasher::new();
+          adjusted_pos.hash(&mut hasher);
+          (hasher.finish() as usize) % matches.len()
+        } else {
+          adjusted_pos % matches.len()
+        };
         let (x, y) = matches[step];
         actived_pos.x = x;
         actived_pos.y = y;
       } else {
         // No matches, fallback to normal running
-        if !reverse {
+        if random {
+          let mut hasher = DefaultHasher::new();
+          adjusted_pos.hash(&mut hasher);
+          let hash = hasher.finish() as usize;
+          actived_pos.x = hash % marker_w;
+          actived_pos.y = (hash / marker_w) % marker_h;
+        } else if !reverse {
           actived_pos.x = adjusted_pos % marker_w;
           if actived_pos.x == 0 {
             actived_pos.y += 1;
@@ -251,7 +272,13 @@ impl MarkerArea {
       }
     } else {
       // Normal running
-      if !reverse {
+      if random {
+        let mut hasher = DefaultHasher::new();
+        adjusted_pos.hash(&mut hasher);
+        let hash = hasher.finish() as usize;
+        actived_pos.x = hash % marker_w;
+        actived_pos.y = (hash / marker_w) % marker_h;
+      } else if !reverse {
         actived_pos.x = adjusted_pos % marker_w;
         if actived_pos.x == 0 {
           actived_pos.y += 1;
@@ -296,6 +323,32 @@ impl MarkerArea {
       .unwrap();
   }
 
+  pub fn toggle_random_mode(&self, cb_sink: cursive::CbSink) {
+    let mut rand = self.random_mode.lock().unwrap();
+    *rand = !*rand;
+    let is_rand = *rand;
+    drop(rand);
+
+    let mode_status = self.build_mode_status_string();
+
+    cb_sink
+      .send(Box::new(move |siv| {
+        siv.call_on_name(
+          consts::canvas_editor_section_view,
+          |canvas: &mut Canvas<CanvasEditor>| {
+            let editor = canvas.state_mut();
+            editor.random_mode = is_rand;
+            editor.marker_ui.random_mode = is_rand;
+          },
+        );
+
+        siv.call_on_name(consts::osc_status_unit_view, |view: &mut TextView| {
+          view.set_content(mode_status);
+        });
+      }))
+      .unwrap();
+  }
+
   pub fn scale(&self, (w, h): (i32, i32)) {
     let pos = self.pos.lock().unwrap();
     let mut area = self.area.lock().unwrap();
@@ -323,7 +376,7 @@ impl MarkerArea {
     let operators = ['P', 'S', 'O'];
 
     // Check if abs_x aligns with an operator position
-    if abs_x % spacing == 0 {
+    if abs_x.is_multiple_of(spacing) {
       let operator_index = (abs_x / spacing) % operators.len();
       let operator = operators[operator_index];
 
@@ -335,8 +388,8 @@ impl MarkerArea {
           drop(marker_pos);
 
           let mut pushed = self.pushed_positions.lock().unwrap();
-          if !pushed.contains_key(&push_pos) {
-            pushed.insert(push_pos, true);
+          if let Entry::Vacant(e) = pushed.entry(push_pos) {
+            e.insert(true);
             drop(pushed);
 
             let mut stack = self.position_stack.lock().unwrap();
@@ -892,6 +945,9 @@ impl MarkerArea {
           }
           Message::ToggleArpeggiatorMode(cb_sink) => {
             self.toggle_arpeggiator_mode(cb_sink);
+          }
+          Message::ToggleRandomMode(cb_sink) => {
+            self.toggle_random_mode(cb_sink);
           }
         }
       }
