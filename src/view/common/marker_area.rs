@@ -84,11 +84,27 @@ impl MarkerArea {
     }
   }
 
+  fn build_mode_status_string(&self) -> String {
+    let reverse = *self.reverse_mode.lock().unwrap();
+    let arpeggiator = *self.arpeggiator_mode.lock().unwrap();
+    let accumulation = *self.accumulation_mode.lock().unwrap();
+
+    format!(
+      "{}{}{}",
+      if reverse { "R" } else { "-" },
+      if arpeggiator { "A" } else { "-" },
+      if accumulation { "U" } else { "-" }
+    )
+  }
+
   pub fn toggle_reverse_mode(&self, cb_sink: cursive::CbSink) {
     let mut reverse = self.reverse_mode.lock().unwrap();
     *reverse = !*reverse;
     let is_reversed = *reverse;
     drop(reverse);
+
+    let mode_status = self.build_mode_status_string();
+
     cb_sink
       .send(Box::new(move |siv| {
         siv.call_on_name(
@@ -99,6 +115,10 @@ impl MarkerArea {
             editor.marker_ui.reverse_mode = is_reversed;
           },
         );
+
+        siv.call_on_name(consts::osc_status_unit_view, |view: &mut TextView| {
+          view.set_content(mode_status);
+        });
       }))
       .unwrap();
   }
@@ -245,6 +265,9 @@ impl MarkerArea {
     *arp = !*arp;
     let is_arp = *arp;
     drop(arp);
+
+    let mode_status = self.build_mode_status_string();
+
     cb_sink
       .send(Box::new(move |siv| {
         siv.call_on_name(
@@ -255,6 +278,10 @@ impl MarkerArea {
             editor.marker_ui.arpeggiator_mode = is_arp;
           },
         );
+
+        siv.call_on_name(consts::osc_status_unit_view, |view: &mut TextView| {
+          view.set_content(mode_status);
+        });
       }))
       .unwrap();
   }
@@ -812,6 +839,8 @@ impl MarkerArea {
               drop(pushed);
             }
 
+            let mode_status = self.build_mode_status_string();
+
             // Update UI to clear accumulation display and stack display
             cb_sink
               .send(Box::new(move |siv| {
@@ -824,6 +853,10 @@ impl MarkerArea {
                     view.set_content("[]");
                   });
                 }
+
+                siv.call_on_name(consts::osc_status_unit_view, |view: &mut TextView| {
+                  view.set_content(mode_status);
+                });
               }))
               .unwrap();
           }

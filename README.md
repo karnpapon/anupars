@@ -26,9 +26,16 @@ anupars (อนุภา(ส)), a Rust-based reimagining of [`anu`](https://gith
 
 - **Generated Text Content (Dissociative Press Algorithm)**
   - Generate new musical or textual material using the Dissociative Press algorithm, for creative pattern mutation and generative composition.
+  - Manaul file loader TBD
 
 - **Accumulation Mode (Semi Self-Configuration)**
   - Activate accumulation mode to let the system semi-autonomously reconfigure itself, stacking and evolving patterns for emergent musical results.
+
+- **OSC**
+  - Soon
+
+- **Multi-step**
+  - TBD
 
 # Building
 - Docker must be installed before proceeding

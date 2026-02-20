@@ -105,7 +105,6 @@ impl Console {
       .child("RegExp: ", regex_input_unit_view)
       .child("Mode: ", mode_view)
       .child("flag: ", flag_view)
-      .child("status: ", input_status_unit_view)
       .full_width()
       .max_width(30)
       .min_width(10);
@@ -137,9 +136,10 @@ impl Console {
 
     let protocol_controller_section_view = ListView::new()
       .child(
-        "OSC:",
-        TextView::new("-").with_name(consts::osc_status_unit_view), // .fixed_width(8),
+        "Mode:",
+        TextView::new("---").with_name(consts::osc_status_unit_view), // R=Reverse, A=Arpeggiator, C=Accumulation
       )
+      .child("State: ", input_status_unit_view)
       .child(
         "MIDI:",
         TextView::new("-").with_name(consts::midi_status_unit_view),

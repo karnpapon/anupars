@@ -152,6 +152,27 @@ impl CommandManager {
 
         Ok(None)
       }
+      Command::ToggleReverse => {
+        self
+          .marker_tx_cloned
+          .send(marker::Message::ToggleReverseMode())
+          .unwrap();
+        Ok(None)
+      }
+      Command::ToggleArpeggiator => {
+        self
+          .marker_tx_cloned
+          .send(marker::Message::ToggleArpeggiatorMode())
+          .unwrap();
+        Ok(None)
+      }
+      Command::ToggleAccumulation => {
+        self
+          .marker_tx_cloned
+          .send(marker::Message::ToggleAccumulationMode())
+          .unwrap();
+        Ok(None)
+      }
     }
   }
 
@@ -232,6 +253,9 @@ impl CommandManager {
     );
     kb.insert(">".into(), vec![Command::AdjustBPM(Adjustment::Increase)]);
     kb.insert("<".into(), vec![Command::AdjustBPM(Adjustment::Decrease)]);
+    kb.insert("Ctrl+r".into(), vec![Command::ToggleReverse]);
+    kb.insert("Ctrl+a".into(), vec![Command::ToggleArpeggiator]);
+    kb.insert("Ctrl+u".into(), vec![Command::ToggleAccumulation]);
 
     kb
   }
