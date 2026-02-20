@@ -40,6 +40,7 @@ pub enum Message {
   SetScaleModeTop(crate::core::scale::ScaleMode),
   ToggleAccumulationMode(),
   ToggleReverseMode(),
+  ToggleArpeggiatorMode(),
   SetTempo(usize),
 }
 
@@ -202,6 +203,12 @@ impl Marker {
               .unwrap();
 
             self.midi_tx.send(midi::Message::SetTempo(bpm)).unwrap();
+          }
+          Message::ToggleArpeggiatorMode() => {
+            let cb_sink = self.cb_sink.clone();
+            marker_area_tx
+              .send(marker_area::Message::ToggleArpeggiatorMode(cb_sink))
+              .unwrap();
           }
         }
       }

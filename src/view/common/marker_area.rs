@@ -32,6 +32,7 @@ pub enum Message {
   ToggleAccumulationMode(cursive::CbSink),
   SetTempo(usize),
   ToggleReverseMode(cursive::CbSink),
+  ToggleArpeggiatorMode(cursive::CbSink),
 }
 
 pub struct MarkerArea {
@@ -54,6 +55,7 @@ pub struct MarkerArea {
   position_stack: Arc<Mutex<Vec<(usize, usize)>>>,
   pushed_positions: Arc<Mutex<HashMap<(usize, usize), bool>>>,
   reverse_mode: Arc<Mutex<bool>>,
+  arpeggiator_mode: Arc<Mutex<bool>>,
 }
 
 impl MarkerArea {
@@ -78,6 +80,7 @@ impl MarkerArea {
       position_stack: Arc::new(Mutex::new(Vec::new())),
       pushed_positions: Arc::new(Mutex::new(HashMap::new())),
       reverse_mode: Arc::new(Mutex::new(false)),
+      arpeggiator_mode: Arc::new(Mutex::new(false)),
     }
   }
 
@@ -105,8 +108,8 @@ impl MarkerArea {
     let mut area = self.area.lock().unwrap();
     let (dx, dy) = direction.get_direction();
     let next_pos = Vec2::new(
-      pos.x.saturating_add_signed(dx.try_into().unwrap()),
-      pos.y.saturating_add_signed(dy.try_into().unwrap()),
+      pos.x.saturating_add_signed(dx as isize),
+      pos.y.saturating_add_signed(dy as isize),
     );
     let next_pos_bottom_right: Vec2 = (
       next_pos.x + area.width() - 1,
@@ -166,24 +169,94 @@ impl MarkerArea {
     let area = self.area.lock().unwrap();
     let mut actived_pos = self.actived_pos.lock().unwrap();
     let reverse = *self.reverse_mode.lock().unwrap();
-    let width = area.width();
-    let height = area.height();
-    if !reverse {
-      actived_pos.x = pos % width;
-      if actived_pos.x == 0 {
-        actived_pos.y += 1;
-        actived_pos.y %= height;
+    let arpeggiator = *self.arpeggiator_mode.lock().unwrap();
+    let marker_w = area.width();
+    let marker_h = area.height();
+    let marker_x = area.left();
+    let marker_y = area.top();
+    let canvas_w = *self.grid_width.lock().unwrap();
+
+    if arpeggiator {
+      let regex_indexes = self.regex_indexes.lock().unwrap();
+      let mut matches: Vec<(usize, usize)> = regex_indexes
+        .iter()
+        .filter_map(|&idx| {
+          let x = idx % canvas_w;
+          let y = idx / canvas_w;
+          // Only include matches inside the marker area
+          if x >= marker_x && x < marker_x + marker_w && y >= marker_y && y < marker_y + marker_h {
+            Some((x - marker_x, y - marker_y))
+          } else {
+            None
+          }
+        })
+        .collect();
+      matches.sort_by_key(|&(x, y)| (y, x));
+      if reverse {
+        matches.reverse();
+      }
+      if !matches.is_empty() {
+        let step = pos % matches.len();
+        let (x, y) = matches[step];
+        actived_pos.x = x;
+        actived_pos.y = y;
+      } else {
+        // No matches, fallback to normal running
+        if !reverse {
+          actived_pos.x = pos % marker_w;
+          if actived_pos.x == 0 {
+            actived_pos.y += 1;
+            actived_pos.y %= marker_h;
+          }
+        } else {
+          actived_pos.x = marker_w - 1 - (pos % marker_w);
+          if actived_pos.x == marker_w - 1 {
+            if actived_pos.y == 0 {
+              actived_pos.y = marker_h - 1;
+            } else {
+              actived_pos.y -= 1;
+            }
+          }
+        }
       }
     } else {
-      actived_pos.x = width - 1 - (pos % width);
-      if actived_pos.x == width - 1 {
-        if actived_pos.y == 0 {
-          actived_pos.y = height - 1;
-        } else {
-          actived_pos.y -= 1;
+      // Normal running
+      if !reverse {
+        actived_pos.x = pos % marker_w;
+        if actived_pos.x == 0 {
+          actived_pos.y += 1;
+          actived_pos.y %= marker_h;
+        }
+      } else {
+        actived_pos.x = marker_w - 1 - (pos % marker_w);
+        if actived_pos.x == marker_w - 1 {
+          if actived_pos.y == 0 {
+            actived_pos.y = marker_h - 1;
+          } else {
+            actived_pos.y -= 1;
+          }
         }
       }
     }
+  }
+
+  pub fn toggle_arpeggiator_mode(&self, cb_sink: cursive::CbSink) {
+    let mut arp = self.arpeggiator_mode.lock().unwrap();
+    *arp = !*arp;
+    let is_arp = *arp;
+    drop(arp);
+    cb_sink
+      .send(Box::new(move |siv| {
+        siv.call_on_name(
+          consts::canvas_editor_section_view,
+          |canvas: &mut Canvas<CanvasEditor>| {
+            let editor = canvas.state_mut();
+            editor.arpeggiator_mode = is_arp;
+            editor.marker_ui.arpeggiator_mode = is_arp;
+          },
+        );
+      }))
+      .unwrap();
   }
 
   pub fn scale(&self, (w, h): (i32, i32)) {
@@ -760,6 +833,9 @@ impl MarkerArea {
           }
           Message::ToggleReverseMode(cb_sink) => {
             self.toggle_reverse_mode(cb_sink);
+          }
+          Message::ToggleArpeggiatorMode(cb_sink) => {
+            self.toggle_arpeggiator_mode(cb_sink);
           }
         }
       }

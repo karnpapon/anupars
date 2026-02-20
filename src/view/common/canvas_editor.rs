@@ -26,6 +26,7 @@ pub struct MarkerUI {
   pub text_matcher: Option<HashMap<usize, Match>>,
   pub regex_indexes: Arc<Mutex<BTreeSet<usize>>>,
   pub reverse_mode: bool,
+  pub arpeggiator_mode: bool,
 }
 
 pub struct CanvasEditor {
@@ -38,6 +39,7 @@ pub struct CanvasEditor {
   pub scale_mode_left: crate::core::scale::ScaleMode,
   pub scale_mode_top: crate::core::scale::ScaleMode,
   pub reverse_mode: bool,
+  pub arpeggiator_mode: bool,
 }
 
 impl MarkerUI {
@@ -49,6 +51,7 @@ impl MarkerUI {
       text_matcher: None,
       regex_indexes: Arc::new(Mutex::new(BTreeSet::new())),
       reverse_mode: false,
+      arpeggiator_mode: false,
     }
   }
 }
@@ -65,6 +68,7 @@ impl CanvasEditor {
       scale_mode_left: crate::core::scale::ScaleMode::default(),
       scale_mode_top: crate::core::scale::ScaleMode::default(),
       reverse_mode: false,
+      arpeggiator_mode: false,
     }
   }
 

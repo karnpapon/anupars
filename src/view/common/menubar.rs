@@ -99,6 +99,18 @@ impl Menubar {
       .leaf("Generate Text", generate_contents)
       .leaf("Insert File", build_file_explorer_view)
       .delimiter()
+      .leaf("Arpeggiator", |s| {
+        s.call_on_name(
+          consts::canvas_editor_section_view,
+          |canvas: &mut Canvas<CanvasEditor>| {
+            canvas
+              .state_mut()
+              .marker_tx
+              .send(super::marker::Message::ToggleArpeggiatorMode())
+              .unwrap();
+          },
+        );
+      })
       .subtree(
         "MIDI",
         build_midi_menu(midi_devices.to_vec(), midi_tx.clone()),
