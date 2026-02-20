@@ -7,9 +7,9 @@ set -o xtrace
 
 # TODO: replace with hostname
 readonly TARGET_HOST=pi@192.168.1.131
-readonly TARGET_PATH=/home/pi/anu-rs
+readonly TARGET_PATH=/home/pi/anupars
 readonly TARGET_ARCH=aarch64-unknown-linux-gnu # RPi 64-bit OS
-readonly SOURCE_PATH=./target/${TARGET_ARCH}/release/anu-rs
+readonly SOURCE_PATH=./target/${TARGET_ARCH}/release/anupars
 
 # Check if the target is already installed
 if rustup target list --installed | grep -q "$TARGET_ARCH"; then

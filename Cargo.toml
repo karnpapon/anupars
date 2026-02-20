@@ -1,11 +1,11 @@
 [package]
-name = "anu-rs"
+name = "anupars"
 version = "0.1.0"
 edition = "2021"
-description = "anu, a tiny backend-agnostic step-sequencer/live-coding environment that harnesses the power of RegEx."
+description = "a tiny backend-agnostic step-sequencer/live-coding environment that harnesses the power of RegEx."
 authors = ["karnpapon <karnpapon@gmail.com>"]
 license = "MIT"
-repository = "https://github.com/karnpapon/anu-rs"
+repository = "https://github.com/karnpapon/anupars"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

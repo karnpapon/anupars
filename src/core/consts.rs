@@ -51,7 +51,7 @@ pub static APP_NAME: &str = "
 ░░▒▓██████▓▒░░▒▓█▓▒░░▒▓█▓▒░░░░▒▓██▓▒░░░░  
 ";
 
-pub static DEFAULT_APP_DIRECTORY: &str = ".anu_rs";
+pub static DEFAULT_APP_DIRECTORY: &str = ".anupars";
 pub static DEFAULT_APP_FILENAME: &str = "contents";
 
 // workaround since `format!` cannot be calculated at build-time (eg. for `static` or `const`)

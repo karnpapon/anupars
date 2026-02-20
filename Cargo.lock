@@ -47,7 +47,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "anu-rs"
+name = "anupars"
 version = "0.1.0"
 dependencies = [
  "cfonts",
