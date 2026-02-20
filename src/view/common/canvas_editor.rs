@@ -138,13 +138,11 @@ impl CanvasEditor {
     }
   }
 
-  /// Draw the keyboard visualization on the left margin
   fn draw_keyboard_left(&self, printer: &Printer) {
     if !self.show_keyboard || self.grid.height == 0 {
       return;
     }
 
-    // Draw note names vertically
     for y in 0..self.grid.height {
       let (note_index, octave, note_name) = self.y_to_note_left(y);
 
@@ -161,8 +159,6 @@ impl CanvasEditor {
 
       // Format note label (e.g., "C3", "D#4")
       let label = format!("{}{}", note_name, octave);
-
-      // Use ┣ for C notes to mark octaves, otherwise use ┃
       let symbol = if note_name == "C" { "┣" } else { "┃" };
 
       printer.with_style(style, |printer| {
@@ -172,26 +168,23 @@ impl CanvasEditor {
     }
   }
 
-  /// Draw stack operators at the bottom margin
   fn draw_stack_operators_bottom(&self, printer: &Printer) {
     if !self.show_keyboard || self.grid.width == 0 {
       return;
     }
 
     let operators = ['P', 'S', 'O']; // Push, Swap, pOp
-    let spacing = 10; // Space between operators
-    let pattern_width = spacing + 1; // operator + spaces
+    let spacing = 10;
+    let pattern_width = spacing + 1;
 
     let style = Style::from(ColorStyle::front(ColorType::rgb(100, 100, 100)));
 
-    // Draw separator line
     printer.with_style(style, |printer| {
       for x in 0..self.grid.width {
         printer.print((x, 0), "─");
       }
     });
 
-    // Draw active_pos indicator arrow at the absolute active x position
     let abs_active_x = self.marker_ui.marker_pos.x + self.marker_ui.actived_pos.x;
     if abs_active_x < self.grid.width {
       let arrow_style = Style::from(ColorStyle::front(ColorType::rgb(255, 255, 255)));
@@ -200,12 +193,10 @@ impl CanvasEditor {
       });
     }
 
-    // Draw operators spread across the entire width with spacing
     let mut x = 0;
     let mut op_index = 0;
 
     while x < self.grid.width {
-      // Print the operator at the current position
       let op = operators[op_index % operators.len()];
       let is_active = x == (self.marker_ui.marker_pos.x + self.marker_ui.actived_pos.x);
       let style = if is_active {
@@ -217,7 +208,6 @@ impl CanvasEditor {
         printer.print((x, 1), &op.to_string());
       });
 
-      // Move to next operator position
       x += pattern_width;
       op_index += 1;
     }
@@ -270,7 +260,6 @@ impl CanvasEditor {
           self.grid.set(x, y, '\0');
           x += 1;
         }
-        // Move to next row
         x = 0;
         y += 1;
       } else {
@@ -290,7 +279,6 @@ impl CanvasEditor {
   }
 
   pub fn resize(&mut self, size: Vec2) {
-    // Adjust size to account for keyboard margins when show_keyboard is true
     let grid_width = if self.show_keyboard {
       size.x.saturating_sub(KEYBOARD_MARGIN_LEFT)
     } else {
@@ -333,27 +321,17 @@ impl CanvasEditor {
 
 fn draw(canvas: &CanvasEditor, printer: &Printer) {
   if canvas.show_keyboard {
-    // Draw top keyboard visualization
     let top_keyboard_printer = printer.offset((KEYBOARD_MARGIN_LEFT, 0));
     canvas.draw_keyboard_top(&top_keyboard_printer);
 
-    // Draw left keyboard visualization
     let left_keyboard_printer = printer.offset((0, KEYBOARD_MARGIN_TOP));
     canvas.draw_keyboard_left(&left_keyboard_printer);
 
-    // Draw bottom stack operators
     let bottom_y = KEYBOARD_MARGIN_TOP + canvas.grid.height;
     let bottom_operators_printer = printer.offset((KEYBOARD_MARGIN_LEFT, bottom_y));
     canvas.draw_stack_operators_bottom(&bottom_operators_printer);
-
-    // Draw corner symbol where keyboards meet
-    let style = Style::from(ColorStyle::front(ColorType::rgb(200, 200, 200)));
-    printer.with_style(style, |printer| {
-      printer.print((0, 0), "");
-    });
   }
 
-  // Offset the grid to make room for both keyboards
   let x_offset = if canvas.show_keyboard {
     KEYBOARD_MARGIN_LEFT
   } else {
@@ -370,10 +348,8 @@ fn draw(canvas: &CanvasEditor, printer: &Printer) {
 }
 
 fn layout(canvas: &mut CanvasEditor, size: Vec2) {
-  // Resize canvas when size changes (initialization or terminal resize)
   if canvas.size != size {
     canvas.resize(size);
-    // Update grid content if text is already loaded
     if canvas.text_contents.is_some() {
       canvas.update_grid_src();
     }

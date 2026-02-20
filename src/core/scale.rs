@@ -113,7 +113,6 @@ impl ScaleMode {
     let scale_degree = inverted_y % scale_length;
     let octave_offset = inverted_y / scale_length;
 
-    // Get the actual note index from the scale
     let note_index = intervals[scale_degree];
     let octave = base_octave + (octave_offset as u8);
 

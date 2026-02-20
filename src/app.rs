@@ -81,7 +81,6 @@ pub fn setup_ui(components: &mut AppComponents) {
   let marker_tx = components.marker.tx.clone();
   let metronome_tx = components.metronome.tx.clone();
 
-  // Initialize command manager
   let mut command_manager = CommandManager::new(
     components.anu.clone(),
     metronome_tx.clone(),
@@ -94,7 +93,6 @@ pub fn setup_ui(components: &mut AppComponents) {
   command_manager.register_all();
   command_manager.register_keybindings(&mut components.cursive);
 
-  // Configure cursive settings
   components.cursive.set_autohide_menu(true);
   components.cursive.set_autorefresh(false); // Prevent unintended events
 
@@ -111,12 +109,10 @@ pub fn setup_ui(components: &mut AppComponents) {
     midi_tx: midi_tx.clone(),
   }));
 
-  // Build main view
   let main_view = components
     .anu
     .build(components.regex_handler.tx.clone(), marker_tx);
 
-  // Build menu system
   let devices = components.midi.get_available_devices();
   let menu_app = Menubar::build_menu_app(&devices, midi_tx.clone());
   let menu_help = Menubar::build_menu_help();
@@ -131,7 +127,6 @@ pub fn setup_ui(components: &mut AppComponents) {
 
   components.cursive.add_layer(main_view);
 
-  // Update MIDI status display
   components
     .cursive
     .call_on_name(consts::midi_status_unit_view, |view: &mut TextView| {
