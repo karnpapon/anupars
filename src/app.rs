@@ -98,6 +98,14 @@ pub fn setup_ui(components: &mut AppComponents) {
   components.cursive.set_autohide_menu(true);
   components.cursive.set_autorefresh(false); // Prevent unintended events
 
+  #[cfg(feature = "microcontroller")]
+  components.cursive.set_user_data(Rc::new(UserDataInner {
+    cmd: command_manager,
+    midi_tx: midi_tx.clone(),
+    selected_flag: Arc::clone(&components.anu.selected_flag),
+  }));
+
+  #[cfg(feature = "desktop")]
   components.cursive.set_user_data(Rc::new(UserDataInner {
     cmd: command_manager,
     midi_tx: midi_tx.clone(),

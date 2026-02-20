@@ -104,7 +104,16 @@ impl RegExpHandler {
   }
 
   fn process_event(data: &EventData) -> Result<HashMap<usize, Match>, RegexError> {
-    match Regex::new(&data.pattern.to_string()) {
+    // Build the regex pattern with flags
+    // In Rust regex, flags are added as inline modifiers:
+    // (?i) = case insensitive, (?m) = multiline, (?s) = dot matches newline, (?x) = ignore whitespace, (?U) = lazy
+    let pattern_with_flags = if !data.flags.is_empty() {
+      format!("(?{}){}", data.flags, data.pattern)
+    } else {
+      data.pattern.to_string()
+    };
+
+    match Regex::new(&pattern_with_flags) {
       Ok(regex) => {
         let text = &data.text;
 
