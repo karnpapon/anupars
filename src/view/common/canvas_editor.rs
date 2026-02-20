@@ -196,10 +196,21 @@ impl CanvasEditor {
     let mut x = 0;
     let mut op_index = 0;
 
+    let abs_active_x = self.marker_ui.marker_pos.x + self.marker_ui.actived_pos.x;
+    let regex_indexes = self.marker_ui.regex_indexes.lock().unwrap();
+    let is_regex_match_x = regex_indexes.iter().any(|&idx| {
+      let x_pos = idx % self.grid.width;
+      x_pos == abs_active_x
+    });
     while x < self.grid.width {
       let op = operators[op_index % operators.len()];
-      let is_active = x == (self.marker_ui.marker_pos.x + self.marker_ui.actived_pos.x);
-      let style = if is_active {
+      let is_active = x == abs_active_x;
+      let style = if is_active && is_regex_match_x {
+        Style::from(ColorStyle::new(
+          ColorType::rgb(0, 0, 0),
+          ColorType::rgb(255, 255, 255),
+        ))
+      } else if is_active {
         Style::from(ColorStyle::front(ColorType::rgb(255, 255, 255)))
       } else {
         Style::from(ColorStyle::front(ColorType::rgb(100, 100, 100)))
