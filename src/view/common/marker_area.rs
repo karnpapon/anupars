@@ -196,6 +196,95 @@ impl MarkerArea {
     self.drag_start_y.store(top_left.y, Ordering::SeqCst);
   }
 
+  fn calculate_adjusted_pos(&self, pos: usize) -> usize {
+    let ratio = *self.ratio.lock().unwrap();
+    let divisor = std::cmp::max(1, 16 / ratio.1);
+    pos / divisor
+  }
+
+  fn get_random_index(&self, pos: usize, max: usize) -> usize {
+    let mut hasher = DefaultHasher::new();
+    pos.hash(&mut hasher);
+    (hasher.finish() as usize) % max
+  }
+
+  fn get_arpeggiator_matches(
+    &self,
+    marker_x: usize,
+    marker_y: usize,
+    marker_w: usize,
+    marker_h: usize,
+    canvas_w: usize,
+    reverse: bool,
+  ) -> Vec<(usize, usize)> {
+    let regex_indexes = self.regex_indexes.lock().unwrap();
+    let mut matches: Vec<(usize, usize)> = regex_indexes
+      .iter()
+      .filter_map(|&idx| {
+        let x = idx % canvas_w;
+        let y = idx / canvas_w;
+        if x >= marker_x && x < marker_x + marker_w && y >= marker_y && y < marker_y + marker_h {
+          Some((x - marker_x, y - marker_y))
+        } else {
+          None
+        }
+      })
+      .collect();
+
+    matches.sort_by_key(|&(x, y)| (y, x));
+    if reverse {
+      matches.reverse();
+    }
+    matches
+  }
+
+  fn calculate_normal_position(
+    &self,
+    adjusted_pos: usize,
+    marker_w: usize,
+    marker_h: usize,
+    actived_pos: &mut Vec2,
+  ) {
+    actived_pos.x = adjusted_pos % marker_w;
+    if actived_pos.x == 0 {
+      actived_pos.y += 1;
+      actived_pos.y %= marker_h;
+    }
+  }
+
+  fn calculate_reverse_position(
+    &self,
+    adjusted_pos: usize,
+    marker_w: usize,
+    marker_h: usize,
+    actived_pos: &mut Vec2,
+  ) {
+    actived_pos.x = marker_w - 1 - (adjusted_pos % marker_w);
+    if actived_pos.x == marker_w - 1 {
+      if actived_pos.y == 0 {
+        actived_pos.y = marker_h - 1;
+      } else {
+        actived_pos.y -= 1;
+      }
+    }
+  }
+
+  fn calculate_random_position(
+    &self,
+    adjusted_pos: usize,
+    marker_w: usize,
+    marker_h: usize,
+    actived_pos: &mut Vec2,
+  ) {
+    use std::collections::hash_map::DefaultHasher;
+    use std::hash::{Hash, Hasher};
+    let mut hasher = DefaultHasher::new();
+    adjusted_pos.hash(&mut hasher);
+    let hash = hasher.finish() as usize;
+    actived_pos.x = hash % marker_w;
+    actived_pos.y = (hash / marker_w) % marker_h;
+  }
+
   pub fn set_actived_pos(&self, pos: usize) {
     let area = self.area.lock().unwrap();
     let mut actived_pos = self.actived_pos.lock().unwrap();
@@ -208,37 +297,15 @@ impl MarkerArea {
     let marker_y = area.top();
     let canvas_w = *self.grid_width.lock().unwrap();
 
-    // Adjust pos based on ratio: higher denominators = faster, lower = slower
-    // Clock ticks at 4 per beat (sixteenth note resolution)
-    // 1/16 = every tick, 1/8 = every 2 ticks, 1/4 = every 4 ticks, etc.
-    let ratio = *self.ratio.lock().unwrap();
-    let divisor = std::cmp::max(1, 16 / ratio.1);
-    let adjusted_pos = pos / divisor;
+    let adjusted_pos = self.calculate_adjusted_pos(pos);
 
     if arpeggiator {
-      let regex_indexes = self.regex_indexes.lock().unwrap();
-      let mut matches: Vec<(usize, usize)> = regex_indexes
-        .iter()
-        .filter_map(|&idx| {
-          let x = idx % canvas_w;
-          let y = idx / canvas_w;
-          // Only include matches inside the marker area
-          if x >= marker_x && x < marker_x + marker_w && y >= marker_y && y < marker_y + marker_h {
-            Some((x - marker_x, y - marker_y))
-          } else {
-            None
-          }
-        })
-        .collect();
-      matches.sort_by_key(|&(x, y)| (y, x));
-      if reverse {
-        matches.reverse();
-      }
+      let matches =
+        self.get_arpeggiator_matches(marker_x, marker_y, marker_w, marker_h, canvas_w, reverse);
+
       if !matches.is_empty() {
         let step = if random {
-          let mut hasher = DefaultHasher::new();
-          adjusted_pos.hash(&mut hasher);
-          (hasher.finish() as usize) % matches.len()
+          self.get_random_index(adjusted_pos, matches.len())
         } else {
           adjusted_pos % matches.len()
         };
@@ -247,54 +314,293 @@ impl MarkerArea {
         actived_pos.y = y;
       } else {
         // No matches, fallback to normal running
-        if random {
-          let mut hasher = DefaultHasher::new();
-          adjusted_pos.hash(&mut hasher);
-          let hash = hasher.finish() as usize;
-          actived_pos.x = hash % marker_w;
-          actived_pos.y = (hash / marker_w) % marker_h;
-        } else if !reverse {
-          actived_pos.x = adjusted_pos % marker_w;
-          if actived_pos.x == 0 {
-            actived_pos.y += 1;
-            actived_pos.y %= marker_h;
-          }
-        } else {
-          actived_pos.x = marker_w - 1 - (adjusted_pos % marker_w);
-          if actived_pos.x == marker_w - 1 {
-            if actived_pos.y == 0 {
-              actived_pos.y = marker_h - 1;
-            } else {
-              actived_pos.y -= 1;
-            }
-          }
-        }
+        self.calculate_position_fallback(
+          adjusted_pos,
+          marker_w,
+          marker_h,
+          reverse,
+          random,
+          &mut actived_pos,
+        );
       }
     } else {
-      // Normal running
-      if random {
-        let mut hasher = DefaultHasher::new();
-        adjusted_pos.hash(&mut hasher);
-        let hash = hasher.finish() as usize;
-        actived_pos.x = hash % marker_w;
-        actived_pos.y = (hash / marker_w) % marker_h;
-      } else if !reverse {
-        actived_pos.x = adjusted_pos % marker_w;
-        if actived_pos.x == 0 {
-          actived_pos.y += 1;
-          actived_pos.y %= marker_h;
-        }
+      // Normal running without arpeggiator
+      self.calculate_position_fallback(
+        adjusted_pos,
+        marker_w,
+        marker_h,
+        reverse,
+        random,
+        &mut actived_pos,
+      );
+    }
+  }
+
+  fn calculate_position_fallback(
+    &self,
+    adjusted_pos: usize,
+    marker_w: usize,
+    marker_h: usize,
+    reverse: bool,
+    random: bool,
+    actived_pos: &mut Vec2,
+  ) {
+    if random {
+      self.calculate_random_position(adjusted_pos, marker_w, marker_h, actived_pos);
+    } else if reverse {
+      self.calculate_reverse_position(adjusted_pos, marker_w, marker_h, actived_pos);
+    } else {
+      self.calculate_normal_position(adjusted_pos, marker_w, marker_h, actived_pos);
+    }
+  }
+
+  fn calculate_absolute_position(&self, active_pos: Vec2) -> (usize, usize, usize) {
+    let pos = self.pos.lock().unwrap();
+    let grid_width = *self.grid_width.lock().unwrap();
+    let abs_y = pos.y + active_pos.y;
+    let abs_x = pos.x + active_pos.x;
+    let curr_running_marker = (abs_y * grid_width) + abs_x;
+    (abs_x, abs_y, curr_running_marker)
+  }
+
+  fn determine_note_position_and_scale(
+    &self,
+    active_pos: Vec2,
+    abs_x: usize,
+    abs_y: usize,
+  ) -> (usize, crate::core::scale::ScaleMode) {
+    let mut prev_active = self.prev_active_pos.lock().unwrap();
+    let prev_active_pos = *prev_active;
+
+    let x_diff = active_pos.x.abs_diff(prev_active_pos.x);
+    let y_diff = active_pos.y.abs_diff(prev_active_pos.y);
+
+    *prev_active = active_pos;
+    drop(prev_active);
+
+    let grid_height = *self.grid_height.lock().unwrap();
+
+    if x_diff > y_diff {
+      // Horizontal movement: use top keyboard mapping
+      let pos = if grid_height > 0 {
+        abs_x % grid_height
       } else {
-        actived_pos.x = marker_w - 1 - (adjusted_pos % marker_w);
-        if actived_pos.x == marker_w - 1 {
-          if actived_pos.y == 0 {
-            actived_pos.y = marker_h - 1;
-          } else {
-            actived_pos.y -= 1;
-          }
-        }
+        abs_y
+      };
+      let scale = *self.scale_mode_top.lock().unwrap();
+      (pos, scale)
+    } else {
+      // Vertical movement: use left keyboard mapping
+      let scale = *self.scale_mode_left.lock().unwrap();
+      (abs_y, scale)
+    }
+  }
+
+  fn trigger_midi_if_matched(
+    &self,
+    curr_running_marker: usize,
+    note_position: usize,
+    scale_mode: crate::core::scale::ScaleMode,
+  ) -> bool {
+    if let Some(matcher) = self.text_matcher.lock().unwrap().as_ref() {
+      if matcher.get(&curr_running_marker).is_some() {
+        let grid_width = *self.grid_width.lock().unwrap();
+        let grid_height = *self.grid_height.lock().unwrap();
+        let current_tempo = *self.tempo.lock().unwrap();
+
+        let _ = self.midi_tx.send(midi::Message::TriggerWithPosition((
+          curr_running_marker,
+          note_position,
+          grid_width,
+          grid_height,
+          scale_mode,
+          current_tempo,
+        )));
+        return true;
       }
     }
+    false
+  }
+
+  fn handle_accumulation_mode(&self, abs_x: usize, cb_sink: &cursive::CbSink) -> Option<Vec2> {
+    if !*self.accumulation_mode.lock().unwrap() {
+      return None;
+    }
+
+    self.check_stack_operator(abs_x, cb_sink);
+
+    let area = self.area.lock().unwrap();
+    let marker_area_size = area.width() * area.height();
+    drop(area);
+
+    let mut counter = self.accumulation_counter.lock().unwrap();
+    *counter += 1;
+    let current_count = *counter;
+
+    if *counter >= marker_area_size {
+      *counter = 0;
+      drop(counter);
+
+      self.update_accumulation_ui(0, marker_area_size, cb_sink);
+      Some(self.perform_accumulation_jump(cb_sink))
+    } else {
+      drop(counter);
+      self.update_accumulation_ui(current_count, marker_area_size, cb_sink);
+      None
+    }
+  }
+
+  fn update_accumulation_ui(&self, count: usize, total: usize, cb_sink: &cursive::CbSink) {
+    cb_sink
+      .send(Box::new(move |siv| {
+        siv.call_on_name(
+          consts::input_status_unit_view,
+          move |view: &mut TextView| {
+            view.set_content(format!("acc: {}/{}", count, total));
+          },
+        );
+      }))
+      .unwrap();
+  }
+
+  fn perform_accumulation_jump(&self, cb_sink: &cursive::CbSink) -> Vec2 {
+    let mut rng = rand::thread_rng();
+
+    let area = self.area.lock().unwrap();
+    let marker_width = area.width();
+    let marker_height = area.height();
+    drop(area);
+
+    let grid_width = *self.grid_width.lock().unwrap();
+    let grid_height = *self.grid_height.lock().unwrap();
+
+    let current_marker_pos = {
+      let pos = self.pos.lock().unwrap();
+      (pos.x, pos.y)
+    };
+
+    // Determine jump position from stack or random
+    let (new_x, new_y) = self.get_jump_position(
+      current_marker_pos,
+      marker_width,
+      marker_height,
+      grid_width,
+      grid_height,
+      &mut rng,
+      cb_sink,
+    );
+
+    // Update marker position and area
+    let mut pos = self.pos.lock().unwrap();
+    pos.x = new_x;
+    pos.y = new_y;
+    let new_pos = *pos;
+    drop(pos);
+
+    let mut area = self.area.lock().unwrap();
+    *area = Rect::from_size((new_x, new_y), (marker_width, marker_height));
+    let new_area = *area;
+    drop(area);
+
+    // Reset active position to start
+    let mut actived = self.actived_pos.lock().unwrap();
+    *actived = Vec2::zero();
+    drop(actived);
+
+    // Update UI with new marker position
+    cb_sink
+      .send(Box::new(move |siv| {
+        siv.call_on_name(
+          consts::canvas_editor_section_view,
+          move |canvas: &mut Canvas<CanvasEditor>| {
+            let editor = canvas.state_mut();
+            editor.marker_ui.marker_pos = new_pos;
+            editor.marker_ui.marker_area = new_area;
+          },
+        );
+      }))
+      .unwrap();
+
+    Vec2::zero()
+  }
+
+  fn get_jump_position(
+    &self,
+    current_marker_pos: (usize, usize),
+    marker_width: usize,
+    marker_height: usize,
+    grid_width: usize,
+    grid_height: usize,
+    rng: &mut impl rand::Rng,
+    cb_sink: &cursive::CbSink,
+  ) -> (usize, usize) {
+    let mut stack = self.position_stack.lock().unwrap();
+
+    if let Some(&top_pos) = stack.last() {
+      if top_pos == current_marker_pos {
+        // Same position, jump randomly
+        drop(stack);
+        self.generate_random_position(marker_width, marker_height, grid_width, grid_height, rng)
+      } else {
+        // Use position from stack
+        let pos = stack.pop().unwrap();
+        let stack_display = format!("{:?}", *stack);
+        drop(stack);
+
+        let mut pushed = self.pushed_positions.lock().unwrap();
+        pushed.remove(&pos);
+        drop(pushed);
+
+        self.update_stack_ui(&stack_display, cb_sink);
+        pos
+      }
+    } else {
+      drop(stack);
+      self.generate_random_position(marker_width, marker_height, grid_width, grid_height, rng)
+    }
+  }
+
+  fn generate_random_position(
+    &self,
+    marker_width: usize,
+    marker_height: usize,
+    grid_width: usize,
+    grid_height: usize,
+    rng: &mut impl rand::Rng,
+  ) -> (usize, usize) {
+    let max_x = grid_width.saturating_sub(marker_width);
+    let max_y = grid_height.saturating_sub(marker_height);
+
+    if max_x > 0 && max_y > 0 {
+      (rng.gen_range(0..=max_x), rng.gen_range(0..=max_y))
+    } else {
+      (0, 0)
+    }
+  }
+
+  fn update_stack_ui(&self, stack_display: &str, cb_sink: &cursive::CbSink) {
+    let stack_str = stack_display.to_string();
+    cb_sink
+      .send(Box::new(move |siv| {
+        siv.call_on_name(consts::stack_status_unit_view, |view: &mut TextView| {
+          view.set_content(stack_str.clone());
+        });
+      }))
+      .unwrap();
+  }
+
+  fn update_active_pos_ui(&self, active_pos: Vec2, cb_sink: &cursive::CbSink) {
+    cb_sink
+      .send(Box::new(move |siv| {
+        siv.call_on_name(
+          consts::canvas_editor_section_view,
+          move |canvas: &mut Canvas<CanvasEditor>| {
+            let editor = canvas.state_mut();
+            editor.marker_ui.actived_pos = active_pos;
+          },
+        );
+      }))
+      .unwrap();
   }
 
   pub fn toggle_arpeggiator_mode(&self, cb_sink: cursive::CbSink) {
@@ -591,227 +897,21 @@ impl MarkerArea {
             let mut active_pos = *active_pos_mutex;
             drop(active_pos_mutex);
 
-            // Calculate current running marker position
-            let pos = self.pos.lock().unwrap();
-            let grid_width = *self.grid_width.lock().unwrap();
-            let grid_height = *self.grid_height.lock().unwrap();
-            let abs_y = pos.y + active_pos.y;
-            let abs_x = pos.x + active_pos.x;
-            let curr_running_marker = (abs_y * grid_width) + abs_x;
-            drop(pos);
+            let (abs_x, abs_y, curr_running_marker) = self.calculate_absolute_position(active_pos);
 
-            // Get previous active_pos and determine movement direction
-            let mut prev_active = self.prev_active_pos.lock().unwrap();
-            let prev_active_pos = *prev_active;
+            let (note_position, scale_mode) =
+              self.determine_note_position_and_scale(active_pos, abs_x, abs_y);
 
-            // Calculate which axis of active_pos changed more (horizontal vs vertical movement)
-            let x_diff = active_pos.x.abs_diff(prev_active_pos.x);
-            let y_diff = active_pos.y.abs_diff(prev_active_pos.y);
+            let matched =
+              self.trigger_midi_if_matched(curr_running_marker, note_position, scale_mode);
 
-            // Determine note position and scale mode based on movement direction
-            let (note_position, scale_mode) = if x_diff > y_diff {
-              // Horizontal movement (active_pos.x changed): use top keyboard mapping (x % grid_height)
-              let pos = if grid_height > 0 {
-                abs_x % grid_height
-              } else {
-                abs_y
-              };
-              let scale = *self.scale_mode_top.lock().unwrap();
-              (pos, scale)
-            } else {
-              // Vertical movement (active_pos.y changed): use left keyboard mapping (y position directly)
-              let scale = *self.scale_mode_left.lock().unwrap();
-              (abs_y, scale)
-            };
-
-            // Store current active_pos for next comparison
-            *prev_active = active_pos;
-            drop(prev_active); // Release lock
-
-            // Check if current position has a regex match and trigger with position-based note
-            if let Some(matcher) = self.text_matcher.lock().unwrap().as_ref() {
-              if matcher.get(&curr_running_marker).is_some() {
-                // Get current tempo
-                let current_tempo = *self.tempo.lock().unwrap();
-
-                // Trigger MIDI with position-based note mapping
-                let _ = self.midi_tx.send(midi::Message::TriggerWithPosition((
-                  curr_running_marker,
-                  note_position, // Note position based on movement direction
-                  grid_width,
-                  grid_height,
-                  scale_mode,
-                  current_tempo,
-                )));
-
-                // Handle accumulation mode
-                if *self.accumulation_mode.lock().unwrap() {
-                  // Check stack operator at current abs_x position (only when accumulation mode is on)
-                  self.check_stack_operator(abs_x, &cb_sink);
-
-                  let area = self.area.lock().unwrap();
-                  let marker_area_size = area.width() * area.height();
-                  drop(area);
-
-                  let mut counter = self.accumulation_counter.lock().unwrap();
-                  *counter += 1;
-                  let current_count = *counter;
-
-                  // When counter reaches marker area size, randomly jump to new position
-                  if *counter >= marker_area_size {
-                    *counter = 0; // Reset counter
-                    drop(counter);
-
-                    // Update UI to show reset counter
-                    let cb_sink_update = cb_sink.clone();
-                    cb_sink_update
-                      .send(Box::new(move |siv| {
-                        siv.call_on_name(
-                          consts::input_status_unit_view,
-                          move |view: &mut TextView| {
-                            view.set_content(format!("acc: 0/{}", marker_area_size));
-                          },
-                        );
-                      }))
-                      .unwrap();
-
-                    // Generate random position within canvas_editor bounds
-                    use rand::Rng;
-                    let mut rng = rand::thread_rng();
-
-                    let area = self.area.lock().unwrap();
-                    let marker_width = area.width();
-                    let marker_height = area.height();
-                    drop(area);
-
-                    // Get current marker position to check against stack
-                    let current_marker_pos = {
-                      let pos = self.pos.lock().unwrap();
-                      (pos.x, pos.y)
-                    };
-
-                    // Determine jump position: check stack first, otherwise random
-                    let mut stack = self.position_stack.lock().unwrap();
-                    let (new_x, new_y) = if let Some(&top_pos) = stack.last() {
-                      // Check if stack position is the same as current position
-                      if top_pos == current_marker_pos {
-                        // Same position, jump randomly but keep position in stack for next time
-                        drop(stack);
-
-                        // Generate random position
-                        let max_x = grid_width.saturating_sub(marker_width);
-                        let max_y = grid_height.saturating_sub(marker_height);
-
-                        if max_x > 0 && max_y > 0 {
-                          (rng.gen_range(0..=max_x), rng.gen_range(0..=max_y))
-                        } else {
-                          (0, 0)
-                        }
-                      } else {
-                        // Use position from stack (pop it since we're jumping to it)
-                        let pos = stack.pop().unwrap();
-                        let stack_display = format!("{:?}", *stack);
-                        drop(stack);
-
-                        // Remove from pushed_positions
-                        let mut pushed = self.pushed_positions.lock().unwrap();
-                        pushed.remove(&pos);
-                        drop(pushed);
-
-                        // Update stack UI
-                        let cb_sink_stack = cb_sink.clone();
-                        cb_sink_stack
-                          .send(Box::new(move |siv| {
-                            siv.call_on_name(
-                              consts::stack_status_unit_view,
-                              |view: &mut TextView| {
-                                view.set_content(stack_display);
-                              },
-                            );
-                          }))
-                          .unwrap();
-
-                        pos
-                      }
-                    } else {
-                      drop(stack);
-
-                      // No position in stack, jump randomly
-                      let max_x = grid_width.saturating_sub(marker_width);
-                      let max_y = grid_height.saturating_sub(marker_height);
-
-                      if max_x > 0 && max_y > 0 {
-                        (rng.gen_range(0..=max_x), rng.gen_range(0..=max_y))
-                      } else {
-                        (0, 0)
-                      }
-                    };
-
-                    // Update marker position
-                    let mut pos = self.pos.lock().unwrap();
-                    pos.x = new_x;
-                    pos.y = new_y;
-                    let new_pos = *pos;
-                    drop(pos);
-
-                    // Update marker area
-                    let mut area = self.area.lock().unwrap();
-                    *area = Rect::from_size((new_x, new_y), (marker_width, marker_height));
-                    let new_area = *area;
-                    drop(area);
-
-                    // Reset active position to start
-                    let mut actived = self.actived_pos.lock().unwrap();
-                    *actived = Vec2::zero();
-                    active_pos = Vec2::zero(); // Update local variable for UI update
-                    drop(actived);
-
-                    // Update UI with new marker position and area immediately
-                    let cb_sink_clone = cb_sink.clone();
-                    cb_sink_clone
-                      .send(Box::new(move |siv| {
-                        siv.call_on_name(
-                          consts::canvas_editor_section_view,
-                          move |canvas: &mut Canvas<CanvasEditor>| {
-                            let editor = canvas.state_mut();
-                            editor.marker_ui.marker_pos = new_pos;
-                            editor.marker_ui.marker_area = new_area;
-                          },
-                        );
-                      }))
-                      .unwrap();
-                  } else {
-                    // Update UI to show current counter progress
-                    drop(counter);
-                    let cb_sink_update = cb_sink.clone();
-                    cb_sink_update
-                      .send(Box::new(move |siv| {
-                        siv.call_on_name(
-                          consts::input_status_unit_view,
-                          move |view: &mut TextView| {
-                            view
-                              .set_content(format!("acc: {}/{}", current_count, marker_area_size));
-                          },
-                        );
-                      }))
-                      .unwrap();
-                  }
-                }
+            if matched {
+              if let Some(new_active_pos) = self.handle_accumulation_mode(abs_x, &cb_sink) {
+                active_pos = new_active_pos;
               }
             }
 
-            // Always update active_pos in UI (will be Vec2::zero() if we just jumped)
-            cb_sink
-              .send(Box::new(move |siv| {
-                siv.call_on_name(
-                  consts::canvas_editor_section_view,
-                  move |canvas: &mut Canvas<CanvasEditor>| {
-                    let editor = canvas.state_mut();
-                    editor.marker_ui.actived_pos = active_pos;
-                  },
-                );
-              }))
-              .unwrap();
+            self.update_active_pos_ui(active_pos, &cb_sink);
           }
           Message::Scale(size, cb_sink) => {
             self.scale(size);
