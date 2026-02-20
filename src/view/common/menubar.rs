@@ -108,6 +108,18 @@ impl Menubar {
       .subtree("Scale (Left)", build_scale_menu_left())
       .subtree("Scale (Top)", build_scale_menu_top())
       .delimiter()
+      .leaf("Reverse", |s| {
+        s.call_on_name(
+          consts::canvas_editor_section_view,
+          |canvas: &mut Canvas<CanvasEditor>| {
+            canvas
+              .state_mut()
+              .marker_tx
+              .send(super::marker::Message::ToggleReverseMode())
+              .unwrap();
+          },
+        );
+      })
       .leaf("Toggle Accumulation Mode", |s| {
         s.call_on_name(
           consts::canvas_editor_section_view,

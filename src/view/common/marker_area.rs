@@ -31,6 +31,7 @@ pub enum Message {
   SetScaleModeTop(crate::core::scale::ScaleMode),
   ToggleAccumulationMode(cursive::CbSink),
   SetTempo(usize),
+  ToggleReverseMode(cursive::CbSink),
 }
 
 pub struct MarkerArea {
@@ -52,6 +53,7 @@ pub struct MarkerArea {
   tempo: Arc<Mutex<usize>>,
   position_stack: Arc<Mutex<Vec<(usize, usize)>>>,
   pushed_positions: Arc<Mutex<HashMap<(usize, usize), bool>>>,
+  reverse_mode: Arc<Mutex<bool>>,
 }
 
 impl MarkerArea {
@@ -75,13 +77,37 @@ impl MarkerArea {
       tempo: Arc::new(Mutex::new(120)), // Default 120 BPM
       position_stack: Arc::new(Mutex::new(Vec::new())),
       pushed_positions: Arc::new(Mutex::new(HashMap::new())),
+      reverse_mode: Arc::new(Mutex::new(false)),
     }
+  }
+
+  pub fn toggle_reverse_mode(&self, cb_sink: cursive::CbSink) {
+    let mut reverse = self.reverse_mode.lock().unwrap();
+    *reverse = !*reverse;
+    let is_reversed = *reverse;
+    drop(reverse);
+    cb_sink
+      .send(Box::new(move |siv| {
+        siv.call_on_name(
+          consts::canvas_editor_section_view,
+          |canvas: &mut Canvas<CanvasEditor>| {
+            let editor = canvas.state_mut();
+            editor.reverse_mode = is_reversed;
+            editor.marker_ui.reverse_mode = is_reversed;
+          },
+        );
+      }))
+      .unwrap();
   }
 
   fn set_move(&self, direction: Direction, canvas_size: Vec2) {
     let mut pos = self.pos.lock().unwrap();
     let mut area = self.area.lock().unwrap();
-    let next_pos = pos.saturating_add(direction.get_direction());
+    let (dx, dy) = direction.get_direction();
+    let next_pos = Vec2::new(
+      pos.x.saturating_add_signed(dx.try_into().unwrap()),
+      pos.y.saturating_add_signed(dy.try_into().unwrap()),
+    );
     let next_pos_bottom_right: Vec2 = (
       next_pos.x + area.width() - 1,
       next_pos.y + area.height() - 1,
@@ -139,12 +165,24 @@ impl MarkerArea {
   pub fn set_actived_pos(&self, pos: usize) {
     let area = self.area.lock().unwrap();
     let mut actived_pos = self.actived_pos.lock().unwrap();
-
-    actived_pos.x = pos % area.width();
-
-    if actived_pos.x == 0 {
-      actived_pos.y += 1;
-      actived_pos.y %= area.height();
+    let reverse = *self.reverse_mode.lock().unwrap();
+    let width = area.width();
+    let height = area.height();
+    if !reverse {
+      actived_pos.x = pos % width;
+      if actived_pos.x == 0 {
+        actived_pos.y += 1;
+        actived_pos.y %= height;
+      }
+    } else {
+      actived_pos.x = width - 1 - (pos % width);
+      if actived_pos.x == width - 1 {
+        if actived_pos.y == 0 {
+          actived_pos.y = height - 1;
+        } else {
+          actived_pos.y -= 1;
+        }
+      }
     }
   }
 
@@ -719,6 +757,9 @@ impl MarkerArea {
           Message::SetTempo(bpm) => {
             let mut tempo = self.tempo.lock().unwrap();
             *tempo = bpm;
+          }
+          Message::ToggleReverseMode(cb_sink) => {
+            self.toggle_reverse_mode(cb_sink);
           }
         }
       }

@@ -39,6 +39,7 @@ pub enum Message {
   SetScaleModeLeft(crate::core::scale::ScaleMode),
   SetScaleModeTop(crate::core::scale::ScaleMode),
   ToggleAccumulationMode(),
+  ToggleReverseMode(),
   SetTempo(usize),
 }
 
@@ -148,12 +149,10 @@ impl Marker {
           Message::SetScaleModeLeft(scale_mode) => {
             let cb_sink = self.cb_sink.clone();
 
-            // Send to marker_area
             marker_area_tx
               .send(marker_area::Message::SetScaleModeLeft(scale_mode))
               .unwrap();
 
-            // Update canvas_editor
             cb_sink
               .send(Box::new(move |siv| {
                 siv.call_on_name(
@@ -169,12 +168,10 @@ impl Marker {
           Message::SetScaleModeTop(scale_mode) => {
             let cb_sink = self.cb_sink.clone();
 
-            // Send to marker_area
             marker_area_tx
               .send(marker_area::Message::SetScaleModeTop(scale_mode))
               .unwrap();
 
-            // Update canvas_editor
             cb_sink
               .send(Box::new(move |siv| {
                 siv.call_on_name(
@@ -189,22 +186,22 @@ impl Marker {
           }
           Message::ToggleAccumulationMode() => {
             let cb_sink = self.cb_sink.clone();
-            // Forward to marker_area
             marker_area_tx
               .send(marker_area::Message::ToggleAccumulationMode(cb_sink))
               .unwrap();
           }
+          Message::ToggleReverseMode() => {
+            let cb_sink = self.cb_sink.clone();
+            marker_area_tx
+              .send(marker_area::Message::ToggleReverseMode(cb_sink))
+              .unwrap();
+          }
           Message::SetTempo(bpm) => {
-            // Forward to marker_area
             marker_area_tx
               .send(marker_area::Message::SetTempo(bpm))
               .unwrap();
-            
-            // Also forward to MIDI
-            self
-              .midi_tx
-              .send(midi::Message::SetTempo(bpm))
-              .unwrap();
+
+            self.midi_tx.send(midi::Message::SetTempo(bpm)).unwrap();
           }
         }
       }
