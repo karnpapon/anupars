@@ -100,21 +100,29 @@ impl CanvasEditor {
       return;
     }
 
+    let abs_active_x = self.marker_ui.marker_pos.x + self.marker_ui.actived_pos.x;
     for x in 0..self.grid.width {
       let y_pos = x % self.grid.height;
       let (note_index, octave, note_name) = self.y_to_note_top(y_pos);
 
       let is_black_key = matches!(note_index, 1 | 3 | 6 | 8 | 10); // C#, D#, F#, G#, A#
 
-      let text_color = ColorType::rgb(100, 100, 100);
-
-      let style = if note_name == "C" {
+      let style = if x == abs_active_x {
+        if note_name == "C" {
+          Style::from(ColorStyle::new(
+            ColorType::rgb(0, 0, 0),
+            ColorType::rgb(255, 255, 255),
+          ))
+        } else {
+          Style::from(ColorStyle::front(ColorType::rgb(255, 255, 255)))
+        }
+      } else if note_name == "C" {
         Style::from(ColorStyle::new(
           ColorType::rgb(0, 0, 0),
           ColorType::rgb(100, 100, 100),
         ))
       } else {
-        Style::from(ColorStyle::front(text_color))
+        Style::from(ColorStyle::front(ColorType::rgb(100, 100, 100)))
       };
 
       printer.with_style(style, |printer| {
@@ -193,21 +201,26 @@ impl CanvasEditor {
     }
 
     // Draw operators spread across the entire width with spacing
-    let op_style = Style::from(ColorStyle::front(ColorType::rgb(100, 100, 100)));
-    printer.with_style(op_style, |printer| {
-      let mut x = 0;
-      let mut op_index = 0;
+    let mut x = 0;
+    let mut op_index = 0;
 
-      while x < self.grid.width {
-        // Print the operator at the current position
-        let op = operators[op_index % operators.len()];
+    while x < self.grid.width {
+      // Print the operator at the current position
+      let op = operators[op_index % operators.len()];
+      let is_active = x == (self.marker_ui.marker_pos.x + self.marker_ui.actived_pos.x);
+      let style = if is_active {
+        Style::from(ColorStyle::front(ColorType::rgb(255, 255, 255)))
+      } else {
+        Style::from(ColorStyle::front(ColorType::rgb(100, 100, 100)))
+      };
+      printer.with_style(style, |printer| {
         printer.print((x, 1), &op.to_string());
+      });
 
-        // Move to next operator position
-        x += pattern_width;
-        op_index += 1;
-      }
-    });
+      // Move to next operator position
+      x += pattern_width;
+      op_index += 1;
+    }
   }
 
   pub fn build(
