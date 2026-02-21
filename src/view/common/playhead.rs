@@ -1,12 +1,14 @@
 use std::collections::hash_map::Entry;
 use std::collections::BTreeSet;
 use std::collections::HashMap;
+use std::collections::VecDeque;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::mpsc::{channel, Sender};
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::thread;
+use std::time::Duration;
 
 use cursive::views::Canvas;
 use cursive::views::TextView;
@@ -17,13 +19,21 @@ use crate::core::{consts, midi, playback_modes, rect::Rect, regex::Match, utils}
 use crate::view::common::grid_editor::CanvasEditor;
 use crate::view::common::playhead_controller::Direction;
 
+// UI update types for batching
+#[derive(Clone, Debug)]
+pub enum UIUpdate {
+  ActivePos(Vec2),
+  AccumulationCounter(usize, usize), // (count, total)
+  StackDisplay(String),
+  MarkerPosAndArea(Vec2, Rect),
+}
+
 struct GridParams<'a, R: rand::Rng> {
   pub marker_width: usize,
   pub marker_height: usize,
   pub grid_width: usize,
   pub grid_height: usize,
   pub rng: &'a mut R,
-  pub cb_sink: &'a cursive::CbSink,
 }
 
 pub struct MarkerUI {
@@ -95,6 +105,7 @@ pub struct MarkerArea {
   ratio: Arc<Mutex<(i64, usize)>>,
   position_stack: Arc<Mutex<Vec<(usize, usize)>>>,
   pushed_positions: Arc<Mutex<HashMap<(usize, usize), bool>>>,
+  pub ui_update_queue: Arc<Mutex<VecDeque<UIUpdate>>>,
 }
 
 impl MarkerArea {
@@ -122,7 +133,72 @@ impl MarkerArea {
       ratio: Arc::new(Mutex::new((1, 16))),
       position_stack: Arc::new(Mutex::new(Vec::new())),
       pushed_positions: Arc::new(Mutex::new(HashMap::new())),
+      ui_update_queue: Arc::new(Mutex::new(VecDeque::new())),
     }
+  }
+
+  pub fn spawn_ui_processor(ui_queue: Arc<Mutex<VecDeque<UIUpdate>>>, cb_sink: cursive::CbSink) {
+    thread::Builder::new()
+      .name("ui-batch-processor".to_string())
+      .spawn(move || loop {
+        thread::sleep(Duration::from_millis(16)); // ~60 FPS
+
+        let mut queue = ui_queue.lock().unwrap();
+        if queue.is_empty() {
+          drop(queue);
+          continue;
+        }
+
+        // Drain all pending updates
+        let updates: Vec<UIUpdate> = queue.drain(..).collect();
+        drop(queue);
+
+        // Process batched updates
+        cb_sink
+          .send(Box::new(move |siv| {
+            for update in updates {
+              match update {
+                UIUpdate::ActivePos(active_pos) => {
+                  siv.call_on_name(
+                    consts::canvas_editor_section_view,
+                    move |canvas: &mut Canvas<CanvasEditor>| {
+                      let editor = canvas.state_mut();
+                      editor.marker_ui.actived_pos = active_pos;
+                    },
+                  );
+                }
+                UIUpdate::AccumulationCounter(count, total) => {
+                  siv.call_on_name(
+                    consts::input_status_unit_view,
+                    move |view: &mut TextView| {
+                      view.set_content(format!("acc: {}/{}", count, total));
+                    },
+                  );
+                }
+                UIUpdate::StackDisplay(stack_str) => {
+                  siv.call_on_name(
+                    consts::stack_status_unit_view,
+                    move |view: &mut TextView| {
+                      view.set_content(stack_str);
+                    },
+                  );
+                }
+                UIUpdate::MarkerPosAndArea(pos, area) => {
+                  siv.call_on_name(
+                    consts::canvas_editor_section_view,
+                    move |canvas: &mut Canvas<CanvasEditor>| {
+                      let editor = canvas.state_mut();
+                      editor.marker_ui.marker_pos = pos;
+                      editor.marker_ui.marker_area = area;
+                    },
+                  );
+                }
+              }
+            }
+          }))
+          .unwrap();
+      })
+      .expect("Failed to spawn UI batch processor thread");
   }
 
   fn build_mode_status_string(&self) -> String {
@@ -365,7 +441,7 @@ impl MarkerArea {
       return None;
     }
 
-    self.check_stack_operator(abs_x, cb_sink);
+    self.check_stack_operator(abs_x);
 
     let area = self.area.lock().unwrap();
     let marker_area_size = area.width() * area.height();
@@ -380,7 +456,7 @@ impl MarkerArea {
       drop(counter);
 
       self.update_accumulation_ui(0, marker_area_size, cb_sink);
-      Some(self.perform_accumulation_jump(cb_sink))
+      Some(self.perform_accumulation_jump())
     } else {
       drop(counter);
       self.update_accumulation_ui(current_count, marker_area_size, cb_sink);
@@ -388,20 +464,13 @@ impl MarkerArea {
     }
   }
 
-  fn update_accumulation_ui(&self, count: usize, total: usize, cb_sink: &cursive::CbSink) {
-    cb_sink
-      .send(Box::new(move |siv| {
-        siv.call_on_name(
-          consts::input_status_unit_view,
-          move |view: &mut TextView| {
-            view.set_content(format!("acc: {}/{}", count, total));
-          },
-        );
-      }))
-      .unwrap();
+  fn update_accumulation_ui(&self, count: usize, total: usize, _cb_sink: &cursive::CbSink) {
+    // Queue UI update instead of immediate send (batched processing)
+    let mut queue = self.ui_update_queue.lock().unwrap();
+    queue.push_back(UIUpdate::AccumulationCounter(count, total));
   }
 
-  fn perform_accumulation_jump(&self, cb_sink: &cursive::CbSink) -> Vec2 {
+  fn perform_accumulation_jump(&self) -> Vec2 {
     let mut rng = rand::thread_rng();
 
     let area = self.area.lock().unwrap();
@@ -424,7 +493,6 @@ impl MarkerArea {
       grid_width,
       grid_height,
       rng: &mut rng,
-      cb_sink,
     };
     let (new_x, new_y) = self.get_jump_position(current_marker_pos, params);
 
@@ -445,19 +513,8 @@ impl MarkerArea {
     *actived = Vec2::zero();
     drop(actived);
 
-    // Update UI with new marker position
-    cb_sink
-      .send(Box::new(move |siv| {
-        siv.call_on_name(
-          consts::canvas_editor_section_view,
-          move |canvas: &mut Canvas<CanvasEditor>| {
-            let editor = canvas.state_mut();
-            editor.marker_ui.marker_pos = new_pos;
-            editor.marker_ui.marker_area = new_area;
-          },
-        );
-      }))
-      .unwrap();
+    let mut queue = self.ui_update_queue.lock().unwrap();
+    queue.push_back(UIUpdate::MarkerPosAndArea(new_pos, new_area));
 
     Vec2::zero()
   }
@@ -490,7 +547,11 @@ impl MarkerArea {
         pushed.remove(&pos);
         drop(pushed);
 
-        self.update_stack_ui(&stack_display, params.cb_sink);
+        // Queue UI update (batched processing)
+        let mut queue = self.ui_update_queue.lock().unwrap();
+        queue.push_back(UIUpdate::StackDisplay(stack_display));
+        drop(queue);
+
         pos
       }
     } else {
@@ -523,29 +584,10 @@ impl MarkerArea {
     }
   }
 
-  fn update_stack_ui(&self, stack_display: &str, cb_sink: &cursive::CbSink) {
-    let stack_str = stack_display.to_string();
-    cb_sink
-      .send(Box::new(move |siv| {
-        siv.call_on_name(consts::stack_status_unit_view, |view: &mut TextView| {
-          view.set_content(stack_str.clone());
-        });
-      }))
-      .unwrap();
-  }
-
-  fn update_active_pos_ui(&self, active_pos: Vec2, cb_sink: &cursive::CbSink) {
-    cb_sink
-      .send(Box::new(move |siv| {
-        siv.call_on_name(
-          consts::canvas_editor_section_view,
-          move |canvas: &mut Canvas<CanvasEditor>| {
-            let editor = canvas.state_mut();
-            editor.marker_ui.actived_pos = active_pos;
-          },
-        );
-      }))
-      .unwrap();
+  fn update_active_pos_ui(&self, active_pos: Vec2, _cb_sink: &cursive::CbSink) {
+    // Queue UI update instead of immediate send (batched processing)
+    let mut queue = self.ui_update_queue.lock().unwrap();
+    queue.push_back(UIUpdate::ActivePos(active_pos));
   }
 
   pub fn toggle_arpeggiator_mode(&self, cb_sink: cursive::CbSink) {
@@ -611,7 +653,7 @@ impl MarkerArea {
     *tm = text_matcher
   }
 
-  fn check_stack_operator(&self, abs_x: usize, cb_sink: &cursive::CbSink) {
+  fn check_stack_operator(&self, abs_x: usize) {
     // Stack operators: P (Push), S (Swap), O (pOp) with spacing of 11 (10 spaces + 1 char)
     // Only active when accumulation mode is enabled
     let is_accumulation_mode = self.accumulation_mode.load(Ordering::Relaxed);
@@ -644,14 +686,8 @@ impl MarkerArea {
             let stack_display = format!("{:?}", *stack);
             drop(stack);
 
-            // Update UI
-            cb_sink
-              .send(Box::new(move |siv| {
-                siv.call_on_name(consts::stack_status_unit_view, |view: &mut TextView| {
-                  view.set_content(stack_display);
-                });
-              }))
-              .unwrap();
+            let mut queue = self.ui_update_queue.lock().unwrap();
+            queue.push_back(UIUpdate::StackDisplay(stack_display));
           }
         }
         'S' => {
@@ -664,14 +700,8 @@ impl MarkerArea {
           let stack_display = format!("{:?}", *stack);
           drop(stack);
 
-          // Update UI
-          cb_sink
-            .send(Box::new(move |siv| {
-              siv.call_on_name(consts::stack_status_unit_view, |view: &mut TextView| {
-                view.set_content(stack_display);
-              });
-            }))
-            .unwrap();
+          let mut queue = self.ui_update_queue.lock().unwrap();
+          queue.push_back(UIUpdate::StackDisplay(stack_display));
         }
         'O' => {
           // pOp: Remove last position from stack
@@ -684,14 +714,8 @@ impl MarkerArea {
             pushed.remove(&pos);
             drop(pushed);
 
-            // Update UI
-            cb_sink
-              .send(Box::new(move |siv| {
-                siv.call_on_name(consts::stack_status_unit_view, |view: &mut TextView| {
-                  view.set_content(stack_display);
-                });
-              }))
-              .unwrap();
+            let mut queue = self.ui_update_queue.lock().unwrap();
+            queue.push_back(UIUpdate::StackDisplay(stack_display));
           }
         }
         _ => {}

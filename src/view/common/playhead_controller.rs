@@ -73,6 +73,13 @@ impl Marker {
 
   pub fn run(self) {
     let marker_area = Arc::new(MarkerArea::new(self.midi_tx.clone()));
+
+    // Spawn UI batch processor thread (60 FPS)
+    playhead::MarkerArea::spawn_ui_processor(
+      Arc::clone(&marker_area.ui_update_queue),
+      self.cb_sink.clone(),
+    );
+
     let marker_area_tx = marker_area.run();
 
     thread::spawn(move || {
