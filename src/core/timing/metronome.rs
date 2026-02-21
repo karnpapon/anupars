@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use num::ToPrimitive;
 
-use crate::view::common::marker;
+use crate::view::common::playhead_controller;
 
 use super::clock;
 
@@ -25,12 +25,12 @@ pub enum Message {
 pub struct Metronome {
   pub tx: Sender<Message>,
   pub rx: Receiver<Message>,
-  pub marker_tx: Sender<marker::Message>,
+  pub marker_tx: Sender<playhead_controller::Message>,
   cb_sink: cursive::CbSink,
 }
 
 impl Metronome {
-  pub fn new(cb_sink: cursive::CbSink, marker_tx: Sender<marker::Message>) -> Self {
+  pub fn new(cb_sink: cursive::CbSink, marker_tx: Sender<playhead_controller::Message>) -> Self {
     let (tx, rx) = channel();
 
     Self {
@@ -73,13 +73,16 @@ impl Metronome {
 
           // Forward tempo to marker as BPM (convert from Ratio to usize)
           let bpm = tempo.to_integer() as usize;
-          self.marker_tx.send(marker::Message::SetTempo(bpm)).unwrap();
+          self
+            .marker_tx
+            .send(playhead_controller::Message::SetTempo(bpm))
+            .unwrap();
         }
         Message::Time(time) => {
           let tick = time.ticks().to_usize().unwrap();
           self
             .marker_tx
-            .send(marker::Message::SetActivePos(tick))
+            .send(playhead_controller::Message::SetActivePos(tick))
             .unwrap();
         }
       }

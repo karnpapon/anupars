@@ -1,9 +1,11 @@
-use crate::core::{
-  application::UserData,
-  consts,
-  midi::{self, MidiMsg},
-  parser::{self},
-  utils,
+use crate::{
+  app::UserData,
+  core::{
+    consts,
+    midi::{self, MidiMsg},
+    parser::{self},
+    utils,
+  },
 };
 use cursive::{
   theme::Style,

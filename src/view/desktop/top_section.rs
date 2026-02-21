@@ -12,10 +12,10 @@ use cursive::{
 
 use crate::{
   core::{consts, regex, utils},
-  view::common::canvas_editor::CanvasEditor,
+  view::common::grid_editor::CanvasEditor,
 };
 
-use super::anu::Anu;
+use super::app::Anu;
 
 pub enum RegexFlag {
   CaseSensitive,

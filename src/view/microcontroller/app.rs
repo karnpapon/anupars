@@ -10,8 +10,8 @@ use std::sync::RwLock;
 
 use crate::core::consts;
 use crate::core::regex;
-use crate::view::common::canvas_section::CanvasSection;
-use crate::view::common::marker;
+use crate::view::common::grid::CanvasSection;
+use crate::view::common::playhead_controller;
 
 use super::console::{Console, RegexFlag, RegexMode};
 
@@ -40,7 +40,7 @@ impl Anu {
   pub fn build(
     &mut self,
     regex_tx: Sender<regex::Message>,
-    marker_tx: Sender<marker::Message>,
+    marker_tx: Sender<playhead_controller::Message>,
   ) -> NamedView<LinearLayout> {
     let top_section = Console::build(self, regex_tx);
     let padding_section = DummyView::new().fixed_width(1);

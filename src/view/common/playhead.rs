@@ -1,8 +1,6 @@
-use std::collections::hash_map::DefaultHasher;
 use std::collections::hash_map::Entry;
 use std::collections::BTreeSet;
 use std::collections::HashMap;
-use std::hash::{Hash, Hasher};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::mpsc::{channel, Sender};
 use std::sync::Arc;
@@ -15,9 +13,35 @@ use cursive::views::TextView;
 use cursive::Vec2;
 use cursive::XY;
 
-use crate::core::{consts, midi, rect::Rect, regex::Match, utils};
+use crate::core::{consts, midi, playback_modes, rect::Rect, regex::Match, utils};
+use crate::view::common::grid_editor::CanvasEditor;
+use crate::view::common::playhead_controller::Direction;
 
-use super::{canvas_editor::CanvasEditor, marker::Direction};
+pub struct MarkerUI {
+  pub marker_area: Rect,
+  pub marker_pos: Vec2,
+  pub actived_pos: Vec2,
+  pub text_matcher: Option<HashMap<usize, Match>>,
+  pub regex_indexes: Arc<Mutex<BTreeSet<usize>>>,
+  pub reverse_mode: bool,
+  pub arpeggiator_mode: bool,
+  pub random_mode: bool,
+}
+
+impl MarkerUI {
+  pub fn new() -> Self {
+    MarkerUI {
+      marker_area: Rect::from_point(Vec2::zero()),
+      marker_pos: Vec2::zero(),
+      actived_pos: Vec2::zero(),
+      text_matcher: None,
+      regex_indexes: Arc::new(Mutex::new(BTreeSet::new())),
+      reverse_mode: false,
+      arpeggiator_mode: false,
+      random_mode: false,
+    }
+  }
+}
 
 #[derive(Clone, Debug)]
 pub enum Message {
@@ -32,11 +56,11 @@ pub enum Message {
   SetScaleModeLeft(crate::core::scale::ScaleMode),
   SetScaleModeTop(crate::core::scale::ScaleMode),
   ToggleAccumulationMode(cursive::CbSink),
-  SetTempo(usize),
-  SetRatio((i64, usize), cursive::CbSink),
   ToggleReverseMode(cursive::CbSink),
   ToggleArpeggiatorMode(cursive::CbSink),
   ToggleRandomMode(cursive::CbSink),
+  SetTempo(usize),
+  SetRatio((i64, usize), cursive::CbSink),
 }
 
 pub struct MarkerArea {
@@ -201,89 +225,6 @@ impl MarkerArea {
     pos / divisor
   }
 
-  fn get_random_index(&self, pos: usize, max: usize) -> usize {
-    let mut hasher = DefaultHasher::new();
-    pos.hash(&mut hasher);
-    (hasher.finish() as usize) % max
-  }
-
-  fn get_arpeggiator_matches(
-    &self,
-    marker_x: usize,
-    marker_y: usize,
-    marker_w: usize,
-    marker_h: usize,
-    canvas_w: usize,
-    reverse: bool,
-  ) -> Vec<(usize, usize)> {
-    let regex_indexes = self.regex_indexes.lock().unwrap();
-    let mut matches: Vec<(usize, usize)> = regex_indexes
-      .iter()
-      .filter_map(|&idx| {
-        let x = idx % canvas_w;
-        let y = idx / canvas_w;
-        if x >= marker_x && x < marker_x + marker_w && y >= marker_y && y < marker_y + marker_h {
-          Some((x - marker_x, y - marker_y))
-        } else {
-          None
-        }
-      })
-      .collect();
-
-    matches.sort_by_key(|&(x, y)| (y, x));
-    if reverse {
-      matches.reverse();
-    }
-    matches
-  }
-
-  fn calculate_normal_position(
-    &self,
-    adjusted_pos: usize,
-    marker_w: usize,
-    marker_h: usize,
-    actived_pos: &mut Vec2,
-  ) {
-    actived_pos.x = adjusted_pos % marker_w;
-    if actived_pos.x == 0 {
-      actived_pos.y += 1;
-      actived_pos.y %= marker_h;
-    }
-  }
-
-  fn calculate_reverse_position(
-    &self,
-    adjusted_pos: usize,
-    marker_w: usize,
-    marker_h: usize,
-    actived_pos: &mut Vec2,
-  ) {
-    actived_pos.x = marker_w - 1 - (adjusted_pos % marker_w);
-    if actived_pos.x == marker_w - 1 {
-      if actived_pos.y == 0 {
-        actived_pos.y = marker_h - 1;
-      } else {
-        actived_pos.y -= 1;
-      }
-    }
-  }
-
-  fn calculate_random_position(
-    &self,
-    adjusted_pos: usize,
-    marker_w: usize,
-    marker_h: usize,
-    actived_pos: &mut Vec2,
-  ) {
-    use std::collections::hash_map::DefaultHasher;
-    use std::hash::{Hash, Hasher};
-    let mut hasher = DefaultHasher::new();
-    adjusted_pos.hash(&mut hasher);
-    let hash = hasher.finish() as usize;
-    actived_pos.x = hash % marker_w;
-    actived_pos.y = (hash / marker_w) % marker_h;
-  }
-
   pub fn set_actived_pos(&self, pos: usize) {
     let area = self.area.lock().unwrap();
     let mut actived_pos = self.actived_pos.lock().unwrap();
@@ -299,12 +240,21 @@ impl MarkerArea {
     let adjusted_pos = self.calculate_adjusted_pos(pos);
 
     if arpeggiator {
-      let matches =
-        self.get_arpeggiator_matches(marker_x, marker_y, marker_w, marker_h, canvas_w, reverse);
+      let regex_indexes = self.regex_indexes.lock().unwrap();
+      let matches = playback_modes::get_arpeggiator_matches(
+        &regex_indexes,
+        marker_x,
+        marker_y,
+        marker_w,
+        marker_h,
+        canvas_w,
+        reverse,
+      );
+      drop(regex_indexes);
 
       if !matches.is_empty() {
         let step = if random {
-          self.get_random_index(adjusted_pos, matches.len())
+          playback_modes::get_random_index(adjusted_pos, matches.len())
         } else {
           adjusted_pos % matches.len()
         };
@@ -313,7 +263,7 @@ impl MarkerArea {
         actived_pos.y = y;
       } else {
         // No matches, fallback to normal running
-        self.calculate_position_fallback(
+        playback_modes::calculate_position_fallback(
           adjusted_pos,
           marker_w,
           marker_h,
@@ -324,7 +274,7 @@ impl MarkerArea {
       }
     } else {
       // Normal running without arpeggiator
-      self.calculate_position_fallback(
+      playback_modes::calculate_position_fallback(
         adjusted_pos,
         marker_w,
         marker_h,
@@ -332,24 +282,6 @@ impl MarkerArea {
         random,
         &mut actived_pos,
       );
-    }
-  }
-
-  fn calculate_position_fallback(
-    &self,
-    adjusted_pos: usize,
-    marker_w: usize,
-    marker_h: usize,
-    reverse: bool,
-    random: bool,
-    actived_pos: &mut Vec2,
-  ) {
-    if random {
-      self.calculate_random_position(adjusted_pos, marker_w, marker_h, actived_pos);
-    } else if reverse {
-      self.calculate_reverse_position(adjusted_pos, marker_w, marker_h, actived_pos);
-    } else {
-      self.calculate_normal_position(adjusted_pos, marker_w, marker_h, actived_pos);
     }
   }
 

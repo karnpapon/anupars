@@ -29,7 +29,7 @@ use cursive::views::TextView;
 use cursive::Cursive;
 use cursive::With;
 
-use super::canvas_editor::CanvasEditor;
+use super::grid_editor::CanvasEditor;
 use crate::core::{consts, disspress, utils};
 
 #[derive(Clone, Copy)]
@@ -116,7 +116,7 @@ impl Menubar {
             canvas
               .state_mut()
               .marker_tx
-              .send(super::marker::Message::ToggleArpeggiatorMode())
+              .send(super::playhead_controller::Message::ToggleArpeggiatorMode())
               .unwrap();
           },
         );
@@ -137,7 +137,7 @@ impl Menubar {
             canvas
               .state_mut()
               .marker_tx
-              .send(super::marker::Message::ToggleReverseMode())
+              .send(super::playhead_controller::Message::ToggleReverseMode())
               .unwrap();
           },
         );
@@ -149,7 +149,7 @@ impl Menubar {
             canvas
               .state_mut()
               .marker_tx
-              .send(super::marker::Message::ToggleAccumulationMode())
+              .send(super::playhead_controller::Message::ToggleAccumulationMode())
               .unwrap();
           },
         );
@@ -222,7 +222,9 @@ fn build_scale_menu_left() -> cursive::menu::Tree {
             canvas
               .state_mut()
               .marker_tx
-              .send(super::marker::Message::SetScaleModeLeft(scale_clone))
+              .send(super::playhead_controller::Message::SetScaleModeLeft(
+                scale_clone,
+              ))
               .unwrap();
           },
         );
@@ -244,7 +246,9 @@ fn build_scale_menu_top() -> cursive::menu::Tree {
             canvas
               .state_mut()
               .marker_tx
-              .send(super::marker::Message::SetScaleModeTop(scale_clone))
+              .send(super::playhead_controller::Message::SetScaleModeTop(
+                scale_clone,
+              ))
               .unwrap();
           },
         );

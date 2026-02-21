@@ -12,7 +12,7 @@ const DISSPRESS_LENGTH: usize = 200;
 pub fn dissociated() -> HashMap<String, HashMap<String, usize>> {
   let mut dissociated: HashMap<String, HashMap<String, usize>> = HashMap::new();
 
-  let file_path = "src/initializer.txt";
+  let file_path = "src/_initializer.txt";
   let content = fs::read_to_string(file_path).expect("Unable to read file");
   let separators = [
     ' ', ',', '.', '!', '?', ':', '—', '-', '$', '%', '=', '(', ')', ';', '/', '*', '#', '[', ']',

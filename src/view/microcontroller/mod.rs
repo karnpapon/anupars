@@ -1,2 +1,2 @@
-pub mod anu;
+pub mod app;
 pub mod console;

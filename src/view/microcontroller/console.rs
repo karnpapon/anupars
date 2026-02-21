@@ -18,15 +18,15 @@ use std::sync::mpsc::Sender;
 use cfonts::{render, Fonts, Options};
 use cursive::Vec2;
 
+use crate::app::UserData;
 use crate::core::regex;
 
-use super::anu::Anu;
-use crate::core::application::UserData;
+use super::app::Anu;
 use crate::core::consts;
 use crate::core::midi::{self, MidiMsg};
 use crate::core::parser::{self};
 use crate::core::utils;
-use crate::view::common::canvas_editor::CanvasEditor;
+use crate::view::common::grid_editor::CanvasEditor;
 use cursive::theme::Style;
 use cursive::view::{Nameable, Resizable};
 use cursive::Cursive;

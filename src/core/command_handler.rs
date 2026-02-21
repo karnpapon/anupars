@@ -3,17 +3,17 @@ use std::sync::mpsc::Sender;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
-use crate::view::common::marker;
+use crate::app::UserData;
+use crate::view::common::playhead_controller;
 
 #[cfg(feature = "desktop")]
-use crate::view::desktop::anu::Anu;
+use crate::view::desktop::app::Anu;
 
 #[cfg(feature = "microcontroller")]
-use crate::view::microcontroller::anu::Anu;
+use crate::view::microcontroller::app::Anu;
 
-use super::application::UserData;
-use super::clock::metronome::Message;
 use super::command::{Adjustment, Command, MoveDirection};
+use super::timing::metronome::Message;
 use super::{consts, utils};
 
 use cursive::event::{Event, Key};
@@ -31,7 +31,7 @@ pub struct CommandManager {
   temp_tempo: Arc<Mutex<i64>>,
   temp_ratio: Arc<Mutex<(i64, usize)>>,
   pub last_key_time: Arc<Mutex<Option<Instant>>>,
-  marker_tx_cloned: Sender<marker::Message>,
+  marker_tx_cloned: Sender<playhead_controller::Message>,
 }
 
 impl CommandManager {
@@ -41,7 +41,7 @@ impl CommandManager {
     cb_sink: cursive::CbSink,
     temp_tempo: Arc<Mutex<i64>>,
     last_key_time: Arc<Mutex<Option<Instant>>>,
-    marker_tx_cloned: Sender<marker::Message>,
+    marker_tx_cloned: Sender<playhead_controller::Message>,
   ) -> Self {
     let bindings = RefCell::new(Self::get_bindings());
     Self {
@@ -119,7 +119,7 @@ impl CommandManager {
 
         self
           .marker_tx_cloned
-          .send(marker::Message::Scale(dir))
+          .send(playhead_controller::Message::Scale(dir))
           .unwrap();
 
         Ok(None)
@@ -139,7 +139,7 @@ impl CommandManager {
 
         self
           .marker_tx_cloned
-          .send(marker::Message::SetTempo(temp))
+          .send(playhead_controller::Message::SetTempo(temp))
           .unwrap();
 
         self
@@ -187,7 +187,7 @@ impl CommandManager {
 
         self
           .marker_tx_cloned
-          .send(marker::Message::SetRatio(new_ratio))
+          .send(playhead_controller::Message::SetRatio(new_ratio))
           .unwrap();
 
         Ok(None)
@@ -195,28 +195,28 @@ impl CommandManager {
       Command::ToggleReverse => {
         self
           .marker_tx_cloned
-          .send(marker::Message::ToggleReverseMode())
+          .send(playhead_controller::Message::ToggleReverseMode())
           .unwrap();
         Ok(None)
       }
       Command::ToggleArpeggiator => {
         self
           .marker_tx_cloned
-          .send(marker::Message::ToggleArpeggiatorMode())
+          .send(playhead_controller::Message::ToggleArpeggiatorMode())
           .unwrap();
         Ok(None)
       }
       Command::ToggleAccumulation => {
         self
           .marker_tx_cloned
-          .send(marker::Message::ToggleAccumulationMode())
+          .send(playhead_controller::Message::ToggleAccumulationMode())
           .unwrap();
         Ok(None)
       }
       Command::ToggleRandom => {
         self
           .marker_tx_cloned
-          .send(marker::Message::ToggleRandomMode())
+          .send(playhead_controller::Message::ToggleRandomMode())
           .unwrap();
         Ok(None)
       }

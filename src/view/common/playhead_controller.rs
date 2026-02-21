@@ -8,9 +8,9 @@ use cursive::{views::Canvas, XY};
 
 use crate::core::{consts, midi, regex::Match};
 
-use super::canvas_editor::CanvasEditor;
-use super::marker_area;
-use super::marker_area::MarkerArea;
+use super::grid_editor::CanvasEditor;
+use super::playhead;
+use super::playhead::MarkerArea;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Direction {
@@ -81,7 +81,7 @@ impl Marker {
         match control_message {
           Message::Move(direction, canvas_size) => {
             marker_area_tx
-              .send(marker_area::Message::Move(
+              .send(playhead::Message::Move(
                 direction,
                 canvas_size,
                 self.cb_sink.clone(),
@@ -90,7 +90,7 @@ impl Marker {
           }
           Message::SetCurrentPos(position, offset) => {
             marker_area_tx
-              .send(marker_area::Message::SetCurrentPos(
+              .send(playhead::Message::SetCurrentPos(
                 position,
                 offset,
                 self.cb_sink.clone(),
@@ -99,14 +99,14 @@ impl Marker {
           }
           Message::UpdateInfoStatusView() => {
             marker_area_tx
-              .send(marker_area::Message::UpdateInfoStatusView(
+              .send(playhead::Message::UpdateInfoStatusView(
                 self.cb_sink.clone(),
               ))
               .unwrap();
           }
           Message::SetGridArea(current_pos) => {
             marker_area_tx
-              .send(marker_area::Message::SetGridArea(
+              .send(playhead::Message::SetGridArea(
                 current_pos,
                 self.cb_sink.clone(),
               ))
@@ -114,35 +114,29 @@ impl Marker {
           }
           Message::SetActivePos(tick) => {
             marker_area_tx
-              .send(marker_area::Message::SetActivePos(
-                tick,
-                self.cb_sink.clone(),
-              ))
+              .send(playhead::Message::SetActivePos(tick, self.cb_sink.clone()))
               .unwrap();
           }
           Message::Scale(dir) => {
             marker_area_tx
-              .send(marker_area::Message::Scale(dir, self.cb_sink.clone()))
+              .send(playhead::Message::Scale(dir, self.cb_sink.clone()))
               .unwrap();
           }
           Message::SetMatcher(matcher) => {
             marker_area_tx
-              .send(marker_area::Message::SetMatcher(
-                matcher,
-                self.cb_sink.clone(),
-              ))
+              .send(playhead::Message::SetMatcher(matcher, self.cb_sink.clone()))
               .unwrap();
           }
           Message::SetGridSize(width, height) => {
             marker_area_tx
-              .send(marker_area::Message::SetGridSize(width, height))
+              .send(playhead::Message::SetGridSize(width, height))
               .unwrap();
           }
           Message::SetScaleModeLeft(scale_mode) => {
             let cb_sink = self.cb_sink.clone();
 
             marker_area_tx
-              .send(marker_area::Message::SetScaleModeLeft(scale_mode))
+              .send(playhead::Message::SetScaleModeLeft(scale_mode))
               .unwrap();
 
             cb_sink
@@ -161,7 +155,7 @@ impl Marker {
             let cb_sink = self.cb_sink.clone();
 
             marker_area_tx
-              .send(marker_area::Message::SetScaleModeTop(scale_mode))
+              .send(playhead::Message::SetScaleModeTop(scale_mode))
               .unwrap();
 
             cb_sink
@@ -179,18 +173,18 @@ impl Marker {
           Message::ToggleAccumulationMode() => {
             let cb_sink = self.cb_sink.clone();
             marker_area_tx
-              .send(marker_area::Message::ToggleAccumulationMode(cb_sink))
+              .send(playhead::Message::ToggleAccumulationMode(cb_sink))
               .unwrap();
           }
           Message::ToggleReverseMode() => {
             let cb_sink = self.cb_sink.clone();
             marker_area_tx
-              .send(marker_area::Message::ToggleReverseMode(cb_sink))
+              .send(playhead::Message::ToggleReverseMode(cb_sink))
               .unwrap();
           }
           Message::SetTempo(bpm) => {
             marker_area_tx
-              .send(marker_area::Message::SetTempo(bpm))
+              .send(playhead::Message::SetTempo(bpm))
               .unwrap();
 
             self.midi_tx.send(midi::Message::SetTempo(bpm)).unwrap();
@@ -198,19 +192,19 @@ impl Marker {
           Message::SetRatio(ratio) => {
             let cb_sink = self.cb_sink.clone();
             marker_area_tx
-              .send(marker_area::Message::SetRatio(ratio, cb_sink))
+              .send(playhead::Message::SetRatio(ratio, cb_sink))
               .unwrap();
           }
           Message::ToggleArpeggiatorMode() => {
             let cb_sink = self.cb_sink.clone();
             marker_area_tx
-              .send(marker_area::Message::ToggleArpeggiatorMode(cb_sink))
+              .send(playhead::Message::ToggleArpeggiatorMode(cb_sink))
               .unwrap();
           }
           Message::ToggleRandomMode() => {
             let cb_sink = self.cb_sink.clone();
             marker_area_tx
-              .send(marker_area::Message::ToggleRandomMode(cb_sink))
+              .send(playhead::Message::ToggleRandomMode(cb_sink))
               .unwrap();
           }
         }

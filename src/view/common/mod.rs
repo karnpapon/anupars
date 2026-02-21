@@ -1,5 +1,5 @@
-pub mod canvas_editor;
-pub mod canvas_section;
-pub mod marker;
-pub mod marker_area;
+pub mod grid;
+pub mod grid_editor;
 pub mod menubar;
+pub mod playhead;
+pub mod playhead_controller;

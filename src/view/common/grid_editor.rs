@@ -1,8 +1,4 @@
-use std::collections::BTreeSet;
-use std::collections::HashMap;
 use std::sync::mpsc::Sender;
-use std::sync::Arc;
-use std::sync::Mutex;
 
 use cursive::event::Event;
 use cursive::event::EventResult;
@@ -21,7 +17,8 @@ use cursive::views::ResizedView;
 use cursive::Printer;
 use cursive::Vec2;
 
-use crate::core::{consts, rect::Rect, regex::Match, traits::Matrix};
+use crate::core::{consts, traits::Matrix};
+use crate::view::common::playhead::MarkerUI;
 
 use consts::BASE_OCTAVE;
 use consts::KEYBOARD_MARGIN_BOTTOM;
@@ -29,18 +26,7 @@ use consts::KEYBOARD_MARGIN_LEFT;
 use consts::KEYBOARD_MARGIN_TOP;
 use consts::NOTE_NAMES;
 
-use super::marker::{self, Direction, Message};
-
-pub struct MarkerUI {
-  pub marker_area: Rect,
-  pub marker_pos: Vec2,
-  pub actived_pos: Vec2,
-  pub text_matcher: Option<HashMap<usize, Match>>,
-  pub regex_indexes: Arc<Mutex<BTreeSet<usize>>>,
-  pub reverse_mode: bool,
-  pub arpeggiator_mode: bool,
-  pub random_mode: bool,
-}
+use super::playhead_controller::{self, Direction, Message};
 
 pub struct CanvasEditor {
   size: Vec2,
@@ -56,23 +42,8 @@ pub struct CanvasEditor {
   pub random_mode: bool,
 }
 
-impl MarkerUI {
-  fn new() -> Self {
-    MarkerUI {
-      marker_area: Rect::from_point(Vec2::zero()),
-      marker_pos: Vec2::zero(),
-      actived_pos: Vec2::zero(),
-      text_matcher: None,
-      regex_indexes: Arc::new(Mutex::new(BTreeSet::new())),
-      reverse_mode: false,
-      arpeggiator_mode: false,
-      random_mode: false,
-    }
-  }
-}
-
 impl CanvasEditor {
-  pub fn new(marker_tx: Sender<marker::Message>) -> CanvasEditor {
+  pub fn new(marker_tx: Sender<playhead_controller::Message>) -> CanvasEditor {
     CanvasEditor {
       size: Vec2::zero(),
       marker_tx,
@@ -249,7 +220,7 @@ impl CanvasEditor {
   }
 
   pub fn build(
-    marker_tx: Sender<marker::Message>,
+    marker_tx: Sender<playhead_controller::Message>,
   ) -> ResizedView<ResizedView<NamedView<Canvas<CanvasEditor>>>> {
     Canvas::new(CanvasEditor::new(marker_tx))
       .with_draw(draw)

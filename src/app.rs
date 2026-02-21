@@ -1,11 +1,14 @@
-use crate::core::application::UserDataInner;
-use crate::core::clock::metronome::{Message, Metronome};
-use crate::core::commands::CommandManager;
 use crate::core::consts;
 use crate::core::midi::Midi;
 use crate::core::regex::RegExpHandler;
-use crate::view::common::marker::Marker;
+use crate::core::timing::metronome::{Message, Metronome};
+use crate::core::{command_handler::CommandManager, midi};
 use crate::view::common::menubar::Menubar;
+use crate::view::common::playhead_controller::Marker;
+#[cfg(feature = "desktop")]
+use crate::view::desktop::top_section::RegexFlag;
+#[cfg(feature = "microcontroller")]
+use crate::view::microcontroller::console::RegexFlag;
 use cursive::theme::{BorderStyle, Palette};
 use cursive::views::TextView;
 use cursive::Cursive;
@@ -13,17 +16,24 @@ use num::rational::Ratio;
 use num::FromPrimitive;
 use std::rc::Rc;
 use std::sync::mpsc::Sender;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, RwLock};
 use std::thread;
 use std::time::{Duration, Instant};
 
 use consts::{DEFAULT_TEMPO, TEMPO_CHECK_INTERVAL_MS, TEMPO_RESET_DELAY_MS};
 
 #[cfg(feature = "desktop")]
-use crate::view::desktop::anu::Anu;
+use crate::view::desktop::app::Anu;
 
 #[cfg(feature = "microcontroller")]
-use crate::view::microcontroller::anu::Anu;
+use crate::view::microcontroller::app::Anu;
+
+pub type UserData = Rc<UserDataInner>;
+pub struct UserDataInner {
+  pub cmd: CommandManager,
+  pub midi_tx: Sender<midi::Message>,
+  pub selected_flag: Arc<RwLock<RegexFlag>>,
+}
 
 /// Application components bundle
 pub struct AppComponents {
@@ -96,17 +106,10 @@ pub fn setup_ui(components: &mut AppComponents) {
   components.cursive.set_autohide_menu(true);
   components.cursive.set_autorefresh(false); // Prevent unintended events
 
-  #[cfg(feature = "microcontroller")]
   components.cursive.set_user_data(Rc::new(UserDataInner {
     cmd: command_manager,
     midi_tx: midi_tx.clone(),
     selected_flag: Arc::clone(&components.anu.selected_flag),
-  }));
-
-  #[cfg(feature = "desktop")]
-  components.cursive.set_user_data(Rc::new(UserDataInner {
-    cmd: command_manager,
-    midi_tx: midi_tx.clone(),
   }));
 
   let main_view = components

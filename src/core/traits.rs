@@ -5,7 +5,7 @@ use cursive::utils::span::SpannedString;
 use cursive::Printer;
 use cursive::Vec2;
 
-use crate::view::common::canvas_editor::MarkerUI;
+use crate::view::common::playhead::MarkerUI;
 
 use super::{consts, regex::Match};
 use std::collections::HashMap;
@@ -171,8 +171,8 @@ impl<T: Printable + Copy> Matrix<T> {
         let pos = (x, y);
         let is_in_marker_area = marker_area.contains(pos.into());
         let is_active_pos = active_absolute_pos.eq(&pos);
-        let is_on_crosshair_vertical = x == active_absolute_pos.x && !is_active_pos;
-        let is_on_crosshair_horizontal = y == active_absolute_pos.y && !is_active_pos;
+        // let is_on_crosshair_vertical = x == active_absolute_pos.x && !is_active_pos;
+        // let is_on_crosshair_horizontal = y == active_absolute_pos.y && !is_active_pos;
 
         // Render default cell with style
         let style = self.calculate_cell_style(cell_index, text_matcher);

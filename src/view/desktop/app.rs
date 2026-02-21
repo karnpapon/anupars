@@ -10,8 +10,8 @@ use std::sync::RwLock;
 
 use crate::core::consts;
 use crate::core::regex;
-use crate::view::common::canvas_section::CanvasSection;
-use crate::view::common::marker;
+use crate::view::common::grid::CanvasSection;
+use crate::view::common::playhead_controller;
 
 use super::middle_section::MiddleSection;
 use super::top_section::RegexFlag;
@@ -25,6 +25,7 @@ pub struct Anu {
   pub input_regex: String,
   pub toggle_regex_input: Arc<RwLock<bool>>,
   pub top_section: TopSection,
+  pub selected_flag: Arc<RwLock<RegexFlag>>,
 }
 
 impl Anu {
@@ -35,13 +36,14 @@ impl Anu {
       input_regex: String::new(),
       toggle_regex_input: Arc::new(RwLock::new(false)),
       top_section: TopSection::new(),
+      selected_flag: Arc::new(RwLock::new(RegexFlag::CaseSensitive)),
     }
   }
 
   pub fn build(
     &mut self,
     regex_tx: Sender<regex::Message>,
-    marker_tx: Sender<marker::Message>,
+    marker_tx: Sender<playhead_controller::Message>,
   ) -> NamedView<LinearLayout> {
     let top_section = TopSection::build(self, regex_tx);
     let middle_section = MiddleSection::build();
