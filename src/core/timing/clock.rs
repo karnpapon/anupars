@@ -276,6 +276,7 @@ impl Clock {
 
     thread::spawn(move || loop {
       if self.is_playing() {
+        self.tick();
         metronome_tx
           .send(metronome::Message::Time(self.time()))
           .unwrap();
