@@ -9,6 +9,8 @@ use std::sync::Arc;
 use std::sync::Mutex;
 use std::thread;
 use std::time::Duration;
+// #[cfg(debug_assertions)]
+// use std::time::Instant;
 
 use cursive::views::Canvas;
 use cursive::views::TextView;
@@ -18,6 +20,8 @@ use cursive::XY;
 use crate::core::{consts, midi, playback_modes, rect::Rect, regex::Match, utils};
 use crate::view::common::grid_editor::CanvasEditor;
 use crate::view::common::playhead_controller::Direction;
+// #[cfg(debug_assertions)]
+// use crate::view::common::timing_diagnostic::TimingStats;
 
 // UI update types for batching
 #[derive(Clone, Debug)]
@@ -106,6 +110,8 @@ pub struct MarkerArea {
   position_stack: Arc<Mutex<Vec<(usize, usize)>>>,
   pushed_positions: Arc<Mutex<HashMap<(usize, usize), bool>>>,
   pub ui_update_queue: Arc<Mutex<VecDeque<UIUpdate>>>,
+  // #[cfg(debug_assertions)]
+  // timing_stats: Arc<TimingStats>,
 }
 
 impl MarkerArea {
@@ -134,6 +140,8 @@ impl MarkerArea {
       position_stack: Arc::new(Mutex::new(Vec::new())),
       pushed_positions: Arc::new(Mutex::new(HashMap::new())),
       ui_update_queue: Arc::new(Mutex::new(VecDeque::new())),
+      // #[cfg(debug_assertions)]
+      // timing_stats: Arc::new(TimingStats::new()),
     }
   }
 
@@ -734,8 +742,21 @@ impl MarkerArea {
   //   pos.saturating_add(*actived_pos).eq(&curr_pos)
   // }
 
+  // #[cfg(debug_assertions)]
+  // pub fn spawn_stats_printer(self: &Arc<Self>) {
+  //   let stats = Arc::clone(&self.timing_stats);
+  //   thread::spawn(move || loop {
+  //     thread::sleep(Duration::from_secs(10));
+  //     stats.print_stats();
+  //     stats.reset();
+  //   });
+  // }
+
   pub fn run(self: Arc<Self>) -> Sender<Message> {
     let (tx, rx) = channel();
+
+    // #[cfg(debug_assertions)]
+    // self.spawn_stats_printer(); // Start stats printer
 
     thread::spawn(move || {
       for control_message in &rx {
@@ -856,6 +877,9 @@ impl MarkerArea {
               .unwrap();
           }
           Message::SetActivePos(tick, cb_sink) => {
+            // #[cfg(debug_assertions)]
+            // let start = Instant::now();
+
             self.set_actived_pos(tick);
 
             let active_pos_mutex = self.actived_pos.lock().unwrap();
@@ -877,6 +901,21 @@ impl MarkerArea {
             }
 
             self.update_active_pos_ui(active_pos, &cb_sink);
+
+            // #[cfg(debug_assertions)]
+            // {
+            //   let elapsed = start.elapsed().as_micros() as u64;
+            //   self.timing_stats.record(elapsed);
+
+            //   // Immediate warning for slow calls
+            //   if elapsed > 1000 {
+            //     eprintln!(
+            //       "⚠️  SLOW: SetActivePos took {}μs ({:.2}ms)",
+            //       elapsed,
+            //       elapsed as f64 / 1000.0
+            //     );
+            //   }
+            // }
           }
           Message::Scale(size, cb_sink) => {
             self.scale(size);
