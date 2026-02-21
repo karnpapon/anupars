@@ -23,7 +23,7 @@ impl Stack {
     }
   }
 
-  pub fn run(self: Arc<Self>, midi_tx: Sender<midi::Message>) -> Sender<Message> {
+  pub fn run(self: Arc<Self>, _midi_tx: Sender<midi::Message>) -> Sender<Message> {
     let (tx, rx) = channel();
 
     thread::spawn(move || {

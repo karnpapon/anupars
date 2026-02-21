@@ -1,5 +1,5 @@
 use midir::{MidiOutput, MidiOutputConnection, MidiOutputPort};
-use std::collections::{BTreeSet, HashMap};
+use std::collections::HashMap;
 use std::error::Error;
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::{Arc, Mutex};

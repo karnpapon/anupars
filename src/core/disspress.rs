@@ -51,7 +51,7 @@ fn dissociated_generate(
         if let Some(inner_map) = dissociated.get(&word) {
           inner_map
             .iter()
-            .flat_map(|(k, v)| std::iter::repeat(k).take(*v))
+            .flat_map(|(k, v)| std::iter::repeat_n(k, *v))
             .choose(&mut rng)
             .cloned()
         } else {

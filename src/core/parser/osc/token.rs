@@ -4,6 +4,7 @@ use std::iter::Enumerate;
 #[derive(PartialEq, Debug, Clone)]
 pub enum Token {
   Illegal,
+  #[allow(clippy::upper_case_acronyms)]
   EOF,
 
   Comma,

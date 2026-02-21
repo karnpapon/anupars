@@ -276,7 +276,6 @@ impl Clock {
 
     thread::spawn(move || loop {
       if self.is_playing() {
-        let tick = self.tick();
         metronome_tx
           .send(metronome::Message::Time(self.time()))
           .unwrap();
@@ -286,7 +285,7 @@ impl Clock {
     });
   }
 
-  fn get_tempo(&self) -> MutexGuard<Ratio<i64>> {
+  fn get_tempo(&self) -> MutexGuard<'_, Ratio<i64>> {
     let tempo = self.tempo.lock().unwrap();
     tempo
   }

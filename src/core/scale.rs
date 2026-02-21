@@ -1,7 +1,8 @@
 /// Musical scale modes and their interval patterns
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub enum ScaleMode {
-  Chromatic,     // All 12 notes
+  #[default]
+  Chromatic, // All 12 notes
   Major,         // Ionian mode
   Minor,         // Natural minor (Aeolian)
   HarmonicMinor, // Harmonic minor
@@ -117,11 +118,5 @@ impl ScaleMode {
     let octave = base_octave + (octave_offset as u8);
 
     (note_index, octave)
-  }
-}
-
-impl Default for ScaleMode {
-  fn default() -> Self {
-    ScaleMode::Chromatic
   }
 }

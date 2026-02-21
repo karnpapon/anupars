@@ -2,7 +2,6 @@ use std::collections::HashMap;
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::Arc;
 use std::thread;
-use std::usize;
 
 use cursive::{views::Canvas, XY};
 

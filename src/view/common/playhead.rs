@@ -6,7 +6,6 @@ use std::sync::mpsc::{channel, Sender};
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::thread;
-use std::usize;
 
 use cursive::views::Canvas;
 use cursive::views::TextView;
@@ -16,6 +15,15 @@ use cursive::XY;
 use crate::core::{consts, midi, playback_modes, rect::Rect, regex::Match, utils};
 use crate::view::common::grid_editor::CanvasEditor;
 use crate::view::common::playhead_controller::Direction;
+
+struct GridParams<'a, R: rand::Rng> {
+  pub marker_width: usize,
+  pub marker_height: usize,
+  pub grid_width: usize,
+  pub grid_height: usize,
+  pub rng: &'a mut R,
+  pub cb_sink: &'a cursive::CbSink,
+}
 
 pub struct MarkerUI {
   pub marker_area: Rect,
@@ -411,15 +419,15 @@ impl MarkerArea {
     };
 
     // Determine jump position from stack or random
-    let (new_x, new_y) = self.get_jump_position(
-      current_marker_pos,
+    let params = GridParams {
       marker_width,
       marker_height,
       grid_width,
       grid_height,
-      &mut rng,
+      rng: &mut rng,
       cb_sink,
-    );
+    };
+    let (new_x, new_y) = self.get_jump_position(current_marker_pos, params);
 
     // Update marker position and area
     let mut pos = self.pos.lock().unwrap();
@@ -455,15 +463,10 @@ impl MarkerArea {
     Vec2::zero()
   }
 
-  fn get_jump_position(
+  fn get_jump_position<R: rand::Rng>(
     &self,
     current_marker_pos: (usize, usize),
-    marker_width: usize,
-    marker_height: usize,
-    grid_width: usize,
-    grid_height: usize,
-    rng: &mut impl rand::Rng,
-    cb_sink: &cursive::CbSink,
+    params: GridParams<R>,
   ) -> (usize, usize) {
     let mut stack = self.position_stack.lock().unwrap();
 
@@ -471,7 +474,13 @@ impl MarkerArea {
       if top_pos == current_marker_pos {
         // Same position, jump randomly
         drop(stack);
-        self.generate_random_position(marker_width, marker_height, grid_width, grid_height, rng)
+        self.generate_random_position(
+          params.marker_width,
+          params.marker_height,
+          params.grid_width,
+          params.grid_height,
+          params.rng,
+        )
       } else {
         // Use position from stack
         let pos = stack.pop().unwrap();
@@ -482,12 +491,18 @@ impl MarkerArea {
         pushed.remove(&pos);
         drop(pushed);
 
-        self.update_stack_ui(&stack_display, cb_sink);
+        self.update_stack_ui(&stack_display, params.cb_sink);
         pos
       }
     } else {
       drop(stack);
-      self.generate_random_position(marker_width, marker_height, grid_width, grid_height, rng)
+      self.generate_random_position(
+        params.marker_width,
+        params.marker_height,
+        params.grid_width,
+        params.grid_height,
+        params.rng,
+      )
     }
   }
 
