@@ -1,6 +1,6 @@
 # anupars
 
-anupars (อนุภา(ส)), a Rust-based reimagining of [`anu`](https://github.com/karnpapon/anu) a musical step-sequencer driven by regular expressions, designed to operate on resource-constrained devices, and performance-oriented.
+anupars (อนุภา(ส), meaning "tiny following light" in Thai), a Rust-based reimagining of [`anu`](https://github.com/karnpapon/anu) a musical sequencer driven by regular expressions, designed to operate on resource-constrained devices, and performance-oriented.
 
 > [!WARNING]
 > This project is a **work in progress**. Features and APIs are subject to change anytime.
@@ -18,8 +18,8 @@ anupars (อนุภา(ส)), a Rust-based reimagining of [`anu`](https://gith
 - **Separated Scale Change for Vertical/Horizontal Steps**
   - Independently assign musical scales for vertical (Y-axis) and horizontal (X-axis) movement, allowing complex modal and harmonic explorations.
 
-- **Reverse Step Mode**
-  - Instantly reverse the running direction of the sequencer, creating evolving or retrograde patterns at the touch of a button.
+- **Reverse/Random Step Mode**
+  - Instantly reverse/randomize the running direction of the sequencer, creating evolving or retrograde patterns at the touch of a button.
 
 - **Arpeggiator Mode**
   - When enabled, the sequencer steps only through positions matching the current regex, producing arpeggiator-like melodic patterns from your rules.

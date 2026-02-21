@@ -14,9 +14,9 @@ use crate::view::common::grid::CanvasSection;
 use crate::view::common::playhead_controller;
 use crate::view::microcontroller::console::RegexFlag;
 
-use super::middle_section::MiddleSection;
-use super::top_section::RegexMode;
-use super::top_section::TopSection;
+use super::console::RegexMode;
+use super::console::TopSection;
+use super::display::MiddleSection;
 
 #[derive(Clone)]
 pub struct Anu {
