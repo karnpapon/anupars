@@ -79,7 +79,7 @@ impl TopSection {
     //   }
     // });
 
-    let mode_view = LinearLayout::horizontal()
+    let _mode_view = LinearLayout::horizontal()
       .child(
         app
           .mode_state
@@ -94,7 +94,7 @@ impl TopSection {
 
     let input_controller_section_view = ListView::new()
       .child("RegExp: ", regex_input_unit_view)
-      .child("Mode: ", mode_view)
+      // .child("Mode: ", mode_view)
       .child("flag: ", flag_view)
       .child("status: ", input_status_unit_view)
       .full_width();

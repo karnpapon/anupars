@@ -168,7 +168,8 @@ impl CanvasEditor {
       return;
     }
 
-    let operators = ['P', 'S', 'O']; // Push, Swap, pOp
+    let stack_operators = ['P', 'S', 'O']; // Push, Swap, pOp
+    let event_operators = ['r', 'c', 'x'];
     let spacing = 10;
     let pattern_width = spacing + 1;
 
@@ -188,17 +189,25 @@ impl CanvasEditor {
       });
     }
 
-    let mut x = 0;
-    let mut op_index = 0;
-
-    let abs_active_x = self.marker_ui.marker_pos.x + self.marker_ui.actived_pos.x;
     let regex_indexes = self.marker_ui.regex_indexes.lock().unwrap();
     let is_regex_match_x = regex_indexes.iter().any(|&idx| {
       let x_pos = idx % self.grid.width;
       x_pos == abs_active_x
     });
+
+    // Draw merged operators (stack and event alternating)
+    let mut x = 0;
+    let mut stack_index = 0;
+    let mut event_index = 0;
+    let mut is_stack = true; // Start with stack operator
+
     while x < self.grid.width {
-      let op = operators[op_index % operators.len()];
+      let (op, _is_uppercase) = if is_stack {
+        (stack_operators[stack_index % stack_operators.len()], true)
+      } else {
+        (event_operators[event_index % event_operators.len()], false)
+      };
+
       let is_active = x == abs_active_x;
       let style = if is_active && is_regex_match_x {
         Style::from(ColorStyle::new(
@@ -214,8 +223,14 @@ impl CanvasEditor {
         printer.print((x, 1), &op.to_string());
       });
 
+      if is_stack {
+        stack_index += 1;
+      } else {
+        event_index += 1;
+      }
+      is_stack = !is_stack; // Toggle between stack and event
+
       x += pattern_width;
-      op_index += 1;
     }
   }
 
