@@ -41,20 +41,34 @@ impl Stack {
 
   pub fn refresh(self: Arc<Self>, midi_tx: Sender<midi::Message>) {
     thread::spawn(move || {
-      let frame_duration = Duration::from_millis(34); // 33.33 ms per frame
+      // Reduced from 34ms to 8ms for 8x better timing resolution
+      // This provides ~125 FPS update rate for precise MIDI note releases
+      let frame_duration = Duration::from_millis(8); // 8 ms per frame (125 FPS)
       loop {
         let frame_start = Instant::now();
 
         {
           let mut st = self.stack.lock().unwrap();
+
+          // Batch collect all note-offs to send at once (reduces lock time)
+          let mut notes_to_release = Vec::new();
+
           st.retain_mut(|item| {
             if item.length < 2 {
-              let _ = midi_tx.send(midi::Message::Trigger(item.clone(), false));
+              notes_to_release.push(item.clone());
             }
             item.length -= 1;
             // Keep the message if its length is still >= 1
             item.length >= 1
           });
+
+          // Release lock before sending MIDI (reduces contention)
+          drop(st);
+
+          // Send all note-offs in batch
+          for note in notes_to_release {
+            let _ = midi_tx.send(midi::Message::Trigger(note, false));
+          }
         }
 
         let elapsed = frame_start.elapsed();
