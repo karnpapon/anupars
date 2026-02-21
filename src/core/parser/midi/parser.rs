@@ -1,14 +1,12 @@
-use nom::{
-  bytes::complete::tag,
-  character::{
-    complete::{digit1, one_of},
-    streaming::space1,
-  },
-  combinator::{map_res, opt},
-  multi::separated_list1,
-  sequence::tuple,
-  IResult,
-};
+use nom::bytes::complete::tag;
+use nom::character::complete::digit1;
+use nom::character::complete::one_of;
+use nom::character::streaming::space1;
+use nom::combinator::map_res;
+use nom::combinator::opt;
+use nom::multi::separated_list1;
+use nom::sequence::tuple;
+use nom::IResult;
 
 type MidiParser = (Vec<(String, u8)>, Vec<u8>, Vec<u8>, u8);
 

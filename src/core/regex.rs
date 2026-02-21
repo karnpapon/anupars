@@ -1,7 +1,7 @@
-use std::{
-  collections::HashMap,
-  sync::mpsc::{channel, Receiver, Sender},
-};
+use std::collections::HashMap;
+use std::sync::mpsc::channel;
+use std::sync::mpsc::Receiver;
+use std::sync::mpsc::Sender;
 
 use cursive::views::{Canvas, TextView};
 use regex::Regex;

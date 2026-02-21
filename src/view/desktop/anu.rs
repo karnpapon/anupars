@@ -1,18 +1,22 @@
-use cursive::{
-  view::{Nameable, Resizable},
-  views::{DummyView, LinearLayout, NamedView, RadioGroup},
-};
-use std::sync::{mpsc::Sender, Arc, RwLock};
+use cursive::view::Nameable;
+use cursive::view::Resizable;
+use cursive::views::DummyView;
+use cursive::views::LinearLayout;
+use cursive::views::NamedView;
+use cursive::views::RadioGroup;
+use std::sync::mpsc::Sender;
+use std::sync::Arc;
+use std::sync::RwLock;
 
-use crate::{
-  core::{consts, midi, regex},
-  view::common::{canvas_section::CanvasSection, marker},
-};
+use crate::core::consts;
+use crate::core::regex;
+use crate::view::common::canvas_section::CanvasSection;
+use crate::view::common::marker;
 
-use super::{
-  middle_section::MiddleSection,
-  top_section::{RegexFlag, RegexMode, TopSection},
-};
+use super::middle_section::MiddleSection;
+use super::top_section::RegexFlag;
+use super::top_section::RegexMode;
+use super::top_section::TopSection;
 
 #[derive(Clone)]
 pub struct Anu {

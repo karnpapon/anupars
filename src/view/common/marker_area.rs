@@ -1,20 +1,19 @@
 use std::collections::hash_map::DefaultHasher;
 use std::collections::hash_map::Entry;
+use std::collections::BTreeSet;
+use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
-use std::{
-  collections::{BTreeSet, HashMap},
-  sync::{
-    atomic::{AtomicUsize, Ordering},
-    mpsc::{channel, Sender},
-    Arc, Mutex,
-  },
-  thread, usize,
-};
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::mpsc::{channel, Sender};
+use std::sync::Arc;
+use std::sync::Mutex;
+use std::thread;
+use std::usize;
 
-use cursive::{
-  views::{Canvas, TextView},
-  Vec2, XY,
-};
+use cursive::views::Canvas;
+use cursive::views::TextView;
+use cursive::Vec2;
+use cursive::XY;
 
 use crate::core::{consts, midi, rect::Rect, regex::Match, utils};
 
@@ -758,16 +757,16 @@ impl MarkerArea {
     }
   }
 
-  fn is_head(&self, curr_pos: Vec2) -> bool {
-    let pos = self.pos.lock().unwrap();
-    pos.eq(&curr_pos)
-  }
+  // fn is_head(&self, curr_pos: Vec2) -> bool {
+  //   let pos = self.pos.lock().unwrap();
+  //   pos.eq(&curr_pos)
+  // }
 
-  fn is_actived_position(&self, curr_pos: Vec2) -> bool {
-    let pos = self.pos.lock().unwrap();
-    let actived_pos = self.actived_pos.lock().unwrap();
-    pos.saturating_add(*actived_pos).eq(&curr_pos)
-  }
+  // fn is_actived_position(&self, curr_pos: Vec2) -> bool {
+  //   let pos = self.pos.lock().unwrap();
+  //   let actived_pos = self.actived_pos.lock().unwrap();
+  //   pos.saturating_add(*actived_pos).eq(&curr_pos)
+  // }
 
   pub fn run(self: Arc<Self>) -> Sender<Message> {
     let (tx, rx) = channel();

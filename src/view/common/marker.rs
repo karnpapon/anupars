@@ -1,20 +1,16 @@
-use std::{
-  collections::{BTreeSet, HashMap},
-  sync::{
-    mpsc::{channel, Receiver, Sender},
-    Arc, Mutex,
-  },
-  thread, usize,
-};
+use std::collections::HashMap;
+use std::sync::mpsc::{channel, Receiver, Sender};
+use std::sync::Arc;
+use std::thread;
+use std::usize;
 
 use cursive::{views::Canvas, XY};
 
 use crate::core::{consts, midi, regex::Match};
 
-use super::{
-  canvas_editor::CanvasEditor,
-  marker_area::{self, MarkerArea},
-};
+use super::canvas_editor::CanvasEditor;
+use super::marker_area;
+use super::marker_area::MarkerArea;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Direction {
@@ -34,7 +30,6 @@ pub enum Message {
   SetActivePos(usize),
   Scale((i32, i32)),
   SetMatcher(Option<HashMap<usize, Match>>),
-  TriggerWithRegexPos((usize, Arc<Mutex<BTreeSet<usize>>>)),
   SetGridSize(usize, usize),
   SetScaleModeLeft(crate::core::scale::ScaleMode),
   SetScaleModeTop(crate::core::scale::ScaleMode),
@@ -136,12 +131,6 @@ impl Marker {
                 matcher,
                 self.cb_sink.clone(),
               ))
-              .unwrap();
-          }
-          Message::TriggerWithRegexPos(msg) => {
-            self
-              .midi_tx
-              .send(midi::Message::TriggerWithRegexPos(msg))
               .unwrap();
           }
           Message::SetGridSize(width, height) => {

@@ -1,22 +1,15 @@
-use crate::{
-  core::{
-    application::UserData,
-    consts,
-    midi::{self, MidiMsg},
-    parser::{self},
-    utils,
-  },
-  view::common::canvas_editor::CanvasEditor,
-};
-use cursive::{
-  theme::Style,
-  view::{Nameable, Resizable},
-  views::{
-    Button, Canvas, Dialog, DummyView, EditView, FocusTracker, LinearLayout, ListView, NamedView,
-    PaddedView, ResizedView, TextView,
-  },
-  Cursive,
-};
+use cursive::views::Button;
+use cursive::views::Canvas;
+use cursive::views::Dialog;
+use cursive::views::DummyView;
+use cursive::views::EditView;
+use cursive::views::FocusTracker;
+use cursive::views::LinearLayout;
+use cursive::views::ListView;
+use cursive::views::NamedView;
+use cursive::views::PaddedView;
+use cursive::views::ResizedView;
+use cursive::views::TextView;
 use cursive_tabs::{Align, TabPanel};
 use std::sync::Arc;
 
@@ -28,6 +21,15 @@ use cursive::Vec2;
 use crate::core::regex;
 
 use super::anu::Anu;
+use crate::core::application::UserData;
+use crate::core::consts;
+use crate::core::midi::{self, MidiMsg};
+use crate::core::parser::{self};
+use crate::core::utils;
+use crate::view::common::canvas_editor::CanvasEditor;
+use cursive::theme::Style;
+use cursive::view::{Nameable, Resizable};
+use cursive::Cursive;
 
 #[derive(Clone, Copy)]
 pub enum RegexFlag {

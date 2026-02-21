@@ -1,10 +1,9 @@
 //! Rectangles on the 2D character grid.
 use std::ops::Add;
 
-use cursive::{
-  direction::{Absolute, Orientation},
-  Vec2,
-};
+use cursive::direction::Absolute;
+use cursive::direction::Orientation;
+use cursive::Vec2;
 
 /// A non-empty rectangle on the 2D grid.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

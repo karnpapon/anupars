@@ -1,21 +1,33 @@
-use std::{
-  collections::{BTreeSet, HashMap},
-  sync::{mpsc::Sender, Arc, Mutex},
-};
+use std::collections::BTreeSet;
+use std::collections::HashMap;
+use std::sync::mpsc::Sender;
+use std::sync::Arc;
+use std::sync::Mutex;
 
-use cursive::{
-  event::{Event, EventResult, Key, MouseButton, MouseEvent},
-  theme::{ColorStyle, ColorType, Style},
-  view::{CannotFocus, Nameable, Resizable},
-  views::{Canvas, NamedView, ResizedView},
-  Printer, Vec2,
-};
+use cursive::event::Event;
+use cursive::event::EventResult;
+use cursive::event::Key;
+use cursive::event::MouseButton;
+use cursive::event::MouseEvent;
+use cursive::theme::ColorStyle;
+use cursive::theme::ColorType;
+use cursive::theme::Style;
+use cursive::view::CannotFocus;
+use cursive::view::Nameable;
+use cursive::view::Resizable;
+use cursive::views::Canvas;
+use cursive::views::NamedView;
+use cursive::views::ResizedView;
+use cursive::Printer;
+use cursive::Vec2;
 
 use crate::core::{consts, rect::Rect, regex::Match, traits::Matrix};
 
-use consts::{
-  BASE_OCTAVE, KEYBOARD_MARGIN_BOTTOM, KEYBOARD_MARGIN_LEFT, KEYBOARD_MARGIN_TOP, NOTE_NAMES,
-};
+use consts::BASE_OCTAVE;
+use consts::KEYBOARD_MARGIN_BOTTOM;
+use consts::KEYBOARD_MARGIN_LEFT;
+use consts::KEYBOARD_MARGIN_TOP;
+use consts::NOTE_NAMES;
 
 use super::marker::{self, Direction, Message};
 

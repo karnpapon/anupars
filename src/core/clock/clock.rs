@@ -1,5 +1,4 @@
 use super::metronome;
-// use crossbeam_utils::sync::{Parker, Unparker};
 use num::integer::Integer;
 use num::rational::Ratio;
 use std::ops::Deref;

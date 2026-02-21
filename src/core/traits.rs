@@ -1,8 +1,9 @@
-use cursive::{
-  theme::{ColorStyle, ColorType, Style},
-  utils::span::SpannedString,
-  Printer, Vec2,
-};
+use cursive::theme::ColorStyle;
+use cursive::theme::ColorType;
+use cursive::theme::Style;
+use cursive::utils::span::SpannedString;
+use cursive::Printer;
+use cursive::Vec2;
 
 use crate::view::common::canvas_editor::MarkerUI;
 

@@ -8,14 +8,14 @@ use std::time::Duration;
 
 use super::stack::{self, Stack};
 use super::utils::Throttler;
+use crate::core::consts::BASE_OCTAVE;
 
 #[derive(Clone, Debug)]
 pub enum Message {
   Push(MidiMsg),
   Trigger(MidiMsg, bool),
-  SetMsgConfig(MidiMsg),
+  SetMsgConfig(MidiMsg), // ? maybe obsolete, TBD
   ClearMsgConfig(),
-  TriggerWithRegexPos((usize, Arc<Mutex<BTreeSet<usize>>>)),
   TriggerWithPosition(
     (
       usize,
@@ -164,13 +164,6 @@ impl Midi {
           Message::ClearMsgConfig() => {
             self.clear_msg_config_list();
           }
-          Message::TriggerWithRegexPos(msg) => {
-            self
-              .throttler
-              .lock()
-              .unwrap()
-              .call(|| self.trigger_w_regex_pos(msg.0, msg.1.clone()));
-          }
           Message::TriggerWithPosition((
             grid_index,
             y_position,
@@ -179,7 +172,6 @@ impl Midi {
             scale_mode,
             bpm,
           )) => {
-            // No throttling for position-based triggers - clock/metronome provides timing control
             self.trigger_w_position(
               grid_index,
               y_position,
@@ -260,31 +252,6 @@ impl Midi {
     midi_msg_config_list.push(midi);
   }
 
-  fn trigger_w_regex_pos(
-    &self,
-    curr_running_marker: usize,
-    regex_indexes: Arc<Mutex<BTreeSet<usize>>>,
-  ) {
-    let regex_indexes = regex_indexes.lock().unwrap();
-    let triggered_index = regex_indexes
-      .iter()
-      .position(|v| v == &curr_running_marker)
-      .unwrap_or(0); //TODO: properly handle moving marker while is_playing=true
-    let midi_msg_config_list = self.msg_config_list.lock().unwrap();
-    if midi_msg_config_list.len() > 0 {
-      let _ = self.trigger(
-        &midi_msg_config_list[triggered_index % midi_msg_config_list.len()],
-        true,
-      );
-      self
-        .tx
-        .send(Message::Push(
-          midi_msg_config_list[triggered_index % midi_msg_config_list.len()].clone(),
-        ))
-        .unwrap();
-    }
-  }
-
   fn trigger_w_position(
     &self,
     _grid_index: usize,
@@ -294,9 +261,6 @@ impl Midi {
     scale_mode: crate::core::scale::ScaleMode,
     bpm: usize,
   ) {
-    // Map Y position to MIDI note using scale mode
-    use crate::core::consts::BASE_OCTAVE;
-
     // Use the actual grid height passed as parameter
     if grid_height == 0 {
       return; // Avoid division by zero
@@ -315,19 +279,8 @@ impl Midi {
     } else {
       base_length
     };
-    let note_length = (calculated_length as u8).min(127); // Ensure it fits in u8 and MIDI range
-
-    // Create a MIDI message based on position
-    let midi_msg = MidiMsg::from(
-      note_index,
-      octave,
-      note_length,
-      100, // Default velocity
-      0,   // Channel 1
-      false,
-    );
-
-    // Trigger the note
+    let note_length = (calculated_length as u8).min(127);
+    let midi_msg = MidiMsg::from(note_index, octave, note_length, 100, 0, false);
     let _ = self.trigger(&midi_msg, true);
     self.tx.send(Message::Push(midi_msg)).unwrap();
   }

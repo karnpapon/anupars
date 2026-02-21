@@ -1,23 +1,33 @@
-use std::{
-  error::Error,
-  ffi::OsString,
-  fs::{self, File},
-  io::{self, Read},
-  path::{Path, PathBuf},
-  sync::mpsc::Sender,
-};
+use std::error::Error;
+use std::ffi::OsString;
+use std::fs;
+use std::fs::File;
+use std::io;
+use std::io::Read;
+use std::path::Path;
+use std::path::PathBuf;
+use std::sync::mpsc::Sender;
 
-use cursive::{
-  align::HAlign,
-  event::{Event, Key},
-  menu::{self, Tree},
-  view::{Margins, Nameable, Resizable},
-  views::{
-    Canvas, Dialog, DummyView, HideableView, LinearLayout, NamedView, OnEventView, ResizedView,
-    SelectView, TextView,
-  },
-  Cursive, With,
-};
+use cursive::align::HAlign;
+use cursive::event::Event;
+use cursive::event::Key;
+use cursive::menu;
+use cursive::menu::Tree;
+use cursive::view::Margins;
+use cursive::view::Nameable;
+use cursive::view::Resizable;
+use cursive::views::Canvas;
+use cursive::views::Dialog;
+use cursive::views::DummyView;
+use cursive::views::HideableView;
+use cursive::views::LinearLayout;
+use cursive::views::NamedView;
+use cursive::views::OnEventView;
+use cursive::views::ResizedView;
+use cursive::views::SelectView;
+use cursive::views::TextView;
+use cursive::Cursive;
+use cursive::With;
 
 use super::canvas_editor::CanvasEditor;
 use crate::core::{consts, disspress, utils};
