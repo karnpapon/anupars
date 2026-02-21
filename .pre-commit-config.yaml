@@ -1,0 +1,26 @@
+repos:
+- repo: local
+  hooks:
+    - id: rust-fmt
+      name: Rust Format
+      entry: cargo fmt -- --check
+      language: system
+      pass_filenames: false
+    # - id: rust-clippy
+    #   name: Rust Lint (clippy)
+    #   entry: cargo clippy -- -D warnings
+    #   language: system
+    #   pass_filenames: false
+    - id: rust-test
+      name: Run Rust Unit Tests
+      entry: cargo test
+      language: system
+      pass_filenames: false
+      always_run: true
+- repo: https://github.com/pre-commit/pre-commit-hooks
+  rev: v6.0.0
+  hooks:
+    - id: detect-private-key
+    - id: end-of-file-fixer
+    - id: check-merge-conflict
+    - id: check-added-large-files
