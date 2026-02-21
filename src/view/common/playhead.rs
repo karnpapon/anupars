@@ -1,6 +1,7 @@
 use std::collections::hash_map::Entry;
 use std::collections::BTreeSet;
 use std::collections::HashMap;
+use std::sync::atomic::AtomicBool;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::mpsc::{channel, Sender};
 use std::sync::Arc;
@@ -80,20 +81,20 @@ pub struct MarkerArea {
   regex_indexes: Arc<Mutex<BTreeSet<usize>>>,
   text_matcher: Arc<Mutex<Option<HashMap<usize, Match>>>>,
   midi_tx: Sender<midi::Message>,
-  grid_width: Arc<Mutex<usize>>,
-  grid_height: Arc<Mutex<usize>>,
+  grid_width: AtomicUsize,
+  grid_height: AtomicUsize,
+  tempo: AtomicUsize,
   prev_active_pos: Arc<Mutex<Vec2>>,
   scale_mode_left: Arc<Mutex<crate::core::scale::ScaleMode>>,
   scale_mode_top: Arc<Mutex<crate::core::scale::ScaleMode>>,
   accumulation_counter: Arc<Mutex<usize>>,
-  accumulation_mode: Arc<Mutex<bool>>,
-  tempo: Arc<Mutex<usize>>,
+  accumulation_mode: AtomicBool,
+  reverse_mode: AtomicBool,
+  arpeggiator_mode: AtomicBool,
+  random_mode: AtomicBool,
   ratio: Arc<Mutex<(i64, usize)>>,
   position_stack: Arc<Mutex<Vec<(usize, usize)>>>,
   pushed_positions: Arc<Mutex<HashMap<(usize, usize), bool>>>,
-  reverse_mode: Arc<Mutex<bool>>,
-  arpeggiator_mode: Arc<Mutex<bool>>,
-  random_mode: Arc<Mutex<bool>>,
 }
 
 impl MarkerArea {
@@ -101,34 +102,34 @@ impl MarkerArea {
     MarkerArea {
       pos: Arc::new(Mutex::new(Vec2::zero())),
       area: Arc::new(Mutex::new(Rect::from_point(Vec2::zero()))),
-      drag_start_y: AtomicUsize::new(0),
       drag_start_x: AtomicUsize::new(0),
+      drag_start_y: AtomicUsize::new(0),
       actived_pos: Arc::new(Mutex::new(Vec2::zero())),
       regex_indexes: Arc::new(Mutex::new(BTreeSet::new())),
       text_matcher: Arc::new(Mutex::new(None)),
       midi_tx,
-      grid_width: Arc::new(Mutex::new(0)),
-      grid_height: Arc::new(Mutex::new(0)),
+      grid_width: AtomicUsize::new(0),
+      grid_height: AtomicUsize::new(0),
+      tempo: AtomicUsize::new(120),
       prev_active_pos: Arc::new(Mutex::new(Vec2::zero())),
       scale_mode_left: Arc::new(Mutex::new(crate::core::scale::ScaleMode::default())),
       scale_mode_top: Arc::new(Mutex::new(crate::core::scale::ScaleMode::default())),
       accumulation_counter: Arc::new(Mutex::new(0)),
-      accumulation_mode: Arc::new(Mutex::new(false)),
-      tempo: Arc::new(Mutex::new(120)),
+      accumulation_mode: AtomicBool::new(false),
+      reverse_mode: AtomicBool::new(false),
+      arpeggiator_mode: AtomicBool::new(false),
+      random_mode: AtomicBool::new(false),
       ratio: Arc::new(Mutex::new((1, 16))),
       position_stack: Arc::new(Mutex::new(Vec::new())),
       pushed_positions: Arc::new(Mutex::new(HashMap::new())),
-      reverse_mode: Arc::new(Mutex::new(false)),
-      arpeggiator_mode: Arc::new(Mutex::new(false)),
-      random_mode: Arc::new(Mutex::new(false)),
     }
   }
 
   fn build_mode_status_string(&self) -> String {
-    let reverse = *self.reverse_mode.lock().unwrap();
-    let arpeggiator = *self.arpeggiator_mode.lock().unwrap();
-    let accumulation = *self.accumulation_mode.lock().unwrap();
-    let random = *self.random_mode.lock().unwrap();
+    let reverse = self.reverse_mode.load(Ordering::Relaxed);
+    let arpeggiator = self.arpeggiator_mode.load(Ordering::Relaxed);
+    let accumulation = self.accumulation_mode.load(Ordering::Relaxed);
+    let random = self.random_mode.load(Ordering::Relaxed);
 
     format!(
       "{}{}{}{}",
@@ -140,10 +141,8 @@ impl MarkerArea {
   }
 
   pub fn toggle_reverse_mode(&self, cb_sink: cursive::CbSink) {
-    let mut reverse = self.reverse_mode.lock().unwrap();
-    *reverse = !*reverse;
-    let is_reversed = *reverse;
-    drop(reverse);
+    let is_reversed = !self.reverse_mode.load(Ordering::Relaxed);
+    self.reverse_mode.store(is_reversed, Ordering::Relaxed);
 
     let mode_status = self.build_mode_status_string();
 
@@ -223,8 +222,8 @@ impl MarkerArea {
     let area = self.area.lock().unwrap();
     let top_left = area.top_left();
 
-    self.drag_start_x.store(top_left.x, Ordering::SeqCst);
-    self.drag_start_y.store(top_left.y, Ordering::SeqCst);
+    self.drag_start_x.store(top_left.x, Ordering::Relaxed);
+    self.drag_start_y.store(top_left.y, Ordering::Relaxed);
   }
 
   fn calculate_adjusted_pos(&self, pos: usize) -> usize {
@@ -236,14 +235,14 @@ impl MarkerArea {
   pub fn set_actived_pos(&self, pos: usize) {
     let area = self.area.lock().unwrap();
     let mut actived_pos = self.actived_pos.lock().unwrap();
-    let reverse = *self.reverse_mode.lock().unwrap();
-    let arpeggiator = *self.arpeggiator_mode.lock().unwrap();
-    let random = *self.random_mode.lock().unwrap();
+    let reverse = self.reverse_mode.load(Ordering::Relaxed);
+    let arpeggiator = self.arpeggiator_mode.load(Ordering::Relaxed);
+    let random = self.random_mode.load(Ordering::Relaxed);
     let marker_w = area.width();
     let marker_h = area.height();
     let marker_x = area.left();
     let marker_y = area.top();
-    let canvas_w = *self.grid_width.lock().unwrap();
+    let canvas_w = self.grid_width.load(Ordering::Relaxed);
 
     let adjusted_pos = self.calculate_adjusted_pos(pos);
 
@@ -295,7 +294,7 @@ impl MarkerArea {
 
   fn calculate_absolute_position(&self, active_pos: Vec2) -> (usize, usize, usize) {
     let pos = self.pos.lock().unwrap();
-    let grid_width = *self.grid_width.lock().unwrap();
+    let grid_width = self.grid_width.load(Ordering::Relaxed);
     let abs_y = pos.y + active_pos.y;
     let abs_x = pos.x + active_pos.x;
     let curr_running_marker = (abs_y * grid_width) + abs_x;
@@ -317,7 +316,7 @@ impl MarkerArea {
     *prev_active = active_pos;
     drop(prev_active);
 
-    let grid_height = *self.grid_height.lock().unwrap();
+    let grid_height = self.grid_height.load(Ordering::Relaxed);
 
     if x_diff > y_diff {
       // Horizontal movement: use top keyboard mapping
@@ -343,9 +342,9 @@ impl MarkerArea {
   ) -> bool {
     if let Some(matcher) = self.text_matcher.lock().unwrap().as_ref() {
       if matcher.get(&curr_running_marker).is_some() {
-        let grid_width = *self.grid_width.lock().unwrap();
-        let grid_height = *self.grid_height.lock().unwrap();
-        let current_tempo = *self.tempo.lock().unwrap();
+        let grid_width = self.grid_width.load(Ordering::Relaxed);
+        let grid_height = self.grid_height.load(Ordering::Relaxed);
+        let current_tempo = self.tempo.load(Ordering::Relaxed);
 
         let _ = self.midi_tx.send(midi::Message::TriggerWithPosition((
           curr_running_marker,
@@ -362,7 +361,7 @@ impl MarkerArea {
   }
 
   fn handle_accumulation_mode(&self, abs_x: usize, cb_sink: &cursive::CbSink) -> Option<Vec2> {
-    if !*self.accumulation_mode.lock().unwrap() {
+    if !self.accumulation_mode.load(Ordering::Relaxed) {
       return None;
     }
 
@@ -410,8 +409,8 @@ impl MarkerArea {
     let marker_height = area.height();
     drop(area);
 
-    let grid_width = *self.grid_width.lock().unwrap();
-    let grid_height = *self.grid_height.lock().unwrap();
+    let grid_width = self.grid_width.load(Ordering::Relaxed);
+    let grid_height = self.grid_height.load(Ordering::Relaxed);
 
     let current_marker_pos = {
       let pos = self.pos.lock().unwrap();
@@ -550,10 +549,8 @@ impl MarkerArea {
   }
 
   pub fn toggle_arpeggiator_mode(&self, cb_sink: cursive::CbSink) {
-    let mut arp = self.arpeggiator_mode.lock().unwrap();
-    *arp = !*arp;
-    let is_arp = *arp;
-    drop(arp);
+    let is_arp = !self.arpeggiator_mode.load(Ordering::Relaxed);
+    self.arpeggiator_mode.store(is_arp, Ordering::Relaxed);
 
     let mode_status = self.build_mode_status_string();
 
@@ -576,10 +573,8 @@ impl MarkerArea {
   }
 
   pub fn toggle_random_mode(&self, cb_sink: cursive::CbSink) {
-    let mut rand = self.random_mode.lock().unwrap();
-    *rand = !*rand;
-    let is_rand = *rand;
-    drop(rand);
+    let is_rand = !self.random_mode.load(Ordering::Relaxed);
+    self.random_mode.store(is_rand, Ordering::Relaxed);
 
     let mode_status = self.build_mode_status_string();
 
@@ -619,7 +614,7 @@ impl MarkerArea {
   fn check_stack_operator(&self, abs_x: usize, cb_sink: &cursive::CbSink) {
     // Stack operators: P (Push), S (Swap), O (pOp) with spacing of 11 (10 spaces + 1 char)
     // Only active when accumulation mode is enabled
-    let is_accumulation_mode = *self.accumulation_mode.lock().unwrap();
+    let is_accumulation_mode = self.accumulation_mode.load(Ordering::Relaxed);
     if !is_accumulation_mode {
       return;
     }
@@ -913,10 +908,8 @@ impl MarkerArea {
               .unwrap();
           }
           Message::SetGridSize(width, height) => {
-            let mut grid_width = self.grid_width.lock().unwrap();
-            *grid_width = width;
-            let mut grid_height = self.grid_height.lock().unwrap();
-            *grid_height = height;
+            self.grid_width.store(width, Ordering::Relaxed);
+            self.grid_height.store(height, Ordering::Relaxed);
           }
           Message::SetScaleModeLeft(scale_mode) => {
             let mut mode = self.scale_mode_left.lock().unwrap();
@@ -927,15 +920,13 @@ impl MarkerArea {
             *mode = scale_mode;
           }
           Message::ToggleAccumulationMode(cb_sink) => {
-            let mut mode = self.accumulation_mode.lock().unwrap();
-            *mode = !*mode;
-            let is_enabled = *mode;
+            let is_enabled = !self.accumulation_mode.load(Ordering::Relaxed);
+            self.accumulation_mode.store(is_enabled, Ordering::Relaxed);
 
             // Reset counter when toggling mode
             let mut counter = self.accumulation_counter.lock().unwrap();
             *counter = 0;
             drop(counter);
-            drop(mode);
 
             // Clear stack when disabling accumulation mode
             if !is_enabled {
@@ -970,8 +961,7 @@ impl MarkerArea {
               .unwrap();
           }
           Message::SetTempo(bpm) => {
-            let mut tempo = self.tempo.lock().unwrap();
-            *tempo = bpm;
+            self.tempo.store(bpm, Ordering::Relaxed);
           }
           Message::SetRatio(new_ratio, cb_sink) => {
             let mut ratio = self.ratio.lock().unwrap();
