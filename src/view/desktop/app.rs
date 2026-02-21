@@ -12,9 +12,9 @@ use crate::core::consts;
 use crate::core::regex;
 use crate::view::common::grid::CanvasSection;
 use crate::view::common::playhead_controller;
+use crate::view::microcontroller::console::RegexFlag;
 
 use super::middle_section::MiddleSection;
-use super::top_section::RegexFlag;
 use super::top_section::RegexMode;
 use super::top_section::TopSection;
 
@@ -25,7 +25,6 @@ pub struct Anu {
   pub input_regex: String,
   pub toggle_regex_input: Arc<RwLock<bool>>,
   pub top_section: TopSection,
-  pub selected_flag: Arc<RwLock<RegexFlag>>,
 }
 
 impl Anu {
@@ -36,7 +35,6 @@ impl Anu {
       input_regex: String::new(),
       toggle_regex_input: Arc::new(RwLock::new(false)),
       top_section: TopSection::new(),
-      selected_flag: Arc::new(RwLock::new(RegexFlag::CaseSensitive)),
     }
   }
 

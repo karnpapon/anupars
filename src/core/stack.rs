@@ -12,14 +12,14 @@ pub enum Message {
 
 pub struct Stack {
   pub stack: Arc<Mutex<Vec<midi::MidiMsg>>>,
-  pub stack_msg_config: Arc<Mutex<Vec<midi::MidiMsg>>>,
+  // pub stack_msg_config: Arc<Mutex<Vec<midi::MidiMsg>>>,
 }
 
 impl Stack {
   pub fn new() -> Stack {
     Stack {
       stack: Arc::new(Mutex::new(vec![])),
-      stack_msg_config: Arc::new(Mutex::new(vec![])),
+      // stack_msg_config: Arc::new(Mutex::new(vec![])),
     }
   }
 

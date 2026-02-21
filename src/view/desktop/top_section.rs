@@ -11,19 +11,12 @@ use cursive::{
 };
 
 use crate::{
+  app::UserData,
   core::{consts, regex, utils},
-  view::common::grid_editor::CanvasEditor,
+  view::{common::grid_editor::CanvasEditor, microcontroller::console::RegexFlag},
 };
 
 use super::app::Anu;
-
-pub enum RegexFlag {
-  CaseSensitive,
-  Multiline,
-  Newline,
-  IgnoreWhiteSpace,
-  Lazy,
-}
 
 pub enum RegexMode {
   Realtime,
@@ -175,10 +168,24 @@ fn solve_regex(siv: &mut Cursive, texts: &str, regex_tx: Sender<regex::Message>)
   let state = canvas_editor_section_view.state_mut();
   let text = state.text_contents();
   let grid_width = state.grid.width;
+
+  let flag = siv
+    .user_data::<UserData>()
+    .map(|user_data| *user_data.cmd.anu.flag_state.selection())
+    .unwrap_or(RegexFlag::CaseSensitive);
+
+  let flag_str = match flag {
+    RegexFlag::CaseSensitive => "i",
+    RegexFlag::Multiline => "m",
+    RegexFlag::Newline => "s",
+    RegexFlag::IgnoreWhiteSpace => "x",
+    RegexFlag::Lazy => "U",
+  };
+
   let input_regex = regex::EventData {
     text,
     pattern: texts.to_string(),
-    flags: String::new(),
+    flags: flag_str.to_string(),
     grid_width,
   };
 

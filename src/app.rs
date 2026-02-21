@@ -5,8 +5,6 @@ use crate::core::timing::metronome::{Message, Metronome};
 use crate::core::{command_handler::CommandManager, midi};
 use crate::view::common::menubar::Menubar;
 use crate::view::common::playhead_controller::Marker;
-#[cfg(feature = "desktop")]
-use crate::view::desktop::top_section::RegexFlag;
 #[cfg(feature = "microcontroller")]
 use crate::view::microcontroller::console::RegexFlag;
 use cursive::theme::{BorderStyle, Palette};
@@ -16,7 +14,7 @@ use num::rational::Ratio;
 use num::FromPrimitive;
 use std::rc::Rc;
 use std::sync::mpsc::Sender;
-use std::sync::{Arc, Mutex, RwLock};
+use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -32,7 +30,6 @@ pub type UserData = Rc<UserDataInner>;
 pub struct UserDataInner {
   pub cmd: CommandManager,
   pub midi_tx: Sender<midi::Message>,
-  pub selected_flag: Arc<RwLock<RegexFlag>>,
 }
 
 /// Application components bundle
@@ -109,7 +106,6 @@ pub fn setup_ui(components: &mut AppComponents) {
   components.cursive.set_user_data(Rc::new(UserDataInner {
     cmd: command_manager,
     midi_tx: midi_tx.clone(),
-    selected_flag: Arc::clone(&components.anu.selected_flag),
   }));
 
   let main_view = components

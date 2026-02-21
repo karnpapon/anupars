@@ -31,7 +31,7 @@ use cursive::theme::Style;
 use cursive::view::{Nameable, Resizable};
 use cursive::Cursive;
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub enum RegexFlag {
   CaseSensitive,
   Multiline,
@@ -89,7 +89,7 @@ impl Console {
       .child(
         app
           .flag_state
-          .button(RegexFlag::CaseSensitive, "i ")
+          .button(RegexFlag::CaseSensitive, "i")
           .selected(),
       )
       .child(app.flag_state.button(RegexFlag::Multiline, "m"));
@@ -339,7 +339,7 @@ impl Console {
     tab.get_mut().add_tab_at(Self::build_welcome_msg(), 0);
     tab
       .get_mut()
-      .set_active_tab(consts::display_view)
+      .set_active_tab(consts::control_section_view)
       .expect("View not found");
 
     tab
@@ -377,8 +377,8 @@ fn solve_regex(siv: &mut Cursive, texts: &str, regex_tx: Sender<regex::Message>)
   let grid_width = state.grid.width;
 
   let flag = siv
-    .user_data::<Anu>()
-    .map(|anu| *anu.flag_state.selection())
+    .user_data::<UserData>()
+    .map(|user_data| *user_data.cmd.anu.flag_state.selection())
     .unwrap_or(RegexFlag::CaseSensitive);
 
   let flag_str = match flag {

@@ -19,7 +19,6 @@ use super::console::{Console, RegexFlag, RegexMode};
 pub struct Anu {
   pub mode_state: RadioGroup<RegexMode>,
   pub flag_state: RadioGroup<RegexFlag>,
-  pub selected_flag: Arc<RwLock<RegexFlag>>,
   pub input_regex: String,
   pub toggle_regex_input: Arc<RwLock<bool>>,
   pub top_section: Console,
@@ -30,7 +29,6 @@ impl Anu {
     Anu {
       mode_state: RadioGroup::new(),
       flag_state: RadioGroup::new(),
-      selected_flag: Arc::new(RwLock::new(RegexFlag::CaseSensitive)),
       input_regex: String::new(),
       toggle_regex_input: Arc::new(RwLock::new(false)),
       top_section: Console::new(),

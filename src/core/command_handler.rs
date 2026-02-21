@@ -25,7 +25,7 @@ use std::cell::RefCell;
 pub struct CommandManager {
   aliases: HashMap<String, String>,
   bindings: RefCell<HashMap<String, Vec<Command>>>,
-  anu: Arc<Anu>,
+  pub anu: Arc<Anu>,
   metronome_sender: Sender<Message>,
   cb_sink: cursive::CbSink,
   temp_tempo: Arc<Mutex<i64>>,
