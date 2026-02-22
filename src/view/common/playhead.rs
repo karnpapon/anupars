@@ -805,7 +805,9 @@ impl PlayheadArea {
       self.execute_queue_operator(position_index);
     }
 
-    if abs_x.is_multiple_of(consts::EVENT_OP_SPACING) {
+    if abs_x.is_multiple_of(consts::EVENT_OP_SPACING)
+      && self.event_operator_mode.load(Ordering::Relaxed)
+    {
       let position_index = abs_x / consts::EVENT_OP_SPACING;
       self.execute_event_operator(position_index);
     }
