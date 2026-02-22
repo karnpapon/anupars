@@ -18,8 +18,8 @@ impl CanvasSection {
   }
 
   pub fn build(
-    marker_tx: Sender<playhead_controller::Message>,
+    playhead_tx: Sender<playhead_controller::Message>,
   ) -> FocusTracker<ResizedView<ResizedView<NamedView<Canvas<CanvasEditor>>>>> {
-    FocusTracker::new(CanvasEditor::build(marker_tx))
+    FocusTracker::new(CanvasEditor::build(playhead_tx))
   }
 }

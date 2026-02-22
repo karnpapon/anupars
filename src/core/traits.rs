@@ -5,7 +5,7 @@ use cursive::utils::span::SpannedString;
 use cursive::Printer;
 use cursive::Vec2;
 
-use crate::view::common::playhead::MarkerUI;
+use crate::view::common::playhead::PlayheadUI;
 
 use super::{consts, regex::Match};
 use std::collections::HashMap;
@@ -101,8 +101,8 @@ impl<T: Printable + Copy> Matrix<T> {
       .to_string()
   }
 
-  /// Render the active marker position
-  fn render_active_marker(
+  /// Render the active playhead position
+  fn render_active_playhead(
     &self,
     printer: &Printer,
     pos: (usize, usize),
@@ -118,14 +118,14 @@ impl<T: Printable + Copy> Matrix<T> {
     }
   }
 
-  /// Render a cell inside the marker area
-  fn render_marker_area_cell(
+  /// Render a cell inside the playhead area
+  fn render_playhead_area_cell(
     &self,
     printer: &Printer,
     x: usize,
     y: usize,
     cell_index: usize,
-    marker_ui: &MarkerUI,
+    playhead_ui: &PlayheadUI,
   ) {
     let display_char = self.get_display_char(x, y);
     printer.print_styled(
@@ -133,17 +133,17 @@ impl<T: Printable + Copy> Matrix<T> {
       &SpannedString::styled(display_char, Style::highlight()),
     );
 
-    if let Some(matcher) = &marker_ui.text_matcher {
+    if let Some(matcher) = &playhead_ui.text_matcher {
       if matcher.contains_key(&cell_index) {
-        let mut regex_indexes = marker_ui.regex_indexes.lock().unwrap();
+        let mut regex_indexes = playhead_ui.regex_indexes.lock().unwrap();
         regex_indexes.insert(cell_index);
 
-        // Retain only indexes within marker bounds
-        let marker_pos = marker_ui.marker_pos;
-        let marker_end = marker_pos + marker_ui.marker_area.size();
+        // Retain only indexes within playhead bounds
+        let playhead_pos = playhead_ui.playhead_pos;
+        let playhead_end = playhead_pos + playhead_ui.playhead_area.size();
         regex_indexes.retain(|&index| {
           let index_pos = self.index_to_xy(&index);
-          index_pos.fits(marker_pos) && index_pos.fits_in(marker_end)
+          index_pos.fits(playhead_pos) && index_pos.fits_in(playhead_end)
         });
 
         printer.print_styled((x, y), &SpannedString::styled('*', Style::highlight()));
@@ -151,25 +151,25 @@ impl<T: Printable + Copy> Matrix<T> {
     }
   }
 
-  /// Print the matrix to the given printer with marker UI highlighting
-  pub fn print(&self, printer: &Printer, marker_ui: &MarkerUI) {
-    let MarkerUI {
+  /// Print the matrix to the given printer with playhead UI highlighting
+  pub fn print(&self, printer: &Printer, playhead_ui: &PlayheadUI) {
+    let PlayheadUI {
       text_matcher,
-      marker_pos,
-      marker_area,
+      playhead_pos,
+      playhead_area,
       actived_pos,
       ..
-    } = marker_ui;
+    } = playhead_ui;
 
     // Calculate absolute active position for crosshair
-    let active_absolute_pos = marker_pos.saturating_add(actived_pos);
+    let active_absolute_pos = playhead_pos.saturating_add(actived_pos);
 
     // Standard row-major order: iterate rows (y) then columns (x)
     for y in 0..self.height {
       for x in 0..self.width {
         let cell_index = x + y * self.width;
         let pos = (x, y);
-        let is_in_marker_area = marker_area.contains(pos.into());
+        let is_in_playhead_area = playhead_area.contains(pos.into());
         let is_active_pos = active_absolute_pos.eq(&pos);
         // let is_on_crosshair_vertical = x == active_absolute_pos.x && !is_active_pos;
         // let is_on_crosshair_horizontal = y == active_absolute_pos.y && !is_active_pos;
@@ -188,12 +188,12 @@ impl<T: Printable + Copy> Matrix<T> {
         //   //   printer.print_styled(pos, &SpannedString::styled("-", crosshair_style));
         // }
 
-        // Render marker-specific overlays
-        if is_in_marker_area {
+        // Render playhead-specific overlays
+        if is_in_playhead_area {
           if is_active_pos {
-            self.render_active_marker(printer, pos, cell_index, text_matcher);
+            self.render_active_playhead(printer, pos, cell_index, text_matcher);
           } else {
-            self.render_marker_area_cell(printer, x, y, cell_index, marker_ui);
+            self.render_playhead_area_cell(printer, x, y, cell_index, playhead_ui);
           }
         }
       }

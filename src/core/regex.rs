@@ -176,7 +176,7 @@ impl RegExpHandler {
                 consts::canvas_editor_section_view,
                 |c: &mut Canvas<CanvasEditor>| {
                   c.state_mut()
-                    .marker_tx
+                    .playhead_tx
                     .send(playhead_controller::Message::SetMatcher(None))
                 },
               )
@@ -200,7 +200,7 @@ impl RegExpHandler {
                       consts::canvas_editor_section_view,
                       |c: &mut Canvas<CanvasEditor>| {
                         c.state_mut()
-                          .marker_tx
+                          .playhead_tx
                           .send(playhead_controller::Message::SetMatcher(mm))
                       },
                     )

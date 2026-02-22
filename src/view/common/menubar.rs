@@ -115,7 +115,7 @@ impl Menubar {
           |canvas: &mut Canvas<CanvasEditor>| {
             canvas
               .state_mut()
-              .marker_tx
+              .playhead_tx
               .send(super::playhead_controller::Message::ToggleArpeggiatorMode())
               .unwrap();
           },
@@ -136,7 +136,7 @@ impl Menubar {
           |canvas: &mut Canvas<CanvasEditor>| {
             canvas
               .state_mut()
-              .marker_tx
+              .playhead_tx
               .send(super::playhead_controller::Message::ToggleReverseMode())
               .unwrap();
           },
@@ -148,7 +148,7 @@ impl Menubar {
           |canvas: &mut Canvas<CanvasEditor>| {
             canvas
               .state_mut()
-              .marker_tx
+              .playhead_tx
               .send(super::playhead_controller::Message::ToggleAccumulationMode())
               .unwrap();
           },
@@ -221,7 +221,7 @@ fn build_scale_menu_left() -> cursive::menu::Tree {
           |canvas: &mut Canvas<CanvasEditor>| {
             canvas
               .state_mut()
-              .marker_tx
+              .playhead_tx
               .send(super::playhead_controller::Message::SetScaleModeLeft(
                 scale_clone,
               ))
@@ -245,7 +245,7 @@ fn build_scale_menu_top() -> cursive::menu::Tree {
           |canvas: &mut Canvas<CanvasEditor>| {
             canvas
               .state_mut()
-              .marker_tx
+              .playhead_tx
               .send(super::playhead_controller::Message::SetScaleModeTop(
                 scale_clone,
               ))

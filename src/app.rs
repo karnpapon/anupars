@@ -4,7 +4,7 @@ use crate::core::regex::RegExpHandler;
 use crate::core::timing::metronome::{Message, Metronome};
 use crate::core::{command_handler::CommandManager, midi};
 use crate::view::common::menubar::Menubar;
-use crate::view::common::playhead_controller::Marker;
+use crate::view::common::playhead_controller::Playhead;
 #[cfg(feature = "microcontroller")]
 use crate::view::microcontroller::console::RegexFlag;
 use cursive::theme::{BorderStyle, Palette};
@@ -38,7 +38,7 @@ pub struct AppComponents {
   pub midi: Midi,
   pub regex_handler: RegExpHandler,
   pub anu: Anu,
-  pub marker: Marker,
+  pub playhead: Playhead,
   pub metronome: Metronome,
   pub last_key_time: Arc<Mutex<Option<Instant>>>,
   pub current_tempo: Arc<Mutex<i64>>,
@@ -67,15 +67,15 @@ pub fn initialize_components() -> AppComponents {
   let current_tempo = Arc::new(Mutex::new(DEFAULT_TEMPO));
   let anu = Anu::new();
 
-  let marker = Marker::new(cursive.cb_sink().clone(), midi.tx.clone());
-  let metronome = Metronome::new(cursive.cb_sink().clone(), marker.tx.clone());
+  let playhead = Playhead::new(cursive.cb_sink().clone(), midi.tx.clone());
+  let metronome = Metronome::new(cursive.cb_sink().clone(), playhead.tx.clone());
 
   AppComponents {
     cursive,
     midi,
     regex_handler,
     anu,
-    marker,
+    playhead,
     metronome,
     last_key_time,
     current_tempo,
@@ -85,7 +85,7 @@ pub fn initialize_components() -> AppComponents {
 /// Setup the user interface, menus, and views
 pub fn setup_ui(components: &mut AppComponents) {
   let midi_tx = components.midi.tx.clone();
-  let marker_tx = components.marker.tx.clone();
+  let playhead_tx = components.playhead.tx.clone();
   let metronome_tx = components.metronome.tx.clone();
 
   let mut command_manager = CommandManager::new(
@@ -94,7 +94,7 @@ pub fn setup_ui(components: &mut AppComponents) {
     components.cursive.cb_sink().clone(),
     Arc::clone(&components.current_tempo),
     Arc::clone(&components.last_key_time),
-    marker_tx.clone(),
+    playhead_tx.clone(),
   );
 
   command_manager.register_all();
@@ -110,7 +110,7 @@ pub fn setup_ui(components: &mut AppComponents) {
 
   let main_view = components
     .anu
-    .build(components.regex_handler.tx.clone(), marker_tx);
+    .build(components.regex_handler.tx.clone(), playhead_tx);
 
   let devices = components.midi.get_available_devices();
   let menu_app = Menubar::build_menu_app(&devices, midi_tx.clone());

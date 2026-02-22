@@ -18,7 +18,7 @@ use cursive::Printer;
 use cursive::Vec2;
 
 use crate::core::{consts, traits::Matrix};
-use crate::view::common::playhead::MarkerUI;
+use crate::view::common::playhead::PlayheadUI;
 use crate::view::common::playhead::EVENT_OPERATORS;
 use crate::view::common::playhead::QUEUE_OPERATORS;
 
@@ -32,10 +32,10 @@ use super::playhead_controller::{self, Direction, Message};
 
 pub struct CanvasEditor {
   size: Vec2,
-  pub marker_tx: Sender<Message>,
+  pub playhead_tx: Sender<Message>,
   pub grid: Matrix<char>,
   pub text_contents: Option<String>,
-  pub marker_ui: MarkerUI,
+  pub playhead_ui: PlayheadUI,
   pub show_keyboard: bool,
   pub scale_mode_left: crate::core::scale::ScaleMode,
   pub scale_mode_top: crate::core::scale::ScaleMode,
@@ -46,13 +46,13 @@ pub struct CanvasEditor {
 }
 
 impl CanvasEditor {
-  pub fn new(marker_tx: Sender<playhead_controller::Message>) -> CanvasEditor {
+  pub fn new(playhead_tx: Sender<playhead_controller::Message>) -> CanvasEditor {
     CanvasEditor {
       size: Vec2::zero(),
-      marker_tx,
+      playhead_tx,
       grid: Matrix::new(0, 0, '\0'),
       text_contents: None,
-      marker_ui: MarkerUI::new(),
+      playhead_ui: PlayheadUI::new(),
       show_keyboard: true,
       scale_mode_left: crate::core::scale::ScaleMode::default(),
       scale_mode_top: crate::core::scale::ScaleMode::default(),
@@ -99,7 +99,7 @@ impl CanvasEditor {
       return;
     }
 
-    let abs_active_x = self.marker_ui.marker_pos.x + self.marker_ui.actived_pos.x;
+    let abs_active_x = self.playhead_ui.playhead_pos.x + self.playhead_ui.actived_pos.x;
     for x in 0..self.grid.width {
       let y_pos = x % self.grid.height;
       let (note_index, octave, note_name) = self.y_to_note_top(y_pos);
@@ -180,7 +180,7 @@ impl CanvasEditor {
       }
     });
 
-    let abs_active_x = self.marker_ui.marker_pos.x + self.marker_ui.actived_pos.x;
+    let abs_active_x = self.playhead_ui.playhead_pos.x + self.playhead_ui.actived_pos.x;
     if abs_active_x < self.grid.width {
       let arrow_style = Style::from(ColorStyle::front(ColorType::rgb(255, 255, 255)));
       printer.with_style(arrow_style, |printer| {
@@ -188,7 +188,7 @@ impl CanvasEditor {
       });
     }
 
-    let regex_indexes = self.marker_ui.regex_indexes.lock().unwrap();
+    let regex_indexes = self.playhead_ui.regex_indexes.lock().unwrap();
     let is_regex_match_x = regex_indexes.iter().any(|&idx| {
       let x_pos = idx % self.grid.width;
       x_pos == abs_active_x
@@ -254,9 +254,9 @@ impl CanvasEditor {
   }
 
   pub fn build(
-    marker_tx: Sender<playhead_controller::Message>,
+    playhead_tx: Sender<playhead_controller::Message>,
   ) -> ResizedView<ResizedView<NamedView<Canvas<CanvasEditor>>>> {
-    Canvas::new(CanvasEditor::new(marker_tx))
+    Canvas::new(CanvasEditor::new(playhead_tx))
       .with_draw(draw)
       .with_layout(layout)
       .with_on_event(on_event)
@@ -337,10 +337,10 @@ impl CanvasEditor {
     self.size = size;
     // Update grid width and height for precise timing calculations and note mapping
     let _ = self
-      .marker_tx
+      .playhead_tx
       .send(Message::SetGridSize(grid_width, grid_height));
-    // Ensure marker stays within new bounds
-    let _ = self.marker_tx.send(Message::Move(
+    // Ensure playhead stays within new bounds
+    let _ = self.playhead_tx.send(Message::Move(
       Direction::Idle,
       (grid_width, grid_height).into(),
     ));
@@ -384,7 +384,7 @@ fn draw(canvas: &CanvasEditor, printer: &Printer) {
   };
   let grid_printer = printer.offset((x_offset, y_offset));
 
-  canvas.grid.print(&grid_printer, &canvas.marker_ui);
+  canvas.grid.print(&grid_printer, &canvas.playhead_ui);
 }
 
 fn layout(canvas: &mut CanvasEditor, size: Vec2) {
@@ -409,7 +409,7 @@ fn on_event(canvas: &mut CanvasEditor, event: Event) -> EventResult {
     Event::Key(Key::Left) => {
       let grid_size = (canvas.grid.width, canvas.grid.height).into();
       canvas
-        .marker_tx
+        .playhead_tx
         .send(Message::Move(Direction::Left, grid_size))
         .unwrap();
       EventResult::Ignored
@@ -417,7 +417,7 @@ fn on_event(canvas: &mut CanvasEditor, event: Event) -> EventResult {
     Event::Key(Key::Right) => {
       let grid_size = (canvas.grid.width, canvas.grid.height).into();
       canvas
-        .marker_tx
+        .playhead_tx
         .send(Message::Move(Direction::Right, grid_size))
         .unwrap();
       EventResult::Ignored
@@ -425,7 +425,7 @@ fn on_event(canvas: &mut CanvasEditor, event: Event) -> EventResult {
     Event::Key(Key::Up) => {
       let grid_size = (canvas.grid.width, canvas.grid.height).into();
       canvas
-        .marker_tx
+        .playhead_tx
         .send(Message::Move(Direction::Up, grid_size))
         .unwrap();
       EventResult::consumed()
@@ -433,7 +433,7 @@ fn on_event(canvas: &mut CanvasEditor, event: Event) -> EventResult {
     Event::Key(Key::Down) => {
       let grid_size = (canvas.grid.width, canvas.grid.height).into();
       canvas
-        .marker_tx
+        .playhead_tx
         .send(Message::Move(Direction::Down, grid_size))
         .unwrap();
       EventResult::Ignored
@@ -461,16 +461,16 @@ fn on_event(canvas: &mut CanvasEditor, event: Event) -> EventResult {
       );
 
       canvas
-        .marker_tx
+        .playhead_tx
         .send(Message::SetCurrentPos(adjusted_position, offset))
         .unwrap();
       let grid_size = (canvas.grid.width, canvas.grid.height).into();
       canvas
-        .marker_tx
+        .playhead_tx
         .send(Message::Move(Direction::Idle, grid_size))
         .unwrap();
       canvas
-        .marker_tx
+        .playhead_tx
         .send(Message::UpdateInfoStatusView())
         .unwrap();
 
@@ -500,7 +500,7 @@ fn on_event(canvas: &mut CanvasEditor, event: Event) -> EventResult {
       let pos_y = position.y.saturating_sub(offset.y + y_offset);
 
       canvas
-        .marker_tx
+        .playhead_tx
         .send(Message::SetGridArea((pos_x, pos_y).into()))
         .unwrap();
 

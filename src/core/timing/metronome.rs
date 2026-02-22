@@ -25,19 +25,19 @@ pub enum Message {
 pub struct Metronome {
   pub tx: Sender<Message>,
   pub rx: Receiver<Message>,
-  pub marker_tx: Sender<playhead_controller::Message>,
+  pub playhead_tx: Sender<playhead_controller::Message>,
   cb_sink: cursive::CbSink,
 }
 
 impl Metronome {
-  pub fn new(cb_sink: cursive::CbSink, marker_tx: Sender<playhead_controller::Message>) -> Self {
+  pub fn new(cb_sink: cursive::CbSink, playhead_tx: Sender<playhead_controller::Message>) -> Self {
     let (tx, rx) = channel();
 
     Self {
       tx,
       rx,
       cb_sink,
-      marker_tx,
+      playhead_tx,
     }
   }
 
@@ -71,17 +71,17 @@ impl Metronome {
         Message::Tempo(tempo) => {
           clock_tx.send(clock::Message::Tempo(tempo)).unwrap();
 
-          // Forward tempo to marker as BPM (convert from Ratio to usize)
+          // Forward tempo to playhead as BPM (convert from Ratio to usize)
           let bpm = tempo.to_integer() as usize;
           self
-            .marker_tx
+            .playhead_tx
             .send(playhead_controller::Message::SetTempo(bpm))
             .unwrap();
         }
         Message::Time(time) => {
           let tick = time.ticks().to_usize().unwrap();
           self
-            .marker_tx
+            .playhead_tx
             .send(playhead_controller::Message::SetActivePos(tick))
             .unwrap();
         }

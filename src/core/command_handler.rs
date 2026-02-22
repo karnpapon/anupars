@@ -31,7 +31,7 @@ pub struct CommandManager {
   temp_tempo: Arc<Mutex<i64>>,
   temp_ratio: Arc<Mutex<(i64, usize)>>,
   pub last_key_time: Arc<Mutex<Option<Instant>>>,
-  marker_tx_cloned: Sender<playhead_controller::Message>,
+  playhead_tx_cloned: Sender<playhead_controller::Message>,
 }
 
 impl CommandManager {
@@ -41,7 +41,7 @@ impl CommandManager {
     cb_sink: cursive::CbSink,
     temp_tempo: Arc<Mutex<i64>>,
     last_key_time: Arc<Mutex<Option<Instant>>>,
-    marker_tx_cloned: Sender<playhead_controller::Message>,
+    playhead_tx_cloned: Sender<playhead_controller::Message>,
   ) -> Self {
     let bindings = RefCell::new(Self::get_bindings());
     Self {
@@ -53,7 +53,7 @@ impl CommandManager {
       temp_tempo,
       temp_ratio: Arc::new(Mutex::new((1, 16))),
       last_key_time,
-      marker_tx_cloned,
+      playhead_tx_cloned,
     }
   }
 
@@ -109,7 +109,7 @@ impl CommandManager {
 
         Ok(None)
       }
-      Command::AdjustMarker(direction) => {
+      Command::AdjustPlayhead(direction) => {
         let dir = match direction {
           MoveDirection::Down => (0, -1),
           MoveDirection::Left => (-1, 0),
@@ -118,7 +118,7 @@ impl CommandManager {
         };
 
         self
-          .marker_tx_cloned
+          .playhead_tx_cloned
           .send(playhead_controller::Message::Scale(dir))
           .unwrap();
 
@@ -138,7 +138,7 @@ impl CommandManager {
         let temp = *tempo as usize;
 
         self
-          .marker_tx_cloned
+          .playhead_tx_cloned
           .send(playhead_controller::Message::SetTempo(temp))
           .unwrap();
 
@@ -186,7 +186,7 @@ impl CommandManager {
         drop(ratio);
 
         self
-          .marker_tx_cloned
+          .playhead_tx_cloned
           .send(playhead_controller::Message::SetRatio(new_ratio))
           .unwrap();
 
@@ -194,35 +194,35 @@ impl CommandManager {
       }
       Command::ToggleReverse => {
         self
-          .marker_tx_cloned
+          .playhead_tx_cloned
           .send(playhead_controller::Message::ToggleReverseMode())
           .unwrap();
         Ok(None)
       }
       Command::ToggleArpeggiator => {
         self
-          .marker_tx_cloned
+          .playhead_tx_cloned
           .send(playhead_controller::Message::ToggleArpeggiatorMode())
           .unwrap();
         Ok(None)
       }
       Command::ToggleAccumulation => {
         self
-          .marker_tx_cloned
+          .playhead_tx_cloned
           .send(playhead_controller::Message::ToggleAccumulationMode())
           .unwrap();
         Ok(None)
       }
       Command::ToggleRandom => {
         self
-          .marker_tx_cloned
+          .playhead_tx_cloned
           .send(playhead_controller::Message::ToggleRandomMode())
           .unwrap();
         Ok(None)
       }
       Command::ToggleEventOperator => {
         self
-          .marker_tx_cloned
+          .playhead_tx_cloned
           .send(playhead_controller::Message::ToggleEventOperatorMode())
           .unwrap();
         Ok(None)
@@ -291,19 +291,19 @@ impl CommandManager {
     kb.insert("Esc".into(), vec![Command::ToggleInputRegexAndCanvas]);
     kb.insert(
       "Shift+D".into(),
-      vec![Command::AdjustMarker(MoveDirection::Right)],
+      vec![Command::AdjustPlayhead(MoveDirection::Right)],
     );
     kb.insert(
       "Shift+A".into(),
-      vec![Command::AdjustMarker(MoveDirection::Left)],
+      vec![Command::AdjustPlayhead(MoveDirection::Left)],
     );
     kb.insert(
       "Shift+W".into(),
-      vec![Command::AdjustMarker(MoveDirection::Up)],
+      vec![Command::AdjustPlayhead(MoveDirection::Up)],
     );
     kb.insert(
       "Shift+S".into(),
-      vec![Command::AdjustMarker(MoveDirection::Down)],
+      vec![Command::AdjustPlayhead(MoveDirection::Down)],
     );
     kb.insert(">".into(), vec![Command::AdjustBPM(Adjustment::Increase)]);
     kb.insert("<".into(), vec![Command::AdjustBPM(Adjustment::Decrease)]);

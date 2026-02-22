@@ -14,55 +14,55 @@ use std::hash::Hasher;
 /// Calculate position for normal (forward) sequential mode
 pub fn calculate_normal_position(
   adjusted_pos: usize,
-  marker_w: usize,
-  marker_h: usize,
+  playhead_w: usize,
+  playhead_h: usize,
   actived_pos: &mut Vec2,
 ) {
-  actived_pos.x = adjusted_pos % marker_w;
+  actived_pos.x = adjusted_pos % playhead_w;
   if actived_pos.x == 0 {
     actived_pos.y += 1;
-    actived_pos.y %= marker_h;
+    actived_pos.y %= playhead_h;
   }
 }
 
 /// Calculate position for reverse sequential mode
 pub fn calculate_reverse_position(
   adjusted_pos: usize,
-  marker_w: usize,
-  marker_h: usize,
+  playhead_w: usize,
+  playhead_h: usize,
   actived_pos: &mut Vec2,
 ) {
-  actived_pos.x = marker_w - 1 - (adjusted_pos % marker_w);
-  if actived_pos.x == marker_w - 1 {
+  actived_pos.x = playhead_w - 1 - (adjusted_pos % playhead_w);
+  if actived_pos.x == playhead_w - 1 {
     if actived_pos.y == 0 {
-      actived_pos.y = marker_h - 1;
+      actived_pos.y = playhead_h - 1;
     } else {
       actived_pos.y -= 1;
     }
   }
 }
 
-/// Calculate random position within marker area using deterministic hashing
+/// Calculate random position within playhead area using deterministic hashing
 pub fn calculate_random_position(
   adjusted_pos: usize,
-  marker_w: usize,
-  marker_h: usize,
+  playhead_w: usize,
+  playhead_h: usize,
   actived_pos: &mut Vec2,
 ) {
   let mut hasher = DefaultHasher::new();
   adjusted_pos.hash(&mut hasher);
   let hash = hasher.finish() as usize;
-  actived_pos.x = hash % marker_w;
-  actived_pos.y = (hash / marker_w) % marker_h;
+  actived_pos.x = hash % playhead_w;
+  actived_pos.y = (hash / playhead_w) % playhead_h;
 }
 
-/// Get arpeggiator matches within marker area
+/// Get arpeggiator matches within playhead area
 pub fn get_arpeggiator_matches(
   regex_indexes: &std::collections::BTreeSet<usize>,
-  marker_x: usize,
-  marker_y: usize,
-  marker_w: usize,
-  marker_h: usize,
+  playhead_x: usize,
+  playhead_y: usize,
+  playhead_w: usize,
+  playhead_h: usize,
   canvas_w: usize,
   reverse: bool,
 ) -> Vec<(usize, usize)> {
@@ -71,8 +71,12 @@ pub fn get_arpeggiator_matches(
     .filter_map(|&idx| {
       let x = idx % canvas_w;
       let y = idx / canvas_w;
-      if x >= marker_x && x < marker_x + marker_w && y >= marker_y && y < marker_y + marker_h {
-        Some((x - marker_x, y - marker_y))
+      if x >= playhead_x
+        && x < playhead_x + playhead_w
+        && y >= playhead_y
+        && y < playhead_y + playhead_h
+      {
+        Some((x - playhead_x, y - playhead_y))
       } else {
         None
       }
@@ -96,18 +100,18 @@ pub fn get_random_index(pos: usize, max: usize) -> usize {
 /// Calculate position when not using arpeggiator or as fallback
 pub fn calculate_position_fallback(
   adjusted_pos: usize,
-  marker_w: usize,
-  marker_h: usize,
+  playhead_w: usize,
+  playhead_h: usize,
   reverse: bool,
   random: bool,
   actived_pos: &mut Vec2,
 ) {
   if random {
-    calculate_random_position(adjusted_pos, marker_w, marker_h, actived_pos);
+    calculate_random_position(adjusted_pos, playhead_w, playhead_h, actived_pos);
   } else if reverse {
-    calculate_reverse_position(adjusted_pos, marker_w, marker_h, actived_pos);
+    calculate_reverse_position(adjusted_pos, playhead_w, playhead_h, actived_pos);
   } else {
-    calculate_normal_position(adjusted_pos, marker_w, marker_h, actived_pos);
+    calculate_normal_position(adjusted_pos, playhead_w, playhead_h, actived_pos);
   }
 }
 

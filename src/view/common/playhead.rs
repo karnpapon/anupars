@@ -93,20 +93,20 @@ pub enum UIUpdate {
   AccumulationCounter(usize, usize), // (count, total)
   OpQueueDisplay(String),
   EvQueueDisplay(String),
-  MarkerPosAndArea(Vec2, Rect),
+  PlayheadPosAndArea(Vec2, Rect),
 }
 
 struct GridParams<'a, R: rand::Rng> {
-  pub marker_width: usize,
-  pub marker_height: usize,
+  pub playhead_width: usize,
+  pub playhead_height: usize,
   pub grid_width: usize,
   pub grid_height: usize,
   pub rng: &'a mut R,
 }
 
-pub struct MarkerUI {
-  pub marker_area: Rect,
-  pub marker_pos: Vec2,
+pub struct PlayheadUI {
+  pub playhead_area: Rect,
+  pub playhead_pos: Vec2,
   pub actived_pos: Vec2,
   pub text_matcher: Option<HashMap<usize, Match>>,
   pub regex_indexes: Arc<Mutex<BTreeSet<usize>>>,
@@ -115,11 +115,11 @@ pub struct MarkerUI {
   pub random_mode: bool,
 }
 
-impl MarkerUI {
+impl PlayheadUI {
   pub fn new() -> Self {
-    MarkerUI {
-      marker_area: Rect::from_point(Vec2::zero()),
-      marker_pos: Vec2::zero(),
+    PlayheadUI {
+      playhead_area: Rect::from_point(Vec2::zero()),
+      playhead_pos: Vec2::zero(),
       actived_pos: Vec2::zero(),
       text_matcher: None,
       regex_indexes: Arc::new(Mutex::new(BTreeSet::new())),
@@ -151,7 +151,7 @@ pub enum Message {
   SetRatio((i64, usize), cursive::CbSink),
 }
 
-pub struct MarkerArea {
+pub struct PlayheadArea {
   pos: Arc<Mutex<Vec2>>,
   area: Arc<Mutex<Rect>>,
   drag_start_x: AtomicUsize,
@@ -181,9 +181,9 @@ pub struct MarkerArea {
   // timing_stats: Arc<TimingStats>,
 }
 
-impl MarkerArea {
+impl PlayheadArea {
   pub fn new(midi_tx: Sender<midi::Message>) -> Self {
-    MarkerArea {
+    PlayheadArea {
       pos: Arc::new(Mutex::new(Vec2::zero())),
       area: Arc::new(Mutex::new(Rect::from_point(Vec2::zero()))),
       drag_start_x: AtomicUsize::new(0),
@@ -240,7 +240,7 @@ impl MarkerArea {
                     consts::canvas_editor_section_view,
                     move |canvas: &mut Canvas<CanvasEditor>| {
                       let editor = canvas.state_mut();
-                      editor.marker_ui.actived_pos = active_pos;
+                      editor.playhead_ui.actived_pos = active_pos;
                     },
                   );
                 }
@@ -268,13 +268,13 @@ impl MarkerArea {
                     },
                   );
                 }
-                UIUpdate::MarkerPosAndArea(pos, area) => {
+                UIUpdate::PlayheadPosAndArea(pos, area) => {
                   siv.call_on_name(
                     consts::canvas_editor_section_view,
                     move |canvas: &mut Canvas<CanvasEditor>| {
                       let editor = canvas.state_mut();
-                      editor.marker_ui.marker_pos = pos;
-                      editor.marker_ui.marker_area = area;
+                      editor.playhead_ui.playhead_pos = pos;
+                      editor.playhead_ui.playhead_area = area;
                     },
                   );
                   siv.call_on_name(consts::pos_status_unit_view, move |view: &mut TextView| {
@@ -323,7 +323,7 @@ impl MarkerArea {
           |canvas: &mut Canvas<CanvasEditor>| {
             let editor = canvas.state_mut();
             editor.reverse_mode = is_reversed;
-            editor.marker_ui.reverse_mode = is_reversed;
+            editor.playhead_ui.reverse_mode = is_reversed;
           },
         );
 
@@ -408,10 +408,10 @@ impl MarkerArea {
     let reverse = self.reverse_mode.load(Ordering::Relaxed);
     let arpeggiator = self.arpeggiator_mode.load(Ordering::Relaxed);
     let random = self.random_mode.load(Ordering::Relaxed);
-    let marker_w = area.width();
-    let marker_h = area.height();
-    let marker_x = area.left();
-    let marker_y = area.top();
+    let playhead_w = area.width();
+    let playhead_h = area.height();
+    let playhead_x = area.left();
+    let playhead_y = area.top();
     let canvas_w = self.grid_width.load(Ordering::Relaxed);
 
     let adjusted_pos = self.calculate_adjusted_pos(pos);
@@ -420,10 +420,10 @@ impl MarkerArea {
       let regex_indexes = self.regex_indexes.lock().unwrap();
       let matches = playback_modes::get_arpeggiator_matches(
         &regex_indexes,
-        marker_x,
-        marker_y,
-        marker_w,
-        marker_h,
+        playhead_x,
+        playhead_y,
+        playhead_w,
+        playhead_h,
         canvas_w,
         reverse,
       );
@@ -442,8 +442,8 @@ impl MarkerArea {
         // No matches, fallback to normal running
         playback_modes::calculate_position_fallback(
           adjusted_pos,
-          marker_w,
-          marker_h,
+          playhead_w,
+          playhead_h,
           reverse,
           random,
           &mut actived_pos,
@@ -453,8 +453,8 @@ impl MarkerArea {
       // Normal running without arpeggiator
       playback_modes::calculate_position_fallback(
         adjusted_pos,
-        marker_w,
-        marker_h,
+        playhead_w,
+        playhead_h,
         reverse,
         random,
         &mut actived_pos,
@@ -467,8 +467,8 @@ impl MarkerArea {
     let grid_width = self.grid_width.load(Ordering::Relaxed);
     let abs_y = pos.y + active_pos.y;
     let abs_x = pos.x + active_pos.x;
-    let curr_running_marker = (abs_y * grid_width) + abs_x;
-    (abs_x, abs_y, curr_running_marker)
+    let curr_running_playhead = (abs_y * grid_width) + abs_x;
+    (abs_x, abs_y, curr_running_playhead)
   }
 
   fn determine_note_position_and_scale(
@@ -506,18 +506,18 @@ impl MarkerArea {
 
   fn trigger_midi_if_matched(
     &self,
-    curr_running_marker: usize,
+    curr_running_playhead: usize,
     note_position: usize,
     scale_mode: crate::core::scale::ScaleMode,
   ) -> bool {
     if let Some(matcher) = self.text_matcher.lock().unwrap().as_ref() {
-      if matcher.get(&curr_running_marker).is_some() {
+      if matcher.get(&curr_running_playhead).is_some() {
         let grid_width = self.grid_width.load(Ordering::Relaxed);
         let grid_height = self.grid_height.load(Ordering::Relaxed);
         let current_tempo = self.tempo.load(Ordering::Relaxed);
 
         let _ = self.midi_tx.send(midi::Message::TriggerWithPosition((
-          curr_running_marker,
+          curr_running_playhead,
           note_position,
           grid_width,
           grid_height,
@@ -538,22 +538,22 @@ impl MarkerArea {
     self.check_operators(abs_x);
 
     let area = self.area.lock().unwrap();
-    let marker_area_size = area.width() * area.height();
+    let playhead_area_size = area.width() * area.height();
     drop(area);
 
     let mut counter = self.accumulation_counter.lock().unwrap();
     *counter += 1;
     let current_count = *counter;
 
-    if *counter >= marker_area_size {
+    if *counter >= playhead_area_size {
       *counter = 0;
       drop(counter);
 
-      self.update_accumulation_ui(0, marker_area_size, cb_sink);
+      self.update_accumulation_ui(0, playhead_area_size, cb_sink);
       Some(self.perform_accumulation_jump())
     } else {
       drop(counter);
-      self.update_accumulation_ui(current_count, marker_area_size, cb_sink);
+      self.update_accumulation_ui(current_count, playhead_area_size, cb_sink);
       None
     }
   }
@@ -568,29 +568,29 @@ impl MarkerArea {
     let mut rng = rand::thread_rng();
 
     let area = self.area.lock().unwrap();
-    let marker_width = area.width();
-    let marker_height = area.height();
+    let playhead_width = area.width();
+    let playhead_height = area.height();
     drop(area);
 
     let grid_width = self.grid_width.load(Ordering::Relaxed);
     let grid_height = self.grid_height.load(Ordering::Relaxed);
 
-    let current_marker_pos = {
+    let current_playhead_pos = {
       let pos = self.pos.lock().unwrap();
       (pos.x, pos.y)
     };
 
     // Determine jump position from stack or random
     let params = GridParams {
-      marker_width,
-      marker_height,
+      playhead_width,
+      playhead_height,
       grid_width,
       grid_height,
       rng: &mut rng,
     };
-    let (new_x, new_y) = self.get_jump_position(current_marker_pos, params);
+    let (new_x, new_y) = self.get_jump_position(current_playhead_pos, params);
 
-    // Update marker position and area
+    // Update playhead position and area
     let mut pos = self.pos.lock().unwrap();
     pos.x = new_x;
     pos.y = new_y;
@@ -598,7 +598,7 @@ impl MarkerArea {
     drop(pos);
 
     let mut area = self.area.lock().unwrap();
-    *area = Rect::from_size((new_x, new_y), (marker_width, marker_height));
+    *area = Rect::from_size((new_x, new_y), (playhead_width, playhead_height));
     let new_area = *area;
     drop(area);
 
@@ -608,14 +608,14 @@ impl MarkerArea {
     drop(actived);
 
     let mut queue = self.ui_update_queue.lock().unwrap();
-    queue.push_back(UIUpdate::MarkerPosAndArea(new_pos, new_area));
+    queue.push_back(UIUpdate::PlayheadPosAndArea(new_pos, new_area));
 
     Vec2::zero()
   }
 
   fn get_jump_position<R: rand::Rng>(
     &self,
-    current_marker_pos: (usize, usize),
+    current_playhead_pos: (usize, usize),
     params: GridParams<R>,
   ) -> (usize, usize) {
     let mut queue = self.operator_queue.lock().unwrap();
@@ -624,12 +624,12 @@ impl MarkerArea {
       match first_item {
         QueueItem::Position(x, y) => {
           let first_pos = (*x, *y);
-          if first_pos == current_marker_pos {
+          if first_pos == current_playhead_pos {
             // Same position, jump randomly
             drop(queue);
             self.generate_random_position(
-              params.marker_width,
-              params.marker_height,
+              params.playhead_width,
+              params.playhead_height,
               params.grid_width,
               params.grid_height,
               params.rng,
@@ -661,8 +661,8 @@ impl MarkerArea {
           // Event at front of queue, can't jump to it, generate random position
           drop(queue);
           self.generate_random_position(
-            params.marker_width,
-            params.marker_height,
+            params.playhead_width,
+            params.playhead_height,
             params.grid_width,
             params.grid_height,
             params.rng,
@@ -672,8 +672,8 @@ impl MarkerArea {
     } else {
       drop(queue);
       self.generate_random_position(
-        params.marker_width,
-        params.marker_height,
+        params.playhead_width,
+        params.playhead_height,
         params.grid_width,
         params.grid_height,
         params.rng,
@@ -683,14 +683,14 @@ impl MarkerArea {
 
   fn generate_random_position(
     &self,
-    marker_width: usize,
-    marker_height: usize,
+    playhead_width: usize,
+    playhead_height: usize,
     grid_width: usize,
     grid_height: usize,
     rng: &mut impl rand::Rng,
   ) -> (usize, usize) {
-    let max_x = grid_width.saturating_sub(marker_width);
-    let max_y = grid_height.saturating_sub(marker_height);
+    let max_x = grid_width.saturating_sub(playhead_width);
+    let max_y = grid_height.saturating_sub(playhead_height);
 
     if max_x > 0 && max_y > 0 {
       (rng.gen_range(0..=max_x), rng.gen_range(0..=max_y))
@@ -718,7 +718,7 @@ impl MarkerArea {
           |canvas: &mut Canvas<CanvasEditor>| {
             let editor = canvas.state_mut();
             editor.arpeggiator_mode = is_arp;
-            editor.marker_ui.arpeggiator_mode = is_arp;
+            editor.playhead_ui.arpeggiator_mode = is_arp;
           },
         );
 
@@ -742,7 +742,7 @@ impl MarkerArea {
           |canvas: &mut Canvas<CanvasEditor>| {
             let editor = canvas.state_mut();
             editor.random_mode = is_rand;
-            editor.marker_ui.random_mode = is_rand;
+            editor.playhead_ui.random_mode = is_rand;
           },
         );
 
@@ -855,10 +855,10 @@ impl MarkerArea {
     } else {
       drop(event_queue);
 
-      // No events in queue, push current marker position
-      let marker_pos = self.pos.lock().unwrap();
-      let push_pos = (marker_pos.x, marker_pos.y);
-      drop(marker_pos);
+      // No events in queue, push current playhead position
+      let playhead_pos = self.pos.lock().unwrap();
+      let push_pos = (playhead_pos.x, playhead_pos.y);
+      drop(playhead_pos);
 
       let mut pushed = self.pushed_positions.lock().unwrap();
       if let Entry::Vacant(e) = pushed.entry(push_pos) {
@@ -1016,8 +1016,8 @@ impl MarkerArea {
                   consts::canvas_editor_section_view,
                   move |canvas: &mut Canvas<CanvasEditor>| {
                     let editor = canvas.state_mut();
-                    editor.marker_ui.marker_pos = pos;
-                    editor.marker_ui.marker_area = area;
+                    editor.playhead_ui.playhead_pos = pos;
+                    editor.playhead_ui.playhead_area = area;
                   },
                 );
               }))
@@ -1043,7 +1043,7 @@ impl MarkerArea {
                   consts::canvas_editor_section_view,
                   move |canvas: &mut Canvas<CanvasEditor>| {
                     let editor = canvas.state_mut();
-                    editor.marker_ui.marker_pos = pos;
+                    editor.playhead_ui.playhead_pos = pos;
                   },
                 );
               }))
@@ -1080,7 +1080,7 @@ impl MarkerArea {
             let area = self.area.lock().unwrap();
             let w = area.width();
             let h = area.height();
-            let marker_area = *area;
+            let playhead_area = *area;
 
             cb_sink
               .send(Box::new(move |siv| {
@@ -1097,7 +1097,7 @@ impl MarkerArea {
                   move |canvas: &mut Canvas<CanvasEditor>| {
                     let editor = canvas.state_mut();
 
-                    editor.marker_ui.marker_area = marker_area;
+                    editor.playhead_ui.playhead_area = playhead_area;
                   },
                 );
               }))
@@ -1113,13 +1113,14 @@ impl MarkerArea {
             let mut active_pos = *active_pos_mutex;
             drop(active_pos_mutex);
 
-            let (abs_x, abs_y, curr_running_marker) = self.calculate_absolute_position(active_pos);
+            let (abs_x, abs_y, curr_running_playhead) =
+              self.calculate_absolute_position(active_pos);
 
             let (note_position, scale_mode) =
               self.determine_note_position_and_scale(active_pos, abs_x, abs_y);
 
             let matched =
-              self.trigger_midi_if_matched(curr_running_marker, note_position, scale_mode);
+              self.trigger_midi_if_matched(curr_running_playhead, note_position, scale_mode);
 
             if matched {
               if let Some(new_active_pos) = self.handle_accumulation_mode(abs_x, &cb_sink) {
@@ -1153,7 +1154,7 @@ impl MarkerArea {
             drop(counter);
 
             let area = self.area.lock().unwrap();
-            let marker_area = *area;
+            let playhead_area = *area;
             let area_size = area.size();
 
             cb_sink
@@ -1170,7 +1171,7 @@ impl MarkerArea {
                   consts::canvas_editor_section_view,
                   move |canvas: &mut Canvas<CanvasEditor>| {
                     let editor = canvas.state_mut();
-                    editor.marker_ui.marker_area = marker_area;
+                    editor.playhead_ui.playhead_area = playhead_area;
                   },
                 );
               }))
@@ -1190,8 +1191,8 @@ impl MarkerArea {
                   consts::canvas_editor_section_view,
                   move |canvas: &mut Canvas<CanvasEditor>| {
                     let editor = canvas.state_mut();
-                    editor.marker_ui.text_matcher = mm;
-                    editor.marker_ui.regex_indexes = regex_indexes_cloned;
+                    editor.playhead_ui.text_matcher = mm;
+                    editor.playhead_ui.regex_indexes = regex_indexes_cloned;
                   },
                 );
               }))

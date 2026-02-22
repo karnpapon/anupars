@@ -38,11 +38,11 @@ impl Anu {
   pub fn build(
     &mut self,
     regex_tx: Sender<regex::Message>,
-    marker_tx: Sender<playhead_controller::Message>,
+    playhead_tx: Sender<playhead_controller::Message>,
   ) -> NamedView<LinearLayout> {
     let top_section = Console::build(self, regex_tx);
     let padding_section = DummyView::new().fixed_width(1);
-    let canvas_section = CanvasSection::build(marker_tx);
+    let canvas_section = CanvasSection::build(playhead_tx);
 
     LinearLayout::vertical()
       .child(top_section)
