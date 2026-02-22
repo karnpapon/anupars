@@ -227,6 +227,13 @@ impl CommandManager {
           .unwrap();
         Ok(None)
       }
+      Command::ToggleLockOpQueue => {
+        self
+          .playhead_tx_cloned
+          .send(playhead_controller::Message::ToggleLockOpQueueMode())
+          .unwrap();
+        Ok(None)
+      }
     }
   }
 
@@ -314,6 +321,7 @@ impl CommandManager {
     kb.insert("Ctrl+u".into(), vec![Command::ToggleAccumulation]);
     kb.insert("Ctrl+d".into(), vec![Command::ToggleRandom]);
     kb.insert("Ctrl+e".into(), vec![Command::ToggleEventOperator]);
+    kb.insert("Ctrl+l".into(), vec![Command::ToggleLockOpQueue]);
     kb
   }
 

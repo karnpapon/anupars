@@ -147,6 +147,7 @@ pub enum Message {
   ToggleArpeggiatorMode(cursive::CbSink),
   ToggleRandomMode(cursive::CbSink),
   ToggleEventOperatorMode(cursive::CbSink),
+  ToggleLockOpQueueMode(cursive::CbSink),
   SetTempo(usize),
   SetRatio((i64, usize), cursive::CbSink),
 }
@@ -172,6 +173,7 @@ pub struct PlayheadArea {
   arpeggiator_mode: AtomicBool,
   random_mode: AtomicBool,
   event_operator_mode: AtomicBool,
+  lock_op_queue_mode: AtomicBool,
   ratio: Arc<Mutex<(i64, usize)>>,
   operator_queue: Arc<Mutex<VecDeque<QueueItem>>>,
   event_queue: Arc<Mutex<VecDeque<EventOperator>>>,
@@ -203,7 +205,8 @@ impl PlayheadArea {
       reverse_mode: AtomicBool::new(false),
       arpeggiator_mode: AtomicBool::new(false),
       random_mode: AtomicBool::new(false),
-      event_operator_mode: AtomicBool::new(true),
+      event_operator_mode: AtomicBool::new(false),
+      lock_op_queue_mode: AtomicBool::new(false),
       ratio: Arc::new(Mutex::new((1, 16))),
       operator_queue: Arc::new(Mutex::new(VecDeque::new())),
       event_queue: Arc::new(Mutex::new(VecDeque::new())),
@@ -299,14 +302,16 @@ impl PlayheadArea {
     let accumulation = self.accumulation_mode.load(Ordering::Relaxed);
     let random = self.random_mode.load(Ordering::Relaxed);
     let event_op = self.event_operator_mode.load(Ordering::Relaxed);
+    let lock_op_queue = self.lock_op_queue_mode.load(Ordering::Relaxed);
 
     format!(
-      "{}{}{}{}{}",
+      "{}{}{}{}{}{}",
       if reverse { "R" } else { "r" },
       if arpeggiator { "A" } else { "a" },
       if accumulation { "U" } else { "u" },
       if random { "D" } else { "d" },
-      if event_op { "E" } else { "e" }
+      if event_op { "E" } else { "e" },
+      if lock_op_queue { "L" } else { "l" }
     )
   }
 
@@ -637,7 +642,23 @@ impl PlayheadArea {
           } else {
             // Use position from queue (pop from front - FIFO)
             let item = queue.pop_front().unwrap();
-            let queue_display = format!("{:?}", *queue);
+            let is_lock = self.lock_op_queue_mode.load(Ordering::Relaxed);
+
+            // Format queue using Display trait for consistency
+            let queue_display = if queue.is_empty() {
+              if is_lock {
+                "&[]".to_string()
+              } else {
+                "[]".to_string()
+              }
+            } else {
+              let items: Vec<String> = queue.iter().map(|item| format!("{}", item)).collect();
+              if is_lock {
+                format!("&[{}]", items.join(", "))
+              } else {
+                format!("[{}]", items.join(", "))
+              }
+            };
             drop(queue);
 
             if let QueueItem::Position(x, y) = item {
@@ -778,6 +799,40 @@ impl PlayheadArea {
       .unwrap();
   }
 
+  pub fn toggle_lock_op_queue_mode(&self, cb_sink: cursive::CbSink) {
+    let is_lock = !self.lock_op_queue_mode.load(Ordering::Relaxed);
+    self.lock_op_queue_mode.store(is_lock, Ordering::Relaxed);
+
+    let mode_status = self.build_mode_status_string();
+
+    cb_sink
+      .send(Box::new(move |siv| {
+        siv.call_on_name(
+          consts::canvas_editor_section_view,
+          |canvas: &mut Canvas<CanvasEditor>| {
+            let editor = canvas.state_mut();
+            editor.lock_op_queue_mode = is_lock;
+          },
+        );
+
+        siv.call_on_name(consts::osc_status_unit_view, |view: &mut TextView| {
+          view.set_content(mode_status);
+        });
+        siv.call_on_name(consts::op_queue_status_unit_view, |view: &mut TextView| {
+          let current = view.get_content().source().to_string();
+          if is_lock {
+            view.set_content(format!("&{}", current));
+          } else if current.starts_with('&') {
+            let unlocked = current.trim_start_matches('&').to_string();
+            view.set_content(unlocked);
+          } else {
+            view.set_content(current);
+          }
+        });
+      }))
+      .unwrap();
+  }
+
   pub fn scale(&self, (w, h): (i32, i32)) {
     let pos = self.pos.lock().unwrap();
     let mut area = self.area.lock().unwrap();
@@ -817,11 +872,28 @@ impl PlayheadArea {
     let operator_index = position_index % QUEUE_OPERATORS.len();
     let operator = QUEUE_OPERATORS[operator_index];
 
+    let is_locked = self.lock_op_queue_mode.load(Ordering::Relaxed);
+
     match operator {
-      QueueOperator::Push => self.handle_push(),
-      QueueOperator::Swap => self.handle_swap(),
-      QueueOperator::Pop => self.handle_pop(),
-      QueueOperator::Duplicate => self.handle_duplicate(),
+      QueueOperator::Push => {
+        if !is_locked {
+          self.handle_push();
+        }
+      }
+      QueueOperator::Swap => {
+        if !is_locked {
+          self.handle_swap();
+        }
+      }
+      QueueOperator::Pop => {
+        // Pop is always allowed, even when locked
+        self.handle_pop();
+      }
+      QueueOperator::Duplicate => {
+        if !is_locked {
+          self.handle_duplicate();
+        }
+      }
     }
   }
 
@@ -889,7 +961,7 @@ impl PlayheadArea {
 
   fn handle_pop(&self) {
     let mut queue = self.operator_queue.lock().unwrap();
-    if let Some(item) = queue.pop_back() {
+    if let Some(item) = queue.pop_front() {
       drop(queue);
 
       // Only remove from pushed_positions if it was a position
@@ -916,13 +988,22 @@ impl PlayheadArea {
   fn update_queue_display(&self) {
     let queue = self.operator_queue.lock().unwrap();
     let event_queue = self.event_queue.lock().unwrap();
+    let lock_op_q = self.lock_op_queue_mode.load(Ordering::Relaxed);
 
     // Format operator queue with Display trait for clean output
     let queue_display = if queue.is_empty() {
-      "[]".to_string()
+      if lock_op_q {
+        "&[]".to_string()
+      } else {
+        "[]".to_string()
+      }
     } else {
       let items: Vec<String> = queue.iter().map(|item| format!("{}", item)).collect();
-      format!("[{}]", items.join(", "))
+      if lock_op_q {
+        format!("&[{}]", items.join(", "))
+      } else {
+        format!("[{}]", items.join(", "))
+      }
     };
 
     // Format event queue with Display trait
@@ -1280,6 +1361,9 @@ impl PlayheadArea {
           }
           Message::ToggleEventOperatorMode(cb_sink) => {
             self.toggle_event_operator_mode(cb_sink);
+          }
+          Message::ToggleLockOpQueueMode(cb_sink) => {
+            self.toggle_lock_op_queue_mode(cb_sink);
           }
         }
       }

@@ -37,6 +37,7 @@ pub enum Message {
   ToggleArpeggiatorMode(),
   ToggleRandomMode(),
   ToggleEventOperatorMode(),
+  ToggleLockOpQueueMode(),
   SetTempo(usize),
   SetRatio((i64, usize)),
 }
@@ -218,6 +219,12 @@ impl Playhead {
             let cb_sink = self.cb_sink.clone();
             playhead_area_tx
               .send(playhead::Message::ToggleEventOperatorMode(cb_sink))
+              .unwrap();
+          }
+          Message::ToggleLockOpQueueMode() => {
+            let cb_sink = self.cb_sink.clone();
+            playhead_area_tx
+              .send(playhead::Message::ToggleLockOpQueueMode(cb_sink))
               .unwrap();
           }
         }

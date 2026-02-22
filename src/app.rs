@@ -1,3 +1,5 @@
+use std::fmt;
+
 use crate::core::consts;
 use crate::core::midi::Midi;
 use crate::core::regex::RegExpHandler;
@@ -30,6 +32,45 @@ pub type UserData = Rc<UserDataInner>;
 pub struct UserDataInner {
   pub cmd: CommandManager,
   pub midi_tx: Sender<midi::Message>,
+}
+
+#[derive(Clone)]
+pub enum AppMode {
+  Reverse,       // r
+  Arpeggiator,   // a
+  Accumulation,  // u
+  Random,        // d
+  EventOperator, // e
+  LockOpQueue,   // l
+  None,
+}
+
+impl fmt::Display for AppMode {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    match self {
+      AppMode::Reverse => write!(f, "r"),
+      AppMode::Arpeggiator => write!(f, "a"),
+      AppMode::Accumulation => write!(f, "u"),
+      AppMode::Random => write!(f, "d"),
+      AppMode::EventOperator => write!(f, "e"),
+      AppMode::LockOpQueue => write!(f, "l"),
+      AppMode::None => write!(f, "n"),
+    }
+  }
+}
+
+impl AppMode {
+  pub fn print_modes(&self) -> String {
+    let modes = [
+      AppMode::Reverse,
+      AppMode::Arpeggiator,
+      AppMode::Accumulation,
+      AppMode::Random,
+      AppMode::EventOperator,
+      AppMode::LockOpQueue,
+    ];
+    modes.iter().map(|mode| mode.to_string()).collect()
+  }
 }
 
 /// Application components bundle

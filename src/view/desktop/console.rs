@@ -1,22 +1,28 @@
 use std::sync::mpsc::Sender;
 
 use cfonts::{render, Fonts, Options};
-use cursive::{
-  event::EventResult,
-  theme::Style,
-  utils::span::SpannedString,
-  view::{Nameable, Resizable},
-  views::{Canvas, Dialog, EditView, FocusTracker, LinearLayout, ListView, NamedView, TextView},
-  Cursive, Vec2,
-};
-
-use crate::{
-  app::UserData,
-  core::{consts, regex, utils},
-  view::{common::grid_editor::CanvasEditor, microcontroller::console::RegexFlag},
-};
 
 use super::app::Anu;
+use crate::app::UserData;
+use crate::core::consts;
+use crate::core::regex;
+use crate::core::utils;
+use crate::view::common::grid_editor::CanvasEditor;
+use crate::view::microcontroller::console::RegexFlag;
+use cursive::event::EventResult;
+use cursive::theme::Style;
+use cursive::utils::span::SpannedString;
+use cursive::view::{Nameable, Resizable};
+use cursive::views::Canvas;
+use cursive::views::Dialog;
+use cursive::views::EditView;
+use cursive::views::FocusTracker;
+use cursive::views::LinearLayout;
+use cursive::views::ListView;
+use cursive::views::NamedView;
+use cursive::views::TextView;
+use cursive::Cursive;
+use cursive::Vec2;
 
 pub enum RegexMode {
   Realtime,
@@ -132,7 +138,7 @@ impl TopSection {
     let protocol_controller_section_view = ListView::new()
       .child(
         "MDE:",
-        TextView::new("raudE").with_name(consts::osc_status_unit_view), // R=Reverse, A=Arpeggiator, U=Accumulation, D=Random, E=Event-Operator
+        TextView::new(app.mode.print_modes()).with_name(consts::osc_status_unit_view),
       )
       .child("STE: ", input_status_unit_view)
       .child(
