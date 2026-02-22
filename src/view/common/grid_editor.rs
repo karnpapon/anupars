@@ -170,8 +170,6 @@ impl CanvasEditor {
 
     let stack_operators = ['P', 'S', 'O']; // Push, Swap, pOp
     let event_operators = ['r', 'c', 'x'];
-    let spacing = 10;
-    let pattern_width = spacing + 1;
 
     let style = Style::from(ColorStyle::front(ColorType::rgb(100, 100, 100)));
 
@@ -195,19 +193,11 @@ impl CanvasEditor {
       x_pos == abs_active_x
     });
 
-    // Draw merged operators (stack and event alternating)
+    // Draw stack operators on row 1
     let mut x = 0;
     let mut stack_index = 0;
-    let mut event_index = 0;
-    let mut is_stack = true; // Start with stack operator
-
     while x < self.grid.width {
-      let (op, _is_uppercase) = if is_stack {
-        (stack_operators[stack_index % stack_operators.len()], true)
-      } else {
-        (event_operators[event_index % event_operators.len()], false)
-      };
-
+      let op = stack_operators[stack_index % stack_operators.len()];
       let is_active = x == abs_active_x;
       let style = if is_active && is_regex_match_x {
         Style::from(ColorStyle::new(
@@ -223,14 +213,32 @@ impl CanvasEditor {
         printer.print((x, 1), &op.to_string());
       });
 
-      if is_stack {
-        stack_index += 1;
-      } else {
-        event_index += 1;
-      }
-      is_stack = !is_stack; // Toggle between stack and event
+      x += consts::STACK_OP_SPACING;
+      stack_index += 1;
+    }
 
-      x += pattern_width;
+    // Draw event operators on row 1 (same line)
+    let mut x = 0;
+    let mut event_index = 0;
+    while x < self.grid.width {
+      let op = event_operators[event_index % event_operators.len()];
+      let is_active = x == abs_active_x;
+      let style = if is_active && is_regex_match_x {
+        Style::from(ColorStyle::new(
+          ColorType::rgb(0, 0, 0),
+          ColorType::rgb(255, 255, 255),
+        ))
+      } else if is_active {
+        Style::from(ColorStyle::front(ColorType::rgb(255, 255, 255)))
+      } else {
+        Style::from(ColorStyle::front(ColorType::rgb(150, 150, 150))) // Slightly brighter for events
+      };
+      printer.with_style(style, |printer| {
+        printer.print((x, 1), &op.to_string());
+      });
+
+      x += consts::EVENT_OP_SPACING;
+      event_index += 1;
     }
   }
 

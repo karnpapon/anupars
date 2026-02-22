@@ -82,7 +82,8 @@ pub static len_status_unit_view: &str = "len_status_unit_view";
 pub static pos_status_unit_view: &str = "pos_status_unit_view";
 pub static osc_status_unit_view: &str = "osc_status_unit_view";
 pub static midi_status_unit_view: &str = "midi_status_unit_view";
-pub static stack_status_unit_view: &str = "stack_status_unit_view";
+pub static op_stack_status_unit_view: &str = "op_stack_status_unit_view";
+pub static ev_stack_status_unit_view: &str = "ev_stack_status_unit_view";
 
 pub static input_controller_section_view: &str = "input_controller_section_view";
 pub static status_controller_section_view: &str = "status_controller_section_view";
@@ -117,8 +118,11 @@ pub const DEFAULT_TEMPO: i64 = 120;
 // Keyboard visualization constants
 pub const KEYBOARD_MARGIN_TOP: usize = 3;
 pub const KEYBOARD_MARGIN_LEFT: usize = 4;
-pub const KEYBOARD_MARGIN_BOTTOM: usize = 2;
+pub const KEYBOARD_MARGIN_BOTTOM: usize = 3; // Increased to accommodate event operators row
 pub const BASE_OCTAVE: u8 = 2; // Starting octave (C2 = MIDI 48)
 pub const NOTE_NAMES: [&str; 12] = [
   "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B",
 ];
+
+pub const STACK_OP_SPACING: usize = 2;
+pub const EVENT_OP_SPACING: usize = 10;

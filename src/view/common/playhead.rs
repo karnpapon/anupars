@@ -2,6 +2,7 @@ use std::collections::hash_map::Entry;
 use std::collections::BTreeSet;
 use std::collections::HashMap;
 use std::collections::VecDeque;
+use std::fmt;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::mpsc::{channel, Sender};
@@ -23,19 +24,59 @@ use crate::view::common::playhead_controller::Direction;
 // #[cfg(debug_assertions)]
 // use crate::view::common::timing_diagnostic::TimingStats;
 
-// Event operator types
-#[derive(Clone, Debug, PartialEq)]
-pub enum EventOp {
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum StackOperator {
+  Push, // P
+  Swap, // S
+  Pop,  // O
+}
+
+impl fmt::Display for StackOperator {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    match self {
+      StackOperator::Push => write!(f, "P"),
+      StackOperator::Swap => write!(f, "S"),
+      StackOperator::Pop => write!(f, "O"),
+    }
+  }
+}
+
+const STACK_OPERATORS: [StackOperator; 3] =
+  [StackOperator::Push, StackOperator::Swap, StackOperator::Pop];
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum EventOperator {
   R,
   C,
   X,
 }
 
+impl fmt::Display for EventOperator {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    match self {
+      EventOperator::R => write!(f, "r"),
+      EventOperator::C => write!(f, "c"),
+      EventOperator::X => write!(f, "x"),
+    }
+  }
+}
+
+const EVENT_OPERATORS: [EventOperator; 3] = [EventOperator::R, EventOperator::C, EventOperator::X];
+
 // Stack item that can be either a position or an event
 #[derive(Clone, Debug, PartialEq)]
 pub enum StackItem {
   Position(usize, usize),
-  Event(EventOp),
+  Event(EventOperator),
+}
+
+impl fmt::Display for StackItem {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    match self {
+      StackItem::Position(x, y) => write!(f, "({},{})", x, y),
+      StackItem::Event(op) => write!(f, "{}", op),
+    }
+  }
 }
 
 // UI update types for batching
@@ -43,7 +84,8 @@ pub enum StackItem {
 pub enum UIUpdate {
   ActivePos(Vec2),
   AccumulationCounter(usize, usize), // (count, total)
-  StackDisplay(String),
+  OpStackDisplay(String),
+  EvStackDisplay(String),
   MarkerPosAndArea(Vec2, Rect),
 }
 
@@ -123,7 +165,7 @@ pub struct MarkerArea {
   random_mode: AtomicBool,
   ratio: Arc<Mutex<(i64, usize)>>,
   operator_stack: Arc<Mutex<Vec<StackItem>>>,
-  event_stack: Arc<Mutex<Vec<EventOp>>>,
+  event_stack: Arc<Mutex<Vec<EventOperator>>>,
   pushed_positions: Arc<Mutex<HashMap<(usize, usize), bool>>>,
   pub ui_update_queue: Arc<Mutex<VecDeque<UIUpdate>>>,
   // #[cfg(debug_assertions)]
@@ -200,9 +242,17 @@ impl MarkerArea {
                     },
                   );
                 }
-                UIUpdate::StackDisplay(stack_str) => {
+                UIUpdate::OpStackDisplay(stack_str) => {
                   siv.call_on_name(
-                    consts::stack_status_unit_view,
+                    consts::op_stack_status_unit_view,
+                    move |view: &mut TextView| {
+                      view.set_content(stack_str);
+                    },
+                  );
+                }
+                UIUpdate::EvStackDisplay(stack_str) => {
+                  siv.call_on_name(
+                    consts::ev_stack_status_unit_view,
                     move |view: &mut TextView| {
                       view.set_content(stack_str);
                     },
@@ -585,7 +635,7 @@ impl MarkerArea {
 
               // Queue UI update (batched processing)
               let mut queue = self.ui_update_queue.lock().unwrap();
-              queue.push_back(UIUpdate::StackDisplay(stack_display));
+              queue.push_back(UIUpdate::OpStackDisplay(stack_display));
               drop(queue);
 
               (x, y)
@@ -706,58 +756,56 @@ impl MarkerArea {
     *tm = text_matcher
   }
 
-  // Stack operators (uppercase): P (Push), S (Swap), O (pOp) at even multiples
-  // Event operators (lowercase): r, c at odd multiples
+  // Stack operators: P (Push), S (Swap), O (pOp) with narrow spacing
+  // Event operators: r, c, x with wider spacing
   fn check_operators(&self, abs_x: usize) {
     if !self.accumulation_mode.load(Ordering::Relaxed) {
       return;
     }
 
-    const SPACING: usize = 11;
-    if !abs_x.is_multiple_of(SPACING) {
-      return;
+    if abs_x.is_multiple_of(consts::STACK_OP_SPACING) {
+      let position_index = abs_x / consts::STACK_OP_SPACING;
+      self.execute_stack_operator(position_index);
     }
 
-    let position_index = abs_x / SPACING;
-    let is_even_position = position_index.is_multiple_of(2);
-
-    if is_even_position {
-      self.execute_stack_operator(position_index);
-    } else {
+    if abs_x.is_multiple_of(consts::EVENT_OP_SPACING) {
+      let position_index = abs_x / consts::EVENT_OP_SPACING;
       self.execute_event_operator(position_index);
     }
   }
 
   fn execute_stack_operator(&self, position_index: usize) {
-    const STACK_OPERATORS: [char; 3] = ['P', 'S', 'O'];
-    let operator_index = (position_index / 2) % STACK_OPERATORS.len();
+    let operator_index = position_index % STACK_OPERATORS.len();
     let operator = STACK_OPERATORS[operator_index];
 
     match operator {
-      'P' => self.handle_push(),
-      'S' => self.handle_swap(),
-      'O' => self.handle_pop(),
-      _ => {}
+      StackOperator::Push => self.handle_push(),
+      StackOperator::Swap => self.handle_swap(),
+      StackOperator::Pop => self.handle_pop(),
     }
   }
 
   fn execute_event_operator(&self, position_index: usize) {
-    const EVENT_OPERATORS: [char; 3] = ['r', 'c', 'x'];
-    let operator_index = ((position_index - 1) / 2) % EVENT_OPERATORS.len();
+    let operator_index = position_index % EVENT_OPERATORS.len();
     let operator = EVENT_OPERATORS[operator_index];
 
     match operator {
-      'r' => self.handle_r(),
-      'c' => self.handle_c(),
-      'x' => self.handle_x(),
-      _ => {}
+      EventOperator::R => self.handle_r(),
+      EventOperator::C => self.handle_c(),
+      EventOperator::X => self.handle_x(),
     }
   }
 
   fn handle_push(&self) {
-    // Check event stack first
+    // Check event stack first (FIFO)
     let mut event_stack = self.event_stack.lock().unwrap();
-    if let Some(event_op) = event_stack.pop() {
+    let event_op = if !event_stack.is_empty() {
+      Some(event_stack.remove(0))
+    } else {
+      None
+    };
+
+    if let Some(event_op) = event_op {
       drop(event_stack);
 
       // Push the event to the main stack
@@ -819,17 +867,33 @@ impl MarkerArea {
     let stack = self.operator_stack.lock().unwrap();
     let event_stack = self.event_stack.lock().unwrap();
 
-    let stack_display = format!("Stack: {:?}\nEvents: {:?}", *stack, *event_stack);
+    // Format operator stack with Display trait for clean output
+    let stack_display = if stack.is_empty() {
+      "[]".to_string()
+    } else {
+      let items: Vec<String> = stack.iter().map(|item| format!("{}", item)).collect();
+      format!("[{}]", items.join(", "))
+    };
+
+    // Format event stack with Display trait
+    let event_stack_display = if event_stack.is_empty() {
+      "[]".to_string()
+    } else {
+      let items: Vec<String> = event_stack.iter().map(|op| format!("{}", op)).collect();
+      format!("[{}]", items.join(", "))
+    };
+
     drop(stack);
     drop(event_stack);
 
     let mut queue = self.ui_update_queue.lock().unwrap();
-    queue.push_back(UIUpdate::StackDisplay(stack_display));
+    queue.push_back(UIUpdate::OpStackDisplay(stack_display));
+    queue.push_back(UIUpdate::EvStackDisplay(event_stack_display));
   }
 
   fn handle_r(&self) {
     let mut event_stack = self.event_stack.lock().unwrap();
-    event_stack.push(EventOp::R);
+    event_stack.push(EventOperator::R);
     drop(event_stack);
 
     self.update_stack_display();
@@ -837,7 +901,7 @@ impl MarkerArea {
 
   fn handle_c(&self) {
     let mut event_stack = self.event_stack.lock().unwrap();
-    event_stack.push(EventOp::C);
+    event_stack.push(EventOperator::C);
     drop(event_stack);
 
     self.update_stack_display();
@@ -845,7 +909,7 @@ impl MarkerArea {
 
   fn handle_x(&self) {
     let mut event_stack = self.event_stack.lock().unwrap();
-    event_stack.push(EventOp::X);
+    event_stack.push(EventOperator::X);
     drop(event_stack);
 
     self.update_stack_display();
@@ -1127,7 +1191,7 @@ impl MarkerArea {
                 });
 
                 if !is_enabled {
-                  siv.call_on_name(consts::stack_status_unit_view, |view: &mut TextView| {
+                  siv.call_on_name(consts::op_stack_status_unit_view, |view: &mut TextView| {
                     view.set_content("[]");
                   });
                 }

@@ -97,7 +97,7 @@ impl Console {
     // .child(app.flag_state.button(RegexFlag::IgnoreWhiteSpace, "x"))
     // .child(app.flag_state.button(RegexFlag::Lazy, "U"));
 
-    let mode_view = LinearLayout::horizontal()
+    let _mode_view = LinearLayout::horizontal()
       .child(app.mode_state.button(RegexMode::Realtime, "RT").selected())
       .child(app.mode_state.button(RegexMode::OnEval, "OE"));
 
@@ -105,8 +105,13 @@ impl Console {
 
     let input_controller_section_view = ListView::new()
       .child("RegExp: ", regex_input_unit_view)
-      .child("Mode: ", mode_view)
+      // .child("Mode: ", mode_view)
       .child("flag: ", flag_view)
+      .child("", TextView::new("").fixed_height(1))
+      .child(
+        "MIDI:",
+        TextView::new("-").with_name(consts::midi_status_unit_view),
+      )
       .full_width()
       .max_width(30)
       .min_width(10);
@@ -142,13 +147,17 @@ impl Console {
         TextView::new("raud").with_name(consts::osc_status_unit_view), // R=Reverse, A=Arpeggiator, U=Accumulation, D=Random
       )
       .child("State: ", input_status_unit_view)
+      // .child(
+      //   "MIDI:",
+      //   TextView::new("-").with_name(consts::midi_status_unit_view),
+      // )
       .child(
-        "MIDI:",
-        TextView::new("-").with_name(consts::midi_status_unit_view),
+        "OpStck:",
+        TextView::new("[]").with_name(consts::op_stack_status_unit_view),
       )
       .child(
-        "Stack:",
-        TextView::new("[]").with_name(consts::stack_status_unit_view),
+        "EvStck:",
+        TextView::new("[]").with_name(consts::ev_stack_status_unit_view),
       )
       .fixed_width(100);
 
