@@ -29,7 +29,7 @@ pub enum Command {
   ToggleAccumulation,
   ToggleRandom,
   ToggleEventOperator,
-  ToggleLockOpQueue,
+  ToggleDrainQueue,
 }
 
 impl fmt::Display for Command {
@@ -47,7 +47,7 @@ impl fmt::Display for Command {
       | Self::ToggleArpeggiator
       | Self::ToggleAccumulation
       | Self::ToggleEventOperator
-      | Self::ToggleLockOpQueue
+      | Self::ToggleDrainQueue
       | Self::ToggleRandom => vec![],
     };
     repr_tokens.append(&mut extras_args);
@@ -70,7 +70,7 @@ impl Command {
       Self::ToggleAccumulation => "toggleaccumulation",
       Self::ToggleRandom => "togglerandom",
       Self::ToggleEventOperator => "toggleeventoperator",
-      Self::ToggleLockOpQueue => "togglelockopqueue",
+      Self::ToggleDrainQueue => "toggledrainqueue",
     }
   }
 }

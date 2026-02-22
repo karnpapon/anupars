@@ -18,6 +18,7 @@ use cursive::views::TextView;
 use cursive::Vec2;
 use cursive::XY;
 
+use crate::app::AppMode;
 use crate::core::{consts, midi, playback_modes, rect::Rect, regex::Match, utils};
 use crate::view::common::grid_editor::CanvasEditor;
 use crate::view::common::playhead_controller::Direction;
@@ -147,7 +148,7 @@ pub enum Message {
   ToggleArpeggiatorMode(cursive::CbSink),
   ToggleRandomMode(cursive::CbSink),
   ToggleEventOperatorMode(cursive::CbSink),
-  ToggleLockOpQueueMode(cursive::CbSink),
+  ToggleDrainQueueMode(cursive::CbSink),
   SetTempo(usize),
   SetRatio((i64, usize), cursive::CbSink),
 }
@@ -173,7 +174,7 @@ pub struct PlayheadArea {
   arpeggiator_mode: AtomicBool,
   random_mode: AtomicBool,
   event_operator_mode: AtomicBool,
-  lock_op_queue_mode: AtomicBool,
+  drain_queue_mode: AtomicBool,
   ratio: Arc<Mutex<(i64, usize)>>,
   operator_queue: Arc<Mutex<VecDeque<QueueItem>>>,
   event_queue: Arc<Mutex<VecDeque<EventOperator>>>,
@@ -206,7 +207,7 @@ impl PlayheadArea {
       arpeggiator_mode: AtomicBool::new(false),
       random_mode: AtomicBool::new(false),
       event_operator_mode: AtomicBool::new(false),
-      lock_op_queue_mode: AtomicBool::new(false),
+      drain_queue_mode: AtomicBool::new(false),
       ratio: Arc::new(Mutex::new((1, 16))),
       operator_queue: Arc::new(Mutex::new(VecDeque::new())),
       event_queue: Arc::new(Mutex::new(VecDeque::new())),
@@ -302,16 +303,23 @@ impl PlayheadArea {
     let accumulation = self.accumulation_mode.load(Ordering::Relaxed);
     let random = self.random_mode.load(Ordering::Relaxed);
     let event_op = self.event_operator_mode.load(Ordering::Relaxed);
-    let lock_op_queue = self.lock_op_queue_mode.load(Ordering::Relaxed);
+    let drain_queue = self.drain_queue_mode.load(Ordering::Relaxed);
+
+    let r = format!("{}", AppMode::Reverse);
+    let a = format!("{}", AppMode::Arpeggiator);
+    let u = format!("{}", AppMode::Accumulation);
+    let d = format!("{}", AppMode::Random);
+    let e = format!("{}", AppMode::EventOperator);
+    let n = format!("{}", AppMode::DrainQueue);
 
     format!(
       "{}{}{}{}{}{}",
-      if reverse { "R" } else { "r" },
-      if arpeggiator { "A" } else { "a" },
-      if accumulation { "U" } else { "u" },
-      if random { "D" } else { "d" },
-      if event_op { "E" } else { "e" },
-      if lock_op_queue { "L" } else { "l" }
+      if reverse { "R" } else { &r },
+      if arpeggiator { "A" } else { &a },
+      if accumulation { "U" } else { &u },
+      if random { "D" } else { &d },
+      if event_op { "E" } else { &e },
+      if drain_queue { "N" } else { &n }
     )
   }
 
@@ -642,18 +650,18 @@ impl PlayheadArea {
           } else {
             // Use position from queue (pop from front - FIFO)
             let item = queue.pop_front().unwrap();
-            let is_lock = self.lock_op_queue_mode.load(Ordering::Relaxed);
+            let is_drain = self.drain_queue_mode.load(Ordering::Relaxed);
 
             // Format queue using Display trait for consistency
             let queue_display = if queue.is_empty() {
-              if is_lock {
+              if is_drain {
                 "&[]".to_string()
               } else {
                 "[]".to_string()
               }
             } else {
               let items: Vec<String> = queue.iter().map(|item| format!("{}", item)).collect();
-              if is_lock {
+              if is_drain {
                 format!("&[{}]", items.join(", "))
               } else {
                 format!("[{}]", items.join(", "))
@@ -799,9 +807,9 @@ impl PlayheadArea {
       .unwrap();
   }
 
-  pub fn toggle_lock_op_queue_mode(&self, cb_sink: cursive::CbSink) {
-    let is_lock = !self.lock_op_queue_mode.load(Ordering::Relaxed);
-    self.lock_op_queue_mode.store(is_lock, Ordering::Relaxed);
+  pub fn toggle_drain_queue_mode(&self, cb_sink: cursive::CbSink) {
+    let is_drain = !self.drain_queue_mode.load(Ordering::Relaxed);
+    self.drain_queue_mode.store(is_drain, Ordering::Relaxed);
 
     let mode_status = self.build_mode_status_string();
 
@@ -811,7 +819,7 @@ impl PlayheadArea {
           consts::canvas_editor_section_view,
           |canvas: &mut Canvas<CanvasEditor>| {
             let editor = canvas.state_mut();
-            editor.lock_op_queue_mode = is_lock;
+            editor.drain_queue_mode = is_drain;
           },
         );
 
@@ -820,7 +828,7 @@ impl PlayheadArea {
         });
         siv.call_on_name(consts::op_queue_status_unit_view, |view: &mut TextView| {
           let current = view.get_content().source().to_string();
-          if is_lock {
+          if is_drain {
             view.set_content(format!("&{}", current));
           } else if current.starts_with('&') {
             let unlocked = current.trim_start_matches('&').to_string();
@@ -872,25 +880,25 @@ impl PlayheadArea {
     let operator_index = position_index % QUEUE_OPERATORS.len();
     let operator = QUEUE_OPERATORS[operator_index];
 
-    let is_locked = self.lock_op_queue_mode.load(Ordering::Relaxed);
+    let is_drain = self.drain_queue_mode.load(Ordering::Relaxed);
 
     match operator {
       QueueOperator::Push => {
-        if !is_locked {
+        if !is_drain {
           self.handle_push();
         }
       }
       QueueOperator::Swap => {
-        if !is_locked {
+        if !is_drain {
           self.handle_swap();
         }
       }
       QueueOperator::Pop => {
-        // Pop is always allowed, even when locked
+        // Pop is always allowed, even when drain mode is active
         self.handle_pop();
       }
       QueueOperator::Duplicate => {
-        if !is_locked {
+        if !is_drain {
           self.handle_duplicate();
         }
       }
@@ -988,18 +996,18 @@ impl PlayheadArea {
   fn update_queue_display(&self) {
     let queue = self.operator_queue.lock().unwrap();
     let event_queue = self.event_queue.lock().unwrap();
-    let lock_op_q = self.lock_op_queue_mode.load(Ordering::Relaxed);
+    let drain_queue = self.drain_queue_mode.load(Ordering::Relaxed);
 
     // Format operator queue with Display trait for clean output
     let queue_display = if queue.is_empty() {
-      if lock_op_q {
+      if drain_queue {
         "&[]".to_string()
       } else {
         "[]".to_string()
       }
     } else {
       let items: Vec<String> = queue.iter().map(|item| format!("{}", item)).collect();
-      if lock_op_q {
+      if drain_queue {
         format!("&[{}]", items.join(", "))
       } else {
         format!("[{}]", items.join(", "))
@@ -1362,8 +1370,8 @@ impl PlayheadArea {
           Message::ToggleEventOperatorMode(cb_sink) => {
             self.toggle_event_operator_mode(cb_sink);
           }
-          Message::ToggleLockOpQueueMode(cb_sink) => {
-            self.toggle_lock_op_queue_mode(cb_sink);
+          Message::ToggleDrainQueueMode(cb_sink) => {
+            self.toggle_drain_queue_mode(cb_sink);
           }
         }
       }

@@ -41,7 +41,7 @@ pub enum AppMode {
   Accumulation,  // u
   Random,        // d
   EventOperator, // e
-  LockOpQueue,   // l
+  DrainQueue,    // l
   None,
 }
 
@@ -53,8 +53,8 @@ impl fmt::Display for AppMode {
       AppMode::Accumulation => write!(f, "u"),
       AppMode::Random => write!(f, "d"),
       AppMode::EventOperator => write!(f, "e"),
-      AppMode::LockOpQueue => write!(f, "l"),
-      AppMode::None => write!(f, "n"),
+      AppMode::DrainQueue => write!(f, "n"),
+      AppMode::None => write!(f, "-"),
     }
   }
 }
@@ -67,7 +67,7 @@ impl AppMode {
       AppMode::Accumulation,
       AppMode::Random,
       AppMode::EventOperator,
-      AppMode::LockOpQueue,
+      AppMode::DrainQueue,
     ];
     modes.iter().map(|mode| mode.to_string()).collect()
   }

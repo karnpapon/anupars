@@ -227,10 +227,10 @@ impl CommandManager {
           .unwrap();
         Ok(None)
       }
-      Command::ToggleLockOpQueue => {
+      Command::ToggleDrainQueue => {
         self
           .playhead_tx_cloned
-          .send(playhead_controller::Message::ToggleLockOpQueueMode())
+          .send(playhead_controller::Message::ToggleDrainQueueMode())
           .unwrap();
         Ok(None)
       }
@@ -321,7 +321,7 @@ impl CommandManager {
     kb.insert("Ctrl+u".into(), vec![Command::ToggleAccumulation]);
     kb.insert("Ctrl+d".into(), vec![Command::ToggleRandom]);
     kb.insert("Ctrl+e".into(), vec![Command::ToggleEventOperator]);
-    kb.insert("Ctrl+l".into(), vec![Command::ToggleLockOpQueue]);
+    kb.insert("Ctrl+n".into(), vec![Command::ToggleDrainQueue]);
     kb
   }
 

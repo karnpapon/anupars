@@ -43,7 +43,7 @@ pub struct CanvasEditor {
   pub arpeggiator_mode: bool,
   pub random_mode: bool,
   pub event_operator_mode: bool,
-  pub lock_op_queue_mode: bool,
+  pub drain_queue_mode: bool,
 }
 
 impl CanvasEditor {
@@ -61,7 +61,7 @@ impl CanvasEditor {
       arpeggiator_mode: false,
       random_mode: false,
       event_operator_mode: false,
-      lock_op_queue_mode: false,
+      drain_queue_mode: false,
     }
   }
 
