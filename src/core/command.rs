@@ -28,6 +28,7 @@ pub enum Command {
   ToggleArpeggiator,
   ToggleAccumulation,
   ToggleRandom,
+  ToggleEventOperator,
 }
 
 impl fmt::Display for Command {
@@ -44,6 +45,7 @@ impl fmt::Display for Command {
       | Self::ToggleReverse
       | Self::ToggleArpeggiator
       | Self::ToggleAccumulation
+      | Self::ToggleEventOperator
       | Self::ToggleRandom => vec![],
     };
     repr_tokens.append(&mut extras_args);
@@ -65,6 +67,7 @@ impl Command {
       Self::ToggleArpeggiator => "togglearpeggiator",
       Self::ToggleAccumulation => "toggleaccumulation",
       Self::ToggleRandom => "togglerandom",
+      Self::ToggleEventOperator => "toggleeventoperator",
     }
   }
 }

@@ -146,6 +146,7 @@ pub enum Message {
   ToggleReverseMode(cursive::CbSink),
   ToggleArpeggiatorMode(cursive::CbSink),
   ToggleRandomMode(cursive::CbSink),
+  ToggleEventOperatorMode(cursive::CbSink),
   SetTempo(usize),
   SetRatio((i64, usize), cursive::CbSink),
 }
@@ -170,6 +171,7 @@ pub struct MarkerArea {
   reverse_mode: AtomicBool,
   arpeggiator_mode: AtomicBool,
   random_mode: AtomicBool,
+  event_operator_mode: AtomicBool,
   ratio: Arc<Mutex<(i64, usize)>>,
   operator_queue: Arc<Mutex<VecDeque<QueueItem>>>,
   event_queue: Arc<Mutex<VecDeque<EventOperator>>>,
@@ -201,6 +203,7 @@ impl MarkerArea {
       reverse_mode: AtomicBool::new(false),
       arpeggiator_mode: AtomicBool::new(false),
       random_mode: AtomicBool::new(false),
+      event_operator_mode: AtomicBool::new(true),
       ratio: Arc::new(Mutex::new((1, 16))),
       operator_queue: Arc::new(Mutex::new(VecDeque::new())),
       event_queue: Arc::new(Mutex::new(VecDeque::new())),
@@ -295,13 +298,15 @@ impl MarkerArea {
     let arpeggiator = self.arpeggiator_mode.load(Ordering::Relaxed);
     let accumulation = self.accumulation_mode.load(Ordering::Relaxed);
     let random = self.random_mode.load(Ordering::Relaxed);
+    let event_op = self.event_operator_mode.load(Ordering::Relaxed);
 
     format!(
-      "{}{}{}{}",
+      "{}{}{}{}{}",
       if reverse { "R" } else { "r" },
       if arpeggiator { "A" } else { "a" },
       if accumulation { "U" } else { "u" },
-      if random { "D" } else { "d" }
+      if random { "D" } else { "d" },
+      if event_op { "E" } else { "e" }
     )
   }
 
@@ -738,6 +743,31 @@ impl MarkerArea {
             let editor = canvas.state_mut();
             editor.random_mode = is_rand;
             editor.marker_ui.random_mode = is_rand;
+          },
+        );
+
+        siv.call_on_name(consts::osc_status_unit_view, |view: &mut TextView| {
+          view.set_content(mode_status);
+        });
+      }))
+      .unwrap();
+  }
+
+  pub fn toggle_event_operator_mode(&self, cb_sink: cursive::CbSink) {
+    let is_event_op = !self.event_operator_mode.load(Ordering::Relaxed);
+    self
+      .event_operator_mode
+      .store(is_event_op, Ordering::Relaxed);
+
+    let mode_status = self.build_mode_status_string();
+
+    cb_sink
+      .send(Box::new(move |siv| {
+        siv.call_on_name(
+          consts::canvas_editor_section_view,
+          |canvas: &mut Canvas<CanvasEditor>| {
+            let editor = canvas.state_mut();
+            editor.event_operator_mode = is_event_op;
           },
         );
 
@@ -1244,6 +1274,9 @@ impl MarkerArea {
           }
           Message::ToggleRandomMode(cb_sink) => {
             self.toggle_random_mode(cb_sink);
+          }
+          Message::ToggleEventOperatorMode(cb_sink) => {
+            self.toggle_event_operator_mode(cb_sink);
           }
         }
       }

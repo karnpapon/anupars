@@ -42,6 +42,7 @@ pub struct CanvasEditor {
   pub reverse_mode: bool,
   pub arpeggiator_mode: bool,
   pub random_mode: bool,
+  pub event_operator_mode: bool,
 }
 
 impl CanvasEditor {
@@ -58,6 +59,7 @@ impl CanvasEditor {
       reverse_mode: false,
       arpeggiator_mode: false,
       random_mode: false,
+      event_operator_mode: true,
     }
   }
 
@@ -196,7 +198,15 @@ impl CanvasEditor {
     let mut x = 0;
     let mut queue_index = 0;
     while x < self.grid.width {
-      let op = QUEUE_OPERATORS[queue_index % QUEUE_OPERATORS.len()];
+      // Check if this position collides with an event operator position
+      let is_event_position = x % consts::EVENT_OP_SPACING == 0;
+      let display_char = if is_event_position {
+        "-".to_string()
+      } else {
+        let op = QUEUE_OPERATORS[queue_index % QUEUE_OPERATORS.len()];
+        op.to_string()
+      };
+
       let is_active = x == abs_active_x;
       let style = if is_active && is_regex_match_x {
         Style::from(ColorStyle::new(
@@ -209,7 +219,7 @@ impl CanvasEditor {
         Style::from(ColorStyle::front(ColorType::rgb(100, 100, 100)))
       };
       printer.with_style(style, |printer| {
-        printer.print((x, 1), &op.to_string());
+        printer.print((x, 1), &display_char);
       });
 
       x += consts::QUEUE_OP_SPACING;
@@ -217,27 +227,29 @@ impl CanvasEditor {
     }
 
     // Draw event operators on row 1 (same line)
-    let mut x = 0;
-    let mut event_index = 0;
-    while x < self.grid.width {
-      let op = EVENT_OPERATORS[event_index % EVENT_OPERATORS.len()];
-      let is_active = x == abs_active_x;
-      let style = if is_active && is_regex_match_x {
-        Style::from(ColorStyle::new(
-          ColorType::rgb(0, 0, 0),
-          ColorType::rgb(255, 255, 255),
-        ))
-      } else if is_active {
-        Style::from(ColorStyle::front(ColorType::rgb(255, 255, 255)))
-      } else {
-        Style::from(ColorStyle::front(ColorType::rgb(150, 150, 150))) // Slightly brighter for events
-      };
-      printer.with_style(style, |printer| {
-        printer.print((x, 1), &op.to_string());
-      });
+    if self.event_operator_mode {
+      let mut x = 0;
+      let mut event_index = 0;
+      while x < self.grid.width {
+        let op = EVENT_OPERATORS[event_index % EVENT_OPERATORS.len()];
+        let is_active = x == abs_active_x;
+        let style = if is_active && is_regex_match_x {
+          Style::from(ColorStyle::new(
+            ColorType::rgb(0, 0, 0),
+            ColorType::rgb(255, 255, 255),
+          ))
+        } else if is_active {
+          Style::from(ColorStyle::front(ColorType::rgb(255, 255, 255)))
+        } else {
+          Style::from(ColorStyle::front(ColorType::rgb(150, 150, 150))) // Slightly brighter for events
+        };
+        printer.with_style(style, |printer| {
+          printer.print((x, 1), &op.to_string());
+        });
 
-      x += consts::EVENT_OP_SPACING;
-      event_index += 1;
+        x += consts::EVENT_OP_SPACING;
+        event_index += 1;
+      }
     }
   }
 

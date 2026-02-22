@@ -36,6 +36,7 @@ pub enum Message {
   ToggleReverseMode(),
   ToggleArpeggiatorMode(),
   ToggleRandomMode(),
+  ToggleEventOperatorMode(),
   SetTempo(usize),
   SetRatio((i64, usize)),
 }
@@ -211,6 +212,12 @@ impl Marker {
             let cb_sink = self.cb_sink.clone();
             marker_area_tx
               .send(playhead::Message::ToggleRandomMode(cb_sink))
+              .unwrap();
+          }
+          Message::ToggleEventOperatorMode() => {
+            let cb_sink = self.cb_sink.clone();
+            marker_area_tx
+              .send(playhead::Message::ToggleEventOperatorMode(cb_sink))
               .unwrap();
           }
         }

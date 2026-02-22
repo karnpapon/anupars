@@ -220,6 +220,13 @@ impl CommandManager {
           .unwrap();
         Ok(None)
       }
+      Command::ToggleEventOperator => {
+        self
+          .marker_tx_cloned
+          .send(playhead_controller::Message::ToggleEventOperatorMode())
+          .unwrap();
+        Ok(None)
+      }
     }
   }
 
@@ -306,7 +313,7 @@ impl CommandManager {
     kb.insert("Ctrl+a".into(), vec![Command::ToggleArpeggiator]);
     kb.insert("Ctrl+u".into(), vec![Command::ToggleAccumulation]);
     kb.insert("Ctrl+d".into(), vec![Command::ToggleRandom]);
-
+    kb.insert("Ctrl+e".into(), vec![Command::ToggleEventOperator]);
     kb
   }
 
