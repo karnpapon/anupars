@@ -42,6 +42,7 @@ pub enum AppMode {
   Random,        // d
   EventOperator, // e
   DrainQueue,    // n
+  Scan,          // s
   None,
 }
 
@@ -54,6 +55,7 @@ impl fmt::Display for AppMode {
       AppMode::Random => write!(f, "d"),
       AppMode::EventOperator => write!(f, "e"),
       AppMode::DrainQueue => write!(f, "n"),
+      AppMode::Scan => write!(f, "s"),
       AppMode::None => write!(f, "-"),
     }
   }
@@ -68,6 +70,7 @@ impl AppMode {
       AppMode::Random,
       AppMode::EventOperator,
       AppMode::DrainQueue,
+      AppMode::Scan,
     ];
     modes.iter().map(|mode| mode.to_string()).collect()
   }

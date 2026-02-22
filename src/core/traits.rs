@@ -158,6 +158,7 @@ impl<T: Printable + Copy> Matrix<T> {
       playhead_pos,
       playhead_area,
       actived_pos,
+      scan_mode,
       ..
     } = playhead_ui;
 
@@ -171,7 +172,7 @@ impl<T: Printable + Copy> Matrix<T> {
         let pos = (x, y);
         let is_in_playhead_area = playhead_area.contains(pos.into());
         let is_active_pos = active_absolute_pos.eq(&pos);
-        // let is_on_crosshair_vertical = x == active_absolute_pos.x && !is_active_pos;
+        let is_on_crosshair_vertical = x == active_absolute_pos.x && !is_active_pos;
         // let is_on_crosshair_horizontal = y == active_absolute_pos.y && !is_active_pos;
 
         // Render default cell with style
@@ -180,13 +181,30 @@ impl<T: Printable + Copy> Matrix<T> {
         printer.print_styled(pos, &SpannedString::styled(display_char, style));
 
         // Render crosshair lines at active position
-        // if is_on_crosshair_vertical {
-        //   let crosshair_style = Style::from(ColorStyle::front(ColorType::rgb(80, 80, 80)));
-        //   printer.print_styled(pos, &SpannedString::styled("|", crosshair_style));
-        //   // } else if is_on_crosshair_horizontal {
-        //   //   let crosshair_style = Style::from(ColorStyle::front(ColorType::rgb(80, 80, 80)));
-        //   //   printer.print_styled(pos, &SpannedString::styled("-", crosshair_style));
-        // }
+        if is_on_crosshair_vertical && *scan_mode {
+          // Check if this position matches regex and is outside playhead area
+          let is_regex_match = text_matcher
+            .as_ref()
+            .map(|m| m.contains_key(&cell_index))
+            .unwrap_or(false);
+
+          let crosshair_char = if is_regex_match && !is_in_playhead_area {
+            ("@", Style::highlight())
+          } else {
+            (
+              "|",
+              Style::from(ColorStyle::front(ColorType::rgb(80, 80, 80))),
+            )
+          };
+
+          printer.print_styled(
+            pos,
+            &SpannedString::styled(crosshair_char.0, crosshair_char.1),
+          );
+          // } else if is_on_crosshair_horizontal {
+          //   let crosshair_style = Style::from(ColorStyle::front(ColorType::rgb(80, 80, 80)));
+          //   printer.print_styled(pos, &SpannedString::styled("-", crosshair_style));
+        }
 
         // Render playhead-specific overlays
         if is_in_playhead_area {

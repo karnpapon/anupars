@@ -114,6 +114,7 @@ pub struct PlayheadUI {
   pub reverse_mode: bool,
   pub arpeggiator_mode: bool,
   pub random_mode: bool,
+  pub scan_mode: bool,
 }
 
 impl PlayheadUI {
@@ -127,6 +128,7 @@ impl PlayheadUI {
       reverse_mode: false,
       arpeggiator_mode: false,
       random_mode: false,
+      scan_mode: false,
     }
   }
 }
@@ -149,6 +151,7 @@ pub enum Message {
   ToggleRandomMode(cursive::CbSink),
   ToggleEventOperatorMode(cursive::CbSink),
   ToggleDrainQueueMode(cursive::CbSink),
+  ToggleScanMode(cursive::CbSink),
   SetTempo(usize),
   SetRatio((i64, usize), cursive::CbSink),
 }
@@ -175,6 +178,7 @@ pub struct PlayheadArea {
   random_mode: AtomicBool,
   event_operator_mode: AtomicBool,
   drain_queue_mode: AtomicBool,
+  scan_mode: AtomicBool,
   ratio: Arc<Mutex<(i64, usize)>>,
   operator_queue: Arc<Mutex<VecDeque<QueueItem>>>,
   event_queue: Arc<Mutex<VecDeque<EventOperator>>>,
@@ -208,6 +212,7 @@ impl PlayheadArea {
       random_mode: AtomicBool::new(false),
       event_operator_mode: AtomicBool::new(false),
       drain_queue_mode: AtomicBool::new(false),
+      scan_mode: AtomicBool::new(false),
       ratio: Arc::new(Mutex::new((1, 16))),
       operator_queue: Arc::new(Mutex::new(VecDeque::new())),
       event_queue: Arc::new(Mutex::new(VecDeque::new())),
@@ -304,6 +309,7 @@ impl PlayheadArea {
     let random = self.random_mode.load(Ordering::Relaxed);
     let event_op = self.event_operator_mode.load(Ordering::Relaxed);
     let drain_queue = self.drain_queue_mode.load(Ordering::Relaxed);
+    let scan = self.scan_mode.load(Ordering::Relaxed);
 
     let r = format!("{}", AppMode::Reverse);
     let a = format!("{}", AppMode::Arpeggiator);
@@ -311,15 +317,17 @@ impl PlayheadArea {
     let d = format!("{}", AppMode::Random);
     let e = format!("{}", AppMode::EventOperator);
     let n = format!("{}", AppMode::DrainQueue);
+    let s = format!("{}", AppMode::Scan);
 
     format!(
-      "{}{}{}{}{}{}",
+      "{}{}{}{}{}{}{}",
       if reverse { "R" } else { &r },
       if arpeggiator { "A" } else { &a },
       if accumulation { "U" } else { &u },
       if random { "D" } else { &d },
       if event_op { "E" } else { &e },
-      if drain_queue { "N" } else { &n }
+      if drain_queue { "N" } else { &n },
+      if scan { "S" } else { &s }
     )
   }
 
@@ -522,13 +530,16 @@ impl PlayheadArea {
     curr_running_playhead: usize,
     note_position: usize,
     scale_mode: crate::core::scale::ScaleMode,
+    abs_x: usize,
   ) -> bool {
+    let grid_width = self.grid_width.load(Ordering::Relaxed);
+    let grid_height = self.grid_height.load(Ordering::Relaxed);
+    let current_tempo = self.tempo.load(Ordering::Relaxed);
+    let mut triggered = false;
+
+    // Trigger MIDI for current playhead position if matched
     if let Some(matcher) = self.text_matcher.lock().unwrap().as_ref() {
       if matcher.get(&curr_running_playhead).is_some() {
-        let grid_width = self.grid_width.load(Ordering::Relaxed);
-        let grid_height = self.grid_height.load(Ordering::Relaxed);
-        let current_tempo = self.tempo.load(Ordering::Relaxed);
-
         let _ = self.midi_tx.send(midi::Message::TriggerWithPosition((
           curr_running_playhead,
           note_position,
@@ -537,10 +548,46 @@ impl PlayheadArea {
           scale_mode,
           current_tempo,
         )));
-        return true;
+        triggered = true;
       }
     }
-    false
+
+    // When scan_mode is enabled, trigger MIDI for all positions along the vertical crosshair
+    if self.scan_mode.load(Ordering::Relaxed) {
+      let x_scale_mode = *self.scale_mode_top.lock().unwrap();
+
+      // Iterate through all y positions for the current x (vertical crosshair)
+      for y in 0..grid_height {
+        let crosshair_index = y * grid_width + abs_x;
+
+        // Skip current playhead position to avoid duplicate MIDI trigger
+        if crosshair_index == curr_running_playhead {
+          continue;
+        }
+
+        let x_note_position = if grid_height > 0 {
+          abs_x % grid_height
+        } else {
+          y
+        };
+
+        // Check if this position matches and trigger MIDI
+        if let Some(matcher) = self.text_matcher.lock().unwrap().as_ref() {
+          if matcher.get(&crosshair_index).is_some() {
+            let _ = self.midi_tx.send(midi::Message::TriggerWithPosition((
+              crosshair_index,
+              x_note_position,
+              grid_width,
+              grid_height,
+              x_scale_mode,
+              current_tempo,
+            )));
+          }
+        }
+      }
+    }
+
+    triggered
   }
 
   fn handle_accumulation_mode(&self, abs_x: usize, cb_sink: &cursive::CbSink) -> Option<Vec2> {
@@ -838,6 +885,30 @@ impl PlayheadArea {
           } else {
             view.set_content(current);
           }
+        });
+      }))
+      .unwrap();
+  }
+
+  pub fn toggle_scan_mode(&self, cb_sink: cursive::CbSink) {
+    let is_scan = !self.scan_mode.load(Ordering::Relaxed);
+    self.scan_mode.store(is_scan, Ordering::Relaxed);
+
+    let mode_status = self.build_mode_status_string();
+
+    cb_sink
+      .send(Box::new(move |siv| {
+        siv.call_on_name(
+          consts::canvas_editor_section_view,
+          |canvas: &mut Canvas<GridEditor>| {
+            let editor = canvas.state_mut();
+            editor.scan_mode = is_scan;
+            editor.playhead_ui.scan_mode = is_scan;
+          },
+        );
+
+        siv.call_on_name(consts::osc_status_unit_view, |view: &mut TextView| {
+          view.set_content(mode_status);
         });
       }))
       .unwrap();
@@ -1213,8 +1284,9 @@ impl PlayheadArea {
               self.determine_note_position_and_scale(active_pos, abs_x, abs_y);
 
             let matched =
-              self.trigger_midi_if_matched(curr_running_playhead, note_position, scale_mode);
+              self.trigger_midi_if_matched(curr_running_playhead, note_position, scale_mode, abs_x);
 
+            // ? should scan mode effect accumulation value
             if matched {
               if let Some(new_active_pos) = self.handle_accumulation_mode(abs_x, &cb_sink) {
                 active_pos = new_active_pos;
@@ -1374,6 +1446,9 @@ impl PlayheadArea {
           }
           Message::ToggleDrainQueueMode(cb_sink) => {
             self.toggle_drain_queue_mode(cb_sink);
+          }
+          Message::ToggleScanMode(cb_sink) => {
+            self.toggle_scan_mode(cb_sink);
           }
         }
       }
