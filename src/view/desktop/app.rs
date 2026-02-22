@@ -11,7 +11,7 @@ use std::sync::RwLock;
 use crate::app::AppMode;
 use crate::core::consts;
 use crate::core::regex;
-use crate::view::common::grid::CanvasSection;
+use crate::view::common::grid::GridSection;
 use crate::view::common::playhead_controller;
 use crate::view::microcontroller::console::RegexFlag;
 
@@ -49,7 +49,7 @@ impl Anu {
     let top_section = TopSection::build(self, regex_tx);
     let middle_section = MiddleSection::build();
     let padding_section = DummyView::new().fixed_width(1);
-    let canvas_section = CanvasSection::build(playhead_tx);
+    let canvas_section = GridSection::build(playhead_tx);
 
     LinearLayout::vertical()
       .child(top_section)

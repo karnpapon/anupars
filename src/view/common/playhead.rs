@@ -20,7 +20,7 @@ use cursive::XY;
 
 use crate::app::AppMode;
 use crate::core::{consts, midi, playback_modes, rect::Rect, regex::Match, utils};
-use crate::view::common::grid_editor::CanvasEditor;
+use crate::view::common::grid_editor::GridEditor;
 use crate::view::common::playhead_controller::Direction;
 // #[cfg(debug_assertions)]
 // use crate::view::common::timing_diagnostic::TimingStats;
@@ -242,7 +242,7 @@ impl PlayheadArea {
                 UIUpdate::ActivePos(active_pos) => {
                   siv.call_on_name(
                     consts::canvas_editor_section_view,
-                    move |canvas: &mut Canvas<CanvasEditor>| {
+                    move |canvas: &mut Canvas<GridEditor>| {
                       let editor = canvas.state_mut();
                       editor.playhead_ui.actived_pos = active_pos;
                     },
@@ -275,7 +275,7 @@ impl PlayheadArea {
                 UIUpdate::PlayheadPosAndArea(pos, area) => {
                   siv.call_on_name(
                     consts::canvas_editor_section_view,
-                    move |canvas: &mut Canvas<CanvasEditor>| {
+                    move |canvas: &mut Canvas<GridEditor>| {
                       let editor = canvas.state_mut();
                       editor.playhead_ui.playhead_pos = pos;
                       editor.playhead_ui.playhead_area = area;
@@ -333,7 +333,7 @@ impl PlayheadArea {
       .send(Box::new(move |siv| {
         siv.call_on_name(
           consts::canvas_editor_section_view,
-          |canvas: &mut Canvas<CanvasEditor>| {
+          |canvas: &mut Canvas<GridEditor>| {
             let editor = canvas.state_mut();
             editor.reverse_mode = is_reversed;
             editor.playhead_ui.reverse_mode = is_reversed;
@@ -744,7 +744,7 @@ impl PlayheadArea {
       .send(Box::new(move |siv| {
         siv.call_on_name(
           consts::canvas_editor_section_view,
-          |canvas: &mut Canvas<CanvasEditor>| {
+          |canvas: &mut Canvas<GridEditor>| {
             let editor = canvas.state_mut();
             editor.arpeggiator_mode = is_arp;
             editor.playhead_ui.arpeggiator_mode = is_arp;
@@ -768,7 +768,7 @@ impl PlayheadArea {
       .send(Box::new(move |siv| {
         siv.call_on_name(
           consts::canvas_editor_section_view,
-          |canvas: &mut Canvas<CanvasEditor>| {
+          |canvas: &mut Canvas<GridEditor>| {
             let editor = canvas.state_mut();
             editor.random_mode = is_rand;
             editor.playhead_ui.random_mode = is_rand;
@@ -794,7 +794,7 @@ impl PlayheadArea {
       .send(Box::new(move |siv| {
         siv.call_on_name(
           consts::canvas_editor_section_view,
-          |canvas: &mut Canvas<CanvasEditor>| {
+          |canvas: &mut Canvas<GridEditor>| {
             let editor = canvas.state_mut();
             editor.event_operator_mode = is_event_op;
           },
@@ -817,7 +817,7 @@ impl PlayheadArea {
       .send(Box::new(move |siv| {
         siv.call_on_name(
           consts::canvas_editor_section_view,
-          |canvas: &mut Canvas<CanvasEditor>| {
+          |canvas: &mut Canvas<GridEditor>| {
             let editor = canvas.state_mut();
             editor.drain_queue_mode = is_drain;
           },
@@ -1105,7 +1105,7 @@ impl PlayheadArea {
 
                 siv.call_on_name(
                   consts::canvas_editor_section_view,
-                  move |canvas: &mut Canvas<CanvasEditor>| {
+                  move |canvas: &mut Canvas<GridEditor>| {
                     let editor = canvas.state_mut();
                     editor.playhead_ui.playhead_pos = pos;
                     editor.playhead_ui.playhead_area = area;
@@ -1132,7 +1132,7 @@ impl PlayheadArea {
 
                 siv.call_on_name(
                   consts::canvas_editor_section_view,
-                  move |canvas: &mut Canvas<CanvasEditor>| {
+                  move |canvas: &mut Canvas<GridEditor>| {
                     let editor = canvas.state_mut();
                     editor.playhead_ui.playhead_pos = pos;
                   },
@@ -1185,7 +1185,7 @@ impl PlayheadArea {
 
                 siv.call_on_name(
                   consts::canvas_editor_section_view,
-                  move |canvas: &mut Canvas<CanvasEditor>| {
+                  move |canvas: &mut Canvas<GridEditor>| {
                     let editor = canvas.state_mut();
 
                     editor.playhead_ui.playhead_area = playhead_area;
@@ -1260,7 +1260,7 @@ impl PlayheadArea {
 
                 siv.call_on_name(
                   consts::canvas_editor_section_view,
-                  move |canvas: &mut Canvas<CanvasEditor>| {
+                  move |canvas: &mut Canvas<GridEditor>| {
                     let editor = canvas.state_mut();
                     editor.playhead_ui.playhead_area = playhead_area;
                   },
@@ -1280,7 +1280,7 @@ impl PlayheadArea {
               .send(Box::new(move |siv| {
                 siv.call_on_name(
                   consts::canvas_editor_section_view,
-                  move |canvas: &mut Canvas<CanvasEditor>| {
+                  move |canvas: &mut Canvas<GridEditor>| {
                     let editor = canvas.state_mut();
                     editor.playhead_ui.text_matcher = mm;
                     editor.playhead_ui.regex_indexes = regex_indexes_cloned;

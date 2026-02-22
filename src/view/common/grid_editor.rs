@@ -30,7 +30,7 @@ use consts::NOTE_NAMES;
 
 use super::playhead_controller::{self, Direction, Message};
 
-pub struct CanvasEditor {
+pub struct GridEditor {
   size: Vec2,
   pub playhead_tx: Sender<Message>,
   pub grid: Matrix<char>,
@@ -46,9 +46,9 @@ pub struct CanvasEditor {
   pub drain_queue_mode: bool,
 }
 
-impl CanvasEditor {
-  pub fn new(playhead_tx: Sender<playhead_controller::Message>) -> CanvasEditor {
-    CanvasEditor {
+impl GridEditor {
+  pub fn new(playhead_tx: Sender<playhead_controller::Message>) -> GridEditor {
+    GridEditor {
       size: Vec2::zero(),
       playhead_tx,
       grid: Matrix::new(0, 0, '\0'),
@@ -257,8 +257,8 @@ impl CanvasEditor {
 
   pub fn build(
     playhead_tx: Sender<playhead_controller::Message>,
-  ) -> ResizedView<ResizedView<NamedView<Canvas<CanvasEditor>>>> {
-    Canvas::new(CanvasEditor::new(playhead_tx))
+  ) -> ResizedView<ResizedView<NamedView<Canvas<GridEditor>>>> {
+    Canvas::new(GridEditor::new(playhead_tx))
       .with_draw(draw)
       .with_layout(layout)
       .with_on_event(on_event)
@@ -361,7 +361,7 @@ impl CanvasEditor {
   }
 }
 
-fn draw(canvas: &CanvasEditor, printer: &Printer) {
+fn draw(canvas: &GridEditor, printer: &Printer) {
   if canvas.show_keyboard {
     let top_keyboard_printer = printer.offset((KEYBOARD_MARGIN_LEFT, 0));
     canvas.draw_keyboard_top(&top_keyboard_printer);
@@ -389,7 +389,7 @@ fn draw(canvas: &CanvasEditor, printer: &Printer) {
   canvas.grid.print(&grid_printer, &canvas.playhead_ui);
 }
 
-fn layout(canvas: &mut CanvasEditor, size: Vec2) {
+fn layout(canvas: &mut GridEditor, size: Vec2) {
   if canvas.size != size {
     canvas.resize(size);
     if canvas.text_contents.is_some() {
@@ -399,13 +399,13 @@ fn layout(canvas: &mut CanvasEditor, size: Vec2) {
 }
 
 fn take_focus(
-  _: &mut CanvasEditor,
+  _: &mut GridEditor,
   _: cursive::direction::Direction,
 ) -> Result<EventResult, CannotFocus> {
   Ok(EventResult::Consumed(None))
 }
 
-fn on_event(canvas: &mut CanvasEditor, event: Event) -> EventResult {
+fn on_event(canvas: &mut GridEditor, event: Event) -> EventResult {
   match event {
     Event::Refresh => EventResult::consumed(),
     Event::Key(Key::Left) => {

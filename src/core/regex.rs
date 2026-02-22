@@ -8,7 +8,7 @@ use regex::Regex;
 
 use serde::{Deserialize, Serialize};
 
-use crate::view::common::{grid_editor::CanvasEditor, playhead_controller};
+use crate::view::common::{grid_editor::GridEditor, playhead_controller};
 
 use super::consts;
 
@@ -174,7 +174,7 @@ impl RegExpHandler {
             let _ = s
               .call_on_name(
                 consts::canvas_editor_section_view,
-                |c: &mut Canvas<CanvasEditor>| {
+                |c: &mut Canvas<GridEditor>| {
                   c.state_mut()
                     .playhead_tx
                     .send(playhead_controller::Message::SetMatcher(None))
@@ -198,7 +198,7 @@ impl RegExpHandler {
                   let _ = s
                     .call_on_name(
                       consts::canvas_editor_section_view,
-                      |c: &mut Canvas<CanvasEditor>| {
+                      |c: &mut Canvas<GridEditor>| {
                         c.state_mut()
                           .playhead_tx
                           .send(playhead_controller::Message::SetMatcher(mm))

@@ -7,7 +7,7 @@ use cursive::{views::Canvas, XY};
 
 use crate::core::{consts, midi, regex::Match};
 
-use super::grid_editor::CanvasEditor;
+use super::grid_editor::GridEditor;
 use super::playhead;
 use super::playhead::PlayheadArea;
 
@@ -151,7 +151,7 @@ impl Playhead {
               .send(Box::new(move |siv| {
                 siv.call_on_name(
                   consts::canvas_editor_section_view,
-                  move |canvas: &mut Canvas<CanvasEditor>| {
+                  move |canvas: &mut Canvas<GridEditor>| {
                     let editor = canvas.state_mut();
                     editor.scale_mode_left = scale_mode;
                   },
@@ -170,7 +170,7 @@ impl Playhead {
               .send(Box::new(move |siv| {
                 siv.call_on_name(
                   consts::canvas_editor_section_view,
-                  move |canvas: &mut Canvas<CanvasEditor>| {
+                  move |canvas: &mut Canvas<GridEditor>| {
                     let editor = canvas.state_mut();
                     editor.scale_mode_top = scale_mode;
                   },

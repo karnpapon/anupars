@@ -7,7 +7,7 @@ use crate::app::UserData;
 use crate::core::consts;
 use crate::core::regex;
 use crate::core::utils;
-use crate::view::common::grid_editor::CanvasEditor;
+use crate::view::common::grid_editor::GridEditor;
 use crate::view::microcontroller::console::RegexFlag;
 use cursive::event::EventResult;
 use cursive::theme::Style;
@@ -179,7 +179,7 @@ impl TopSection {
 
 fn solve_regex(siv: &mut Cursive, texts: &str, regex_tx: Sender<regex::Message>) {
   let mut canvas_editor_section_view = siv
-    .find_name::<Canvas<CanvasEditor>>(consts::canvas_editor_section_view)
+    .find_name::<Canvas<GridEditor>>(consts::canvas_editor_section_view)
     .unwrap();
   let state = canvas_editor_section_view.state_mut();
   let text = state.text_contents();

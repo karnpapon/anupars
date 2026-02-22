@@ -29,7 +29,7 @@ use cursive::views::TextView;
 use cursive::Cursive;
 use cursive::With;
 
-use super::grid_editor::CanvasEditor;
+use super::grid_editor::GridEditor;
 use crate::core::{consts, disspress, utils};
 
 #[derive(Clone, Copy)]
@@ -112,7 +112,7 @@ impl Menubar {
       .leaf("Arpeggiator", |s| {
         s.call_on_name(
           consts::canvas_editor_section_view,
-          |canvas: &mut Canvas<CanvasEditor>| {
+          |canvas: &mut Canvas<GridEditor>| {
             canvas
               .state_mut()
               .playhead_tx
@@ -133,7 +133,7 @@ impl Menubar {
       .leaf("Reverse", |s| {
         s.call_on_name(
           consts::canvas_editor_section_view,
-          |canvas: &mut Canvas<CanvasEditor>| {
+          |canvas: &mut Canvas<GridEditor>| {
             canvas
               .state_mut()
               .playhead_tx
@@ -145,7 +145,7 @@ impl Menubar {
       .leaf("Toggle Accumulation Mode", |s| {
         s.call_on_name(
           consts::canvas_editor_section_view,
-          |canvas: &mut Canvas<CanvasEditor>| {
+          |canvas: &mut Canvas<GridEditor>| {
             canvas
               .state_mut()
               .playhead_tx
@@ -218,7 +218,7 @@ fn build_scale_menu_left() -> cursive::menu::Tree {
       tree.add_item(menu::Item::leaf(scale.name(), move |s| {
         s.call_on_name(
           consts::canvas_editor_section_view,
-          |canvas: &mut Canvas<CanvasEditor>| {
+          |canvas: &mut Canvas<GridEditor>| {
             canvas
               .state_mut()
               .playhead_tx
@@ -242,7 +242,7 @@ fn build_scale_menu_top() -> cursive::menu::Tree {
       tree.add_item(menu::Item::leaf(scale.name(), move |s| {
         s.call_on_name(
           consts::canvas_editor_section_view,
-          |canvas: &mut Canvas<CanvasEditor>| {
+          |canvas: &mut Canvas<GridEditor>| {
             canvas
               .state_mut()
               .playhead_tx
@@ -306,7 +306,7 @@ fn set_contents(siv: &mut Cursive, contents: String) {
   siv
     .call_on_name(
       consts::canvas_editor_section_view,
-      move |c: &mut Canvas<CanvasEditor>| {
+      move |c: &mut Canvas<GridEditor>| {
         c.state_mut().clear_contents();
         c.state_mut().update_text_contents(&contents);
         c.state_mut().update_grid_src();

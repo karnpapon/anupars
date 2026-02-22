@@ -26,7 +26,7 @@ use crate::core::consts;
 use crate::core::midi::{self, MidiMsg};
 use crate::core::parser::{self};
 use crate::core::utils;
-use crate::view::common::grid_editor::CanvasEditor;
+use crate::view::common::grid_editor::GridEditor;
 use cursive::theme::Style;
 use cursive::view::{Nameable, Resizable};
 use cursive::Cursive;
@@ -382,7 +382,7 @@ fn get_input_msg(s: &mut Cursive, name: &str) -> Arc<String> {
 
 fn solve_regex(siv: &mut Cursive, texts: &str, regex_tx: Sender<regex::Message>) {
   let mut canvas_editor_section_view = siv
-    .find_name::<Canvas<CanvasEditor>>(consts::canvas_editor_section_view)
+    .find_name::<Canvas<GridEditor>>(consts::canvas_editor_section_view)
     .unwrap();
   let state = canvas_editor_section_view.state_mut();
   let text = state.text_contents();
