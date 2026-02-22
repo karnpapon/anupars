@@ -217,7 +217,7 @@ impl RegExpHandler {
                 })
                 .unwrap();
                 s.call_on_name(consts::regex_err_display_unit_view, |c: &mut TextView| {
-                  c.set_content("Error in regex pattern!, check the message in the display")
+                  c.set_content("pattern invalid!")
                 })
                 .unwrap()
               } else {
