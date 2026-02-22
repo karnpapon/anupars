@@ -152,12 +152,12 @@ impl Console {
       //   TextView::new("-").with_name(consts::midi_status_unit_view),
       // )
       .child(
-        "OpStck:",
-        TextView::new("[]").with_name(consts::op_stack_status_unit_view),
+        "OPQ:",
+        TextView::new("[]").with_name(consts::op_queue_status_unit_view),
       )
       .child(
-        "EvStck:",
-        TextView::new("[]").with_name(consts::ev_stack_status_unit_view),
+        "EVQ:",
+        TextView::new("[]").with_name(consts::ev_queue_status_unit_view),
       )
       .fixed_width(100);
 

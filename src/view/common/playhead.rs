@@ -25,24 +25,30 @@ use crate::view::common::playhead_controller::Direction;
 // use crate::view::common::timing_diagnostic::TimingStats;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub enum StackOperator {
-  Push, // P
-  Swap, // S
-  Pop,  // O
+pub enum QueueOperator {
+  Push,      // P
+  Swap,      // S
+  Pop,       // O
+  Duplicate, // D
 }
 
-impl fmt::Display for StackOperator {
+impl fmt::Display for QueueOperator {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     match self {
-      StackOperator::Push => write!(f, "P"),
-      StackOperator::Swap => write!(f, "S"),
-      StackOperator::Pop => write!(f, "O"),
+      QueueOperator::Push => write!(f, "P"),
+      QueueOperator::Swap => write!(f, "S"),
+      QueueOperator::Pop => write!(f, "O"),
+      QueueOperator::Duplicate => write!(f, "D"),
     }
   }
 }
 
-const STACK_OPERATORS: [StackOperator; 3] =
-  [StackOperator::Push, StackOperator::Swap, StackOperator::Pop];
+pub const QUEUE_OPERATORS: [QueueOperator; 4] = [
+  QueueOperator::Push,
+  QueueOperator::Swap,
+  QueueOperator::Pop,
+  QueueOperator::Duplicate,
+];
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum EventOperator {
@@ -61,20 +67,21 @@ impl fmt::Display for EventOperator {
   }
 }
 
-const EVENT_OPERATORS: [EventOperator; 3] = [EventOperator::R, EventOperator::C, EventOperator::X];
+pub const EVENT_OPERATORS: [EventOperator; 3] =
+  [EventOperator::R, EventOperator::C, EventOperator::X];
 
-// Stack item that can be either a position or an event
+// Queue item that can be either a position or an event
 #[derive(Clone, Debug, PartialEq)]
-pub enum StackItem {
+pub enum QueueItem {
   Position(usize, usize),
   Event(EventOperator),
 }
 
-impl fmt::Display for StackItem {
+impl fmt::Display for QueueItem {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     match self {
-      StackItem::Position(x, y) => write!(f, "({},{})", x, y),
-      StackItem::Event(op) => write!(f, "{}", op),
+      QueueItem::Position(x, y) => write!(f, "({},{})", x, y),
+      QueueItem::Event(op) => write!(f, "{}", op),
     }
   }
 }
@@ -84,8 +91,8 @@ impl fmt::Display for StackItem {
 pub enum UIUpdate {
   ActivePos(Vec2),
   AccumulationCounter(usize, usize), // (count, total)
-  OpStackDisplay(String),
-  EvStackDisplay(String),
+  OpQueueDisplay(String),
+  EvQueueDisplay(String),
   MarkerPosAndArea(Vec2, Rect),
 }
 
@@ -164,8 +171,8 @@ pub struct MarkerArea {
   arpeggiator_mode: AtomicBool,
   random_mode: AtomicBool,
   ratio: Arc<Mutex<(i64, usize)>>,
-  operator_stack: Arc<Mutex<Vec<StackItem>>>,
-  event_stack: Arc<Mutex<Vec<EventOperator>>>,
+  operator_queue: Arc<Mutex<VecDeque<QueueItem>>>,
+  event_queue: Arc<Mutex<VecDeque<EventOperator>>>,
   pushed_positions: Arc<Mutex<HashMap<(usize, usize), bool>>>,
   pub ui_update_queue: Arc<Mutex<VecDeque<UIUpdate>>>,
   // #[cfg(debug_assertions)]
@@ -195,8 +202,8 @@ impl MarkerArea {
       arpeggiator_mode: AtomicBool::new(false),
       random_mode: AtomicBool::new(false),
       ratio: Arc::new(Mutex::new((1, 16))),
-      operator_stack: Arc::new(Mutex::new(Vec::new())),
-      event_stack: Arc::new(Mutex::new(Vec::new())),
+      operator_queue: Arc::new(Mutex::new(VecDeque::new())),
+      event_queue: Arc::new(Mutex::new(VecDeque::new())),
       pushed_positions: Arc::new(Mutex::new(HashMap::new())),
       ui_update_queue: Arc::new(Mutex::new(VecDeque::new())),
       // #[cfg(debug_assertions)]
@@ -242,19 +249,19 @@ impl MarkerArea {
                     },
                   );
                 }
-                UIUpdate::OpStackDisplay(stack_str) => {
+                UIUpdate::OpQueueDisplay(queue_str) => {
                   siv.call_on_name(
-                    consts::op_stack_status_unit_view,
+                    consts::op_queue_status_unit_view,
                     move |view: &mut TextView| {
-                      view.set_content(stack_str);
+                      view.set_content(queue_str);
                     },
                   );
                 }
-                UIUpdate::EvStackDisplay(stack_str) => {
+                UIUpdate::EvQueueDisplay(queue_str) => {
                   siv.call_on_name(
-                    consts::ev_stack_status_unit_view,
+                    consts::ev_queue_status_unit_view,
                     move |view: &mut TextView| {
-                      view.set_content(stack_str);
+                      view.set_content(queue_str);
                     },
                   );
                 }
@@ -606,15 +613,15 @@ impl MarkerArea {
     current_marker_pos: (usize, usize),
     params: GridParams<R>,
   ) -> (usize, usize) {
-    let mut stack = self.operator_stack.lock().unwrap();
+    let mut queue = self.operator_queue.lock().unwrap();
 
-    if let Some(first_item) = stack.first() {
+    if let Some(first_item) = queue.front() {
       match first_item {
-        StackItem::Position(x, y) => {
+        QueueItem::Position(x, y) => {
           let first_pos = (*x, *y);
           if first_pos == current_marker_pos {
             // Same position, jump randomly
-            drop(stack);
+            drop(queue);
             self.generate_random_position(
               params.marker_width,
               params.marker_height,
@@ -623,20 +630,20 @@ impl MarkerArea {
               params.rng,
             )
           } else {
-            // Use position from stack (pop from front - FIFO)
-            let item = stack.remove(0);
-            let stack_display = format!("{:?}", *stack);
-            drop(stack);
+            // Use position from queue (pop from front - FIFO)
+            let item = queue.pop_front().unwrap();
+            let queue_display = format!("{:?}", *queue);
+            drop(queue);
 
-            if let StackItem::Position(x, y) = item {
+            if let QueueItem::Position(x, y) = item {
               let mut pushed = self.pushed_positions.lock().unwrap();
               pushed.remove(&(x, y));
               drop(pushed);
 
               // Queue UI update (batched processing)
-              let mut queue = self.ui_update_queue.lock().unwrap();
-              queue.push_back(UIUpdate::OpStackDisplay(stack_display));
-              drop(queue);
+              let mut ui_queue = self.ui_update_queue.lock().unwrap();
+              ui_queue.push_back(UIUpdate::OpQueueDisplay(queue_display));
+              drop(ui_queue);
 
               (x, y)
             } else {
@@ -645,9 +652,9 @@ impl MarkerArea {
             }
           }
         }
-        StackItem::Event(_) => {
-          // Event at front of stack, can't jump to it, generate random position
-          drop(stack);
+        QueueItem::Event(_) => {
+          // Event at front of queue, can't jump to it, generate random position
+          drop(queue);
           self.generate_random_position(
             params.marker_width,
             params.marker_height,
@@ -658,7 +665,7 @@ impl MarkerArea {
         }
       }
     } else {
-      drop(stack);
+      drop(queue);
       self.generate_random_position(
         params.marker_width,
         params.marker_height,
@@ -756,16 +763,16 @@ impl MarkerArea {
     *tm = text_matcher
   }
 
-  // Stack operators: P (Push), S (Swap), O (pOp) with narrow spacing
+  // Queue operators: P (Push), S (Swap), O (pOp), D (Duplicate) with narrow spacing
   // Event operators: r, c, x with wider spacing
   fn check_operators(&self, abs_x: usize) {
     if !self.accumulation_mode.load(Ordering::Relaxed) {
       return;
     }
 
-    if abs_x.is_multiple_of(consts::STACK_OP_SPACING) {
-      let position_index = abs_x / consts::STACK_OP_SPACING;
-      self.execute_stack_operator(position_index);
+    if abs_x.is_multiple_of(consts::QUEUE_OP_SPACING) {
+      let position_index = abs_x / consts::QUEUE_OP_SPACING;
+      self.execute_queue_operator(position_index);
     }
 
     if abs_x.is_multiple_of(consts::EVENT_OP_SPACING) {
@@ -774,14 +781,15 @@ impl MarkerArea {
     }
   }
 
-  fn execute_stack_operator(&self, position_index: usize) {
-    let operator_index = position_index % STACK_OPERATORS.len();
-    let operator = STACK_OPERATORS[operator_index];
+  fn execute_queue_operator(&self, position_index: usize) {
+    let operator_index = position_index % QUEUE_OPERATORS.len();
+    let operator = QUEUE_OPERATORS[operator_index];
 
     match operator {
-      StackOperator::Push => self.handle_push(),
-      StackOperator::Swap => self.handle_swap(),
-      StackOperator::Pop => self.handle_pop(),
+      QueueOperator::Push => self.handle_push(),
+      QueueOperator::Swap => self.handle_swap(),
+      QueueOperator::Pop => self.handle_pop(),
+      QueueOperator::Duplicate => self.handle_duplicate(),
     }
   }
 
@@ -797,25 +805,25 @@ impl MarkerArea {
   }
 
   fn handle_push(&self) {
-    // Check event stack first (FIFO)
-    let mut event_stack = self.event_stack.lock().unwrap();
-    let event_op = if !event_stack.is_empty() {
-      Some(event_stack.remove(0))
+    // Check event queue first (FIFO)
+    let mut event_queue = self.event_queue.lock().unwrap();
+    let event_op = if !event_queue.is_empty() {
+      event_queue.pop_front()
     } else {
       None
     };
 
     if let Some(event_op) = event_op {
-      drop(event_stack);
+      drop(event_queue);
 
-      // Push the event to the main stack
-      let mut stack = self.operator_stack.lock().unwrap();
-      stack.push(StackItem::Event(event_op));
-      drop(stack);
+      // Push the event to the main queue
+      let mut queue = self.operator_queue.lock().unwrap();
+      queue.push_back(QueueItem::Event(event_op));
+      drop(queue);
 
-      self.update_stack_display();
+      self.update_queue_display();
     } else {
-      drop(event_stack);
+      drop(event_queue);
 
       // No events in queue, push current marker position
       let marker_pos = self.pos.lock().unwrap();
@@ -827,92 +835,102 @@ impl MarkerArea {
         e.insert(true);
         drop(pushed);
 
-        let mut stack = self.operator_stack.lock().unwrap();
-        stack.push(StackItem::Position(push_pos.0, push_pos.1));
-        drop(stack);
+        let mut queue = self.operator_queue.lock().unwrap();
+        queue.push_back(QueueItem::Position(push_pos.0, push_pos.1));
+        drop(queue);
 
-        self.update_stack_display();
+        self.update_queue_display();
       }
     }
   }
 
   fn handle_swap(&self) {
-    let mut stack = self.operator_stack.lock().unwrap();
-    let len = stack.len();
+    let mut queue = self.operator_queue.lock().unwrap();
+    let len = queue.len();
     if len >= 2 {
-      stack.swap(len - 1, len - 2);
+      queue.swap(len - 1, len - 2);
     }
-    drop(stack);
+    drop(queue);
 
-    self.update_stack_display();
+    self.update_queue_display();
   }
 
   fn handle_pop(&self) {
-    let mut stack = self.operator_stack.lock().unwrap();
-    if let Some(item) = stack.pop() {
-      drop(stack);
+    let mut queue = self.operator_queue.lock().unwrap();
+    if let Some(item) = queue.pop_back() {
+      drop(queue);
 
       // Only remove from pushed_positions if it was a position
-      if let StackItem::Position(x, y) = item {
+      if let QueueItem::Position(x, y) = item {
         let mut pushed = self.pushed_positions.lock().unwrap();
         pushed.remove(&(x, y));
         drop(pushed);
       }
 
-      self.update_stack_display();
+      self.update_queue_display();
     }
   }
 
-  fn update_stack_display(&self) {
-    let stack = self.operator_stack.lock().unwrap();
-    let event_stack = self.event_stack.lock().unwrap();
+  fn handle_duplicate(&self) {
+    let mut queue = self.operator_queue.lock().unwrap();
+    if let Some(item) = queue.back().cloned() {
+      queue.push_back(item);
+    }
+    drop(queue);
 
-    // Format operator stack with Display trait for clean output
-    let stack_display = if stack.is_empty() {
+    self.update_queue_display();
+  }
+
+  fn update_queue_display(&self) {
+    let queue = self.operator_queue.lock().unwrap();
+    let event_queue = self.event_queue.lock().unwrap();
+
+    // Format operator queue with Display trait for clean output
+    let queue_display = if queue.is_empty() {
       "[]".to_string()
     } else {
-      let items: Vec<String> = stack.iter().map(|item| format!("{}", item)).collect();
+      let items: Vec<String> = queue.iter().map(|item| format!("{}", item)).collect();
       format!("[{}]", items.join(", "))
     };
 
-    // Format event stack with Display trait
-    let event_stack_display = if event_stack.is_empty() {
+    // Format event queue with Display trait
+    let event_queue_display = if event_queue.is_empty() {
       "[]".to_string()
     } else {
-      let items: Vec<String> = event_stack.iter().map(|op| format!("{}", op)).collect();
+      let items: Vec<String> = event_queue.iter().map(|op| format!("{}", op)).collect();
       format!("[{}]", items.join(", "))
     };
 
-    drop(stack);
-    drop(event_stack);
+    drop(queue);
+    drop(event_queue);
 
-    let mut queue = self.ui_update_queue.lock().unwrap();
-    queue.push_back(UIUpdate::OpStackDisplay(stack_display));
-    queue.push_back(UIUpdate::EvStackDisplay(event_stack_display));
+    let mut ui_queue = self.ui_update_queue.lock().unwrap();
+    ui_queue.push_back(UIUpdate::OpQueueDisplay(queue_display));
+    ui_queue.push_back(UIUpdate::EvQueueDisplay(event_queue_display));
   }
 
   fn handle_r(&self) {
-    let mut event_stack = self.event_stack.lock().unwrap();
-    event_stack.push(EventOperator::R);
-    drop(event_stack);
+    let mut event_queue = self.event_queue.lock().unwrap();
+    event_queue.push_back(EventOperator::R);
+    drop(event_queue);
 
-    self.update_stack_display();
+    self.update_queue_display();
   }
 
   fn handle_c(&self) {
-    let mut event_stack = self.event_stack.lock().unwrap();
-    event_stack.push(EventOperator::C);
-    drop(event_stack);
+    let mut event_queue = self.event_queue.lock().unwrap();
+    event_queue.push_back(EventOperator::C);
+    drop(event_queue);
 
-    self.update_stack_display();
+    self.update_queue_display();
   }
 
   fn handle_x(&self) {
-    let mut event_stack = self.event_stack.lock().unwrap();
-    event_stack.push(EventOperator::X);
-    drop(event_stack);
+    let mut event_queue = self.event_queue.lock().unwrap();
+    event_queue.push_back(EventOperator::X);
+    drop(event_queue);
 
-    self.update_stack_display();
+    self.update_queue_display();
   }
 
   // fn is_actived_position(&self, curr_pos: Vec2) -> bool {
@@ -1170,11 +1188,11 @@ impl MarkerArea {
             *counter = 0;
             drop(counter);
 
-            // Clear stack when disabling accumulation mode
+            // Clear queue when disabling accumulation mode
             if !is_enabled {
-              let mut stack = self.operator_stack.lock().unwrap();
-              stack.clear();
-              drop(stack);
+              let mut queue = self.operator_queue.lock().unwrap();
+              queue.clear();
+              drop(queue);
 
               let mut pushed = self.pushed_positions.lock().unwrap();
               pushed.clear();
@@ -1183,7 +1201,7 @@ impl MarkerArea {
 
             let mode_status = self.build_mode_status_string();
 
-            // Update UI to clear accumulation display and stack display
+            // Update UI to clear accumulation display and queue display
             cb_sink
               .send(Box::new(move |siv| {
                 siv.call_on_name(consts::input_status_unit_view, |view: &mut TextView| {
@@ -1191,7 +1209,7 @@ impl MarkerArea {
                 });
 
                 if !is_enabled {
-                  siv.call_on_name(consts::op_stack_status_unit_view, |view: &mut TextView| {
+                  siv.call_on_name(consts::op_queue_status_unit_view, |view: &mut TextView| {
                     view.set_content("[]");
                   });
                 }

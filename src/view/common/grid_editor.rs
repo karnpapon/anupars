@@ -19,6 +19,8 @@ use cursive::Vec2;
 
 use crate::core::{consts, traits::Matrix};
 use crate::view::common::playhead::MarkerUI;
+use crate::view::common::playhead::EVENT_OPERATORS;
+use crate::view::common::playhead::QUEUE_OPERATORS;
 
 use consts::BASE_OCTAVE;
 use consts::KEYBOARD_MARGIN_BOTTOM;
@@ -163,13 +165,10 @@ impl CanvasEditor {
     }
   }
 
-  fn draw_stack_operators_bottom(&self, printer: &Printer) {
+  fn draw_queue_operators_bottom(&self, printer: &Printer) {
     if !self.show_keyboard || self.grid.width == 0 {
       return;
     }
-
-    let stack_operators = ['P', 'S', 'O']; // Push, Swap, pOp
-    let event_operators = ['r', 'c', 'x'];
 
     let style = Style::from(ColorStyle::front(ColorType::rgb(100, 100, 100)));
 
@@ -193,11 +192,11 @@ impl CanvasEditor {
       x_pos == abs_active_x
     });
 
-    // Draw stack operators on row 1
+    // Draw queue operators on row 1
     let mut x = 0;
-    let mut stack_index = 0;
+    let mut queue_index = 0;
     while x < self.grid.width {
-      let op = stack_operators[stack_index % stack_operators.len()];
+      let op = QUEUE_OPERATORS[queue_index % QUEUE_OPERATORS.len()];
       let is_active = x == abs_active_x;
       let style = if is_active && is_regex_match_x {
         Style::from(ColorStyle::new(
@@ -213,15 +212,15 @@ impl CanvasEditor {
         printer.print((x, 1), &op.to_string());
       });
 
-      x += consts::STACK_OP_SPACING;
-      stack_index += 1;
+      x += consts::QUEUE_OP_SPACING;
+      queue_index += 1;
     }
 
     // Draw event operators on row 1 (same line)
     let mut x = 0;
     let mut event_index = 0;
     while x < self.grid.width {
-      let op = event_operators[event_index % event_operators.len()];
+      let op = EVENT_OPERATORS[event_index % EVENT_OPERATORS.len()];
       let is_active = x == abs_active_x;
       let style = if is_active && is_regex_match_x {
         Style::from(ColorStyle::new(
@@ -358,7 +357,7 @@ fn draw(canvas: &CanvasEditor, printer: &Printer) {
 
     let bottom_y = KEYBOARD_MARGIN_TOP + canvas.grid.height;
     let bottom_operators_printer = printer.offset((KEYBOARD_MARGIN_LEFT, bottom_y));
-    canvas.draw_stack_operators_bottom(&bottom_operators_printer);
+    canvas.draw_queue_operators_bottom(&bottom_operators_printer);
   }
 
   let x_offset = if canvas.show_keyboard {
