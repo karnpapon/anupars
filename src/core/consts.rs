@@ -89,7 +89,7 @@ pub static input_controller_section_view: &str = "input_controller_section_view"
 pub static status_controller_section_view: &str = "status_controller_section_view";
 pub static protocol_controller_section_view: &str = "protocol_controller_section_view";
 
-pub static regex_display_unit_view: &str = "regex_display_unit_view";
+pub static regex_err_display_unit_view: &str = "regex_err_display_unit_view";
 pub static control_section_view: &str = "control_section_view";
 pub static interactive_display_section_view: &str = "interactive_display_section_view";
 

@@ -93,10 +93,13 @@ impl TopSection {
       .max_width(25);
 
     let input_controller_section_view = ListView::new()
-      .child("RegExp: ", regex_input_unit_view)
+      .child("RGXP: ", regex_input_unit_view)
       // .child("Mode: ", mode_view)
-      .child("flag: ", flag_view)
-      .child("", TextView::new("").fixed_height(1))
+      .child("FLAG: ", flag_view)
+      .child(
+        "ERRR:",
+        TextView::new("-").with_name(consts::regex_err_display_unit_view),
+      )
       .child(
         "MIDI: ",
         TextView::new("-").with_name(consts::midi_status_unit_view),
@@ -128,10 +131,10 @@ impl TopSection {
 
     let protocol_controller_section_view = ListView::new()
       .child(
-        "Mode:",
+        "MDE:",
         TextView::new("raud").with_name(consts::osc_status_unit_view), // R=Reverse, A=Arpeggiator, U=Accumulation, D=Random
       )
-      .child("State: ", input_status_unit_view)
+      .child("STE: ", input_status_unit_view)
       .child(
         "OPQ:",
         TextView::new("[]").with_name(consts::op_queue_status_unit_view),
