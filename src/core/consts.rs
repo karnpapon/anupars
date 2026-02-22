@@ -126,3 +126,5 @@ pub const NOTE_NAMES: [&str; 12] = [
 
 pub const QUEUE_OP_SPACING: usize = 2;
 pub const EVENT_OP_SPACING: usize = 10;
+
+pub const SYMBOL_DRAIN: &char = &'~';

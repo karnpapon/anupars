@@ -252,7 +252,7 @@ impl PlayheadArea {
                   siv.call_on_name(
                     consts::input_status_unit_view,
                     move |view: &mut TextView| {
-                      view.set_content(format!("acc: {}/{}", count, total));
+                      view.set_content(format!("@ {}/{}", count, total));
                     },
                   );
                 }
@@ -655,14 +655,14 @@ impl PlayheadArea {
             // Format queue using Display trait for consistency
             let queue_display = if queue.is_empty() {
               if is_drain {
-                "&[]".to_string()
+                format!("{}[]", consts::SYMBOL_DRAIN)
               } else {
                 "[]".to_string()
               }
             } else {
               let items: Vec<String> = queue.iter().map(|item| format!("{}", item)).collect();
               if is_drain {
-                format!("&[{}]", items.join(", "))
+                format!("{}[{}]", consts::SYMBOL_DRAIN, items.join(", "))
               } else {
                 format!("[{}]", items.join(", "))
               }
@@ -829,9 +829,11 @@ impl PlayheadArea {
         siv.call_on_name(consts::op_queue_status_unit_view, |view: &mut TextView| {
           let current = view.get_content().source().to_string();
           if is_drain {
-            view.set_content(format!("&{}", current));
-          } else if current.starts_with('&') {
-            let unlocked = current.trim_start_matches('&').to_string();
+            view.set_content(format!("{}{}", consts::SYMBOL_DRAIN, current));
+          } else if current.starts_with(*consts::SYMBOL_DRAIN) {
+            let unlocked = current
+              .trim_start_matches(*consts::SYMBOL_DRAIN)
+              .to_string();
             view.set_content(unlocked);
           } else {
             view.set_content(current);
@@ -1001,14 +1003,14 @@ impl PlayheadArea {
     // Format operator queue with Display trait for clean output
     let queue_display = if queue.is_empty() {
       if drain_queue {
-        "&[]".to_string()
+        format!("{}[]", consts::SYMBOL_DRAIN)
       } else {
         "[]".to_string()
       }
     } else {
       let items: Vec<String> = queue.iter().map(|item| format!("{}", item)).collect();
       if drain_queue {
-        format!("&[{}]", items.join(", "))
+        format!("{}[{}]", consts::SYMBOL_DRAIN, items.join(", "))
       } else {
         format!("[{}]", items.join(", "))
       }

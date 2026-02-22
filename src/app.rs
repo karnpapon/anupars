@@ -41,7 +41,7 @@ pub enum AppMode {
   Accumulation,  // u
   Random,        // d
   EventOperator, // e
-  DrainQueue,    // l
+  DrainQueue,    // n
   None,
 }
 
