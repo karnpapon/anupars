@@ -113,7 +113,7 @@ pub static GRID_COL_SPACING: usize = 9;
 // Timing constants
 pub const TEMPO_CHECK_INTERVAL_MS: u64 = 100;
 pub const TEMPO_RESET_DELAY_MS: u64 = 500;
-pub const DEFAULT_TEMPO: i64 = 120;
+pub const DEFAULT_TEMPO: usize = 120;
 
 // Keyboard visualization constants
 pub const KEYBOARD_MARGIN_TOP: usize = 3;

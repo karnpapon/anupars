@@ -85,7 +85,7 @@ pub struct AppComponents {
   pub playhead: Playhead,
   pub metronome: Metronome,
   pub last_key_time: Arc<Mutex<Option<Instant>>>,
-  pub current_tempo: Arc<Mutex<i64>>,
+  pub current_tempo: Arc<Mutex<usize>>,
 }
 
 /// Initialize the default cursive theme with simple borders and terminal colors
@@ -181,7 +181,7 @@ pub fn setup_ui(components: &mut AppComponents) {
 /// Spawn a background thread to monitor key press timing and reset tempo
 fn spawn_tempo_monitor_thread(
   last_key_time: Arc<Mutex<Option<Instant>>>,
-  current_tempo: Arc<Mutex<i64>>,
+  current_tempo: Arc<Mutex<usize>>,
   metronome_tx: Sender<Message>,
 ) {
   thread::Builder::new()
@@ -194,7 +194,9 @@ fn spawn_tempo_monitor_thread(
         if last_time.elapsed() > Duration::from_millis(TEMPO_RESET_DELAY_MS) {
           *last_press = None;
           let tempo = *current_tempo.lock().unwrap();
-          let _ = metronome_tx.send(Message::Tempo(Ratio::from_i64(tempo).unwrap()));
+          let _ = metronome_tx.send(Message::Tempo(
+            Ratio::from_i64(tempo.try_into().unwrap()).unwrap(),
+          ));
         }
       }
     })
@@ -204,7 +206,7 @@ fn spawn_tempo_monitor_thread(
 /// Spawn all background worker threads
 pub fn spawn_background_threads(
   last_key_time: Arc<Mutex<Option<Instant>>>,
-  current_tempo: Arc<Mutex<i64>>,
+  current_tempo: Arc<Mutex<usize>>,
   metronome_tx: Sender<Message>,
   regex_handler: RegExpHandler,
   metronome: Metronome,

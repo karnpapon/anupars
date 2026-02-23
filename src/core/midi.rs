@@ -8,7 +8,7 @@ use std::time::Duration;
 
 use super::stack::{self, Stack};
 use super::utils::Throttler;
-use crate::core::consts::BASE_OCTAVE;
+use crate::core::consts;
 
 #[derive(Clone, Debug)]
 pub enum Message {
@@ -267,12 +267,13 @@ impl Midi {
     }
 
     // Use scale mode to map position to note
-    let (note_index, octave) = scale_mode.y_to_scale_note(y_position, grid_height, BASE_OCTAVE);
+    let (note_index, octave) =
+      scale_mode.y_to_scale_note(y_position, grid_height, consts::BASE_OCTAVE);
 
     // Calculate dynamic note length based on BPM
     // Higher BPM = shorter notes, minimum length is 1
     // Formula: length = max(1, base_length * (base_bpm / current_bpm))
-    let base_bpm = 120;
+    let base_bpm = consts::DEFAULT_TEMPO;
     let base_length = 4;
     let calculated_length = if bpm > 0 {
       ((base_length * base_bpm) / bpm).max(1)

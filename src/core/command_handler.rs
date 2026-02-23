@@ -28,7 +28,7 @@ pub struct CommandManager {
   pub anu: Arc<Anu>,
   metronome_sender: Sender<Message>,
   cb_sink: cursive::CbSink,
-  temp_tempo: Arc<Mutex<i64>>,
+  temp_tempo: Arc<Mutex<usize>>,
   temp_ratio: Arc<Mutex<(i64, usize)>>,
   pub last_key_time: Arc<Mutex<Option<Instant>>>,
   playhead_tx_cloned: Sender<playhead_controller::Message>,
@@ -39,7 +39,7 @@ impl CommandManager {
     anu: Anu,
     m_tx: Sender<Message>,
     cb_sink: cursive::CbSink,
-    temp_tempo: Arc<Mutex<i64>>,
+    temp_tempo: Arc<Mutex<usize>>,
     last_key_time: Arc<Mutex<Option<Instant>>>,
     playhead_tx_cloned: Sender<playhead_controller::Message>,
   ) -> Self {
@@ -125,7 +125,7 @@ impl CommandManager {
         Ok(None)
       }
       Command::AdjustBPM(direction) => {
-        let nudge = match direction {
+        let nudge: isize = match direction {
           Adjustment::Increase => 1,
           Adjustment::Decrease => -1,
         };
@@ -134,8 +134,8 @@ impl CommandManager {
         *last_press = Some(Instant::now());
 
         let mut tempo = self.temp_tempo.lock().unwrap();
-        *tempo += nudge;
-        let temp = *tempo as usize;
+        *tempo = ((*tempo as isize) + nudge) as usize;
+        let temp = *tempo;
 
         self
           .playhead_tx_cloned
