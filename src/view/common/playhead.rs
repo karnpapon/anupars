@@ -184,6 +184,7 @@ pub struct PlayheadArea {
   event_queue: Arc<Mutex<VecDeque<EventOperator>>>,
   pushed_positions: Arc<Mutex<HashMap<(usize, usize), bool>>>,
   pub ui_update_queue: Arc<Mutex<VecDeque<UIUpdate>>>,
+  last_active_pos: Arc<Mutex<Option<Vec2>>>,
   // #[cfg(debug_assertions)]
   // timing_stats: Arc<TimingStats>,
 }
@@ -218,6 +219,7 @@ impl PlayheadArea {
       event_queue: Arc::new(Mutex::new(VecDeque::new())),
       pushed_positions: Arc::new(Mutex::new(HashMap::new())),
       ui_update_queue: Arc::new(Mutex::new(VecDeque::new())),
+      last_active_pos: Arc::new(Mutex::new(None)),
       // #[cfg(debug_assertions)]
       // timing_stats: Arc::new(TimingStats::new()),
     }
@@ -1280,19 +1282,38 @@ impl PlayheadArea {
             let mut active_pos = *active_pos_mutex;
             drop(active_pos_mutex);
 
-            let (abs_x, abs_y, curr_running_playhead) =
-              self.calculate_absolute_position(active_pos);
+            // ? not sure this is the best way to handle unwanted retriggering
+            // ? in case ratio is not 1/16 (metronome tick's ratio)
+            // ? might be a better solution
+            let arpeggiator = self
+              .arpeggiator_mode
+              .load(std::sync::atomic::Ordering::Relaxed);
+            let mut last_active = self.last_active_pos.lock().unwrap();
+            let should_trigger = arpeggiator || last_active.is_none_or(|p| p != active_pos);
+            if should_trigger {
+              let (abs_x, abs_y, curr_running_playhead) =
+                self.calculate_absolute_position(active_pos);
 
-            let (note_position, scale_mode) =
-              self.determine_note_position_and_scale(active_pos, abs_x, abs_y);
+              let (note_position, scale_mode) =
+                self.determine_note_position_and_scale(active_pos, abs_x, abs_y);
 
-            let matched =
-              self.trigger_midi_if_matched(curr_running_playhead, note_position, scale_mode, abs_x);
+              let matched = self.trigger_midi_if_matched(
+                curr_running_playhead,
+                note_position,
+                scale_mode,
+                abs_x,
+              );
 
-            // ? should sweep mode effect accumulation value
-            if matched {
-              if let Some(new_active_pos) = self.handle_accumulation_mode(abs_x, &cb_sink) {
-                active_pos = new_active_pos;
+              // ? should sweep mode effect accumulation value
+              if matched {
+                if let Some(new_active_pos) = self.handle_accumulation_mode(abs_x, &cb_sink) {
+                  active_pos = new_active_pos;
+                }
+              }
+
+              // Only update last_active if not in arpeggiator mode
+              if !arpeggiator {
+                *last_active = Some(active_pos);
               }
             }
 
