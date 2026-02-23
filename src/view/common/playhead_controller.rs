@@ -38,7 +38,7 @@ pub enum Message {
   ToggleRandomMode(),
   ToggleEventOperatorMode(),
   ToggleDrainQueueMode(),
-  ToggleScanMode(),
+  ToggleSweepMode(),
   SetTempo(usize),
   SetRatio((i64, usize)),
 }
@@ -228,10 +228,10 @@ impl Playhead {
               .send(playhead::Message::ToggleDrainQueueMode(cb_sink))
               .unwrap();
           }
-          Message::ToggleScanMode() => {
+          Message::ToggleSweepMode() => {
             let cb_sink = self.cb_sink.clone();
             playhead_area_tx
-              .send(playhead::Message::ToggleScanMode(cb_sink))
+              .send(playhead::Message::ToggleSweepMode(cb_sink))
               .unwrap();
           }
         }

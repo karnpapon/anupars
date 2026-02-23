@@ -158,7 +158,7 @@ impl<T: Printable + Copy> Matrix<T> {
       playhead_pos,
       playhead_area,
       actived_pos,
-      scan_mode,
+      sweep_mode,
       ..
     } = playhead_ui;
 
@@ -181,7 +181,7 @@ impl<T: Printable + Copy> Matrix<T> {
         printer.print_styled(pos, &SpannedString::styled(display_char, style));
 
         // Render crosshair lines at active position
-        if is_on_crosshair_vertical && *scan_mode {
+        if is_on_crosshair_vertical && *sweep_mode {
           // Check if this position matches regex and is outside playhead area
           let is_regex_match = text_matcher
             .as_ref()

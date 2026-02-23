@@ -114,7 +114,7 @@ pub struct PlayheadUI {
   pub reverse_mode: bool,
   pub arpeggiator_mode: bool,
   pub random_mode: bool,
-  pub scan_mode: bool,
+  pub sweep_mode: bool,
 }
 
 impl PlayheadUI {
@@ -128,7 +128,7 @@ impl PlayheadUI {
       reverse_mode: false,
       arpeggiator_mode: false,
       random_mode: false,
-      scan_mode: false,
+      sweep_mode: false,
     }
   }
 }
@@ -151,7 +151,7 @@ pub enum Message {
   ToggleRandomMode(cursive::CbSink),
   ToggleEventOperatorMode(cursive::CbSink),
   ToggleDrainQueueMode(cursive::CbSink),
-  ToggleScanMode(cursive::CbSink),
+  ToggleSweepMode(cursive::CbSink),
   SetTempo(usize),
   SetRatio((i64, usize), cursive::CbSink),
 }
@@ -178,7 +178,7 @@ pub struct PlayheadArea {
   random_mode: AtomicBool,
   event_operator_mode: AtomicBool,
   drain_queue_mode: AtomicBool,
-  scan_mode: AtomicBool,
+  sweep_mode: AtomicBool,
   ratio: Arc<Mutex<(i64, usize)>>,
   operator_queue: Arc<Mutex<VecDeque<QueueItem>>>,
   event_queue: Arc<Mutex<VecDeque<EventOperator>>>,
@@ -212,7 +212,7 @@ impl PlayheadArea {
       random_mode: AtomicBool::new(false),
       event_operator_mode: AtomicBool::new(false),
       drain_queue_mode: AtomicBool::new(false),
-      scan_mode: AtomicBool::new(false),
+      sweep_mode: AtomicBool::new(false),
       ratio: Arc::new(Mutex::new((1, 16))),
       operator_queue: Arc::new(Mutex::new(VecDeque::new())),
       event_queue: Arc::new(Mutex::new(VecDeque::new())),
@@ -309,7 +309,7 @@ impl PlayheadArea {
     let random = self.random_mode.load(Ordering::Relaxed);
     let event_op = self.event_operator_mode.load(Ordering::Relaxed);
     let drain_queue = self.drain_queue_mode.load(Ordering::Relaxed);
-    let scan = self.scan_mode.load(Ordering::Relaxed);
+    let sweep = self.sweep_mode.load(Ordering::Relaxed);
 
     let r = format!("{}", AppMode::Reverse);
     let a = format!("{}", AppMode::Arpeggiator);
@@ -317,7 +317,7 @@ impl PlayheadArea {
     let d = format!("{}", AppMode::Random);
     let e = format!("{}", AppMode::EventOperator);
     let n = format!("{}", AppMode::DrainQueue);
-    let s = format!("{}", AppMode::Scan);
+    let s = format!("{}", AppMode::Sweep);
 
     format!(
       "{}{}{}{}{}{}{}",
@@ -327,7 +327,7 @@ impl PlayheadArea {
       if random { "D" } else { &d },
       if event_op { "E" } else { &e },
       if drain_queue { "N" } else { &n },
-      if scan { "S" } else { &s }
+      if sweep { "S" } else { &s }
     )
   }
 
@@ -552,8 +552,8 @@ impl PlayheadArea {
       }
     }
 
-    // When scan_mode is enabled, trigger MIDI for all positions along the vertical crosshair
-    if self.scan_mode.load(Ordering::Relaxed) {
+    // When sweep_mode is enabled, trigger MIDI for all positions along the vertical crosshair
+    if self.sweep_mode.load(Ordering::Relaxed) {
       let x_scale_mode = *self.scale_mode_top.lock().unwrap();
 
       // Iterate through all y positions for the current x (vertical crosshair)
@@ -890,9 +890,9 @@ impl PlayheadArea {
       .unwrap();
   }
 
-  pub fn toggle_scan_mode(&self, cb_sink: cursive::CbSink) {
-    let is_scan = !self.scan_mode.load(Ordering::Relaxed);
-    self.scan_mode.store(is_scan, Ordering::Relaxed);
+  pub fn toggle_sweep_mode(&self, cb_sink: cursive::CbSink) {
+    let is_sweep = !self.sweep_mode.load(Ordering::Relaxed);
+    self.sweep_mode.store(is_sweep, Ordering::Relaxed);
 
     let mode_status = self.build_mode_status_string();
 
@@ -902,8 +902,8 @@ impl PlayheadArea {
           consts::canvas_editor_section_view,
           |canvas: &mut Canvas<GridEditor>| {
             let editor = canvas.state_mut();
-            editor.scan_mode = is_scan;
-            editor.playhead_ui.scan_mode = is_scan;
+            editor.sweep_mode = is_sweep;
+            editor.playhead_ui.sweep_mode = is_sweep;
           },
         );
 
@@ -1286,7 +1286,7 @@ impl PlayheadArea {
             let matched =
               self.trigger_midi_if_matched(curr_running_playhead, note_position, scale_mode, abs_x);
 
-            // ? should scan mode effect accumulation value
+            // ? should sweep mode effect accumulation value
             if matched {
               if let Some(new_active_pos) = self.handle_accumulation_mode(abs_x, &cb_sink) {
                 active_pos = new_active_pos;
@@ -1447,8 +1447,8 @@ impl PlayheadArea {
           Message::ToggleDrainQueueMode(cb_sink) => {
             self.toggle_drain_queue_mode(cb_sink);
           }
-          Message::ToggleScanMode(cb_sink) => {
-            self.toggle_scan_mode(cb_sink);
+          Message::ToggleSweepMode(cb_sink) => {
+            self.toggle_sweep_mode(cb_sink);
           }
         }
       }

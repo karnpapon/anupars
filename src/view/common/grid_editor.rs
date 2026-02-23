@@ -44,7 +44,7 @@ pub struct GridEditor {
   pub random_mode: bool,
   pub event_operator_mode: bool,
   pub drain_queue_mode: bool,
-  pub scan_mode: bool,
+  pub sweep_mode: bool,
 }
 
 impl GridEditor {
@@ -63,7 +63,7 @@ impl GridEditor {
       random_mode: false,
       event_operator_mode: false,
       drain_queue_mode: false,
-      scan_mode: false,
+      sweep_mode: false,
     }
   }
 

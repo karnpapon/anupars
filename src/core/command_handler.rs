@@ -234,10 +234,10 @@ impl CommandManager {
           .unwrap();
         Ok(None)
       }
-      Command::ToggleScan => {
+      Command::ToggleSweep => {
         self
           .playhead_tx_cloned
-          .send(playhead_controller::Message::ToggleScanMode())
+          .send(playhead_controller::Message::ToggleSweepMode())
           .unwrap();
         Ok(None)
       }
@@ -329,7 +329,7 @@ impl CommandManager {
     kb.insert("Ctrl+d".into(), vec![Command::ToggleRandom]);
     kb.insert("Ctrl+e".into(), vec![Command::ToggleEventOperator]);
     kb.insert("Ctrl+n".into(), vec![Command::ToggleDrainQueue]);
-    kb.insert("Ctrl+s".into(), vec![Command::ToggleScan]);
+    kb.insert("Ctrl+s".into(), vec![Command::ToggleSweep]);
     kb
   }
 
