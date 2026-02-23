@@ -1,3 +1,4 @@
+use cursive::Vec2;
 use midir::{MidiOutput, MidiOutputConnection, MidiOutputPort};
 use std::collections::HashMap;
 use std::error::Error;
@@ -24,8 +25,9 @@ pub enum Message {
       usize,
       crate::core::scale::ScaleMode,
       usize,
+      Vec2,
     ),
-  ), // (grid_index, y_position, grid_width, grid_height, scale_mode, bpm)
+  ), // (grid_index((curr*h)+w), y_position, grid_width, grid_height, scale_mode, bpm, active_pos)
   SwitchDevice(usize),
   Panic(),
   SetTempo(usize),
@@ -171,6 +173,7 @@ impl Midi {
             grid_height,
             scale_mode,
             bpm,
+            active_pos,
           )) => {
             self.trigger_w_position(
               grid_index,
@@ -179,6 +182,7 @@ impl Midi {
               grid_height,
               scale_mode,
               bpm,
+              active_pos,
             );
           }
           Message::SetTempo(bpm) => {
@@ -252,6 +256,8 @@ impl Midi {
     midi_msg_config_list.push(midi);
   }
 
+  // TODO: refac this
+  #[allow(clippy::too_many_arguments)]
   fn trigger_w_position(
     &self,
     _grid_index: usize,
@@ -260,6 +266,7 @@ impl Midi {
     grid_height: usize,
     scale_mode: crate::core::scale::ScaleMode,
     bpm: usize,
+    active_pos: Vec2,
   ) {
     // Use the actual grid height passed as parameter
     if grid_height == 0 {
@@ -269,6 +276,13 @@ impl Midi {
     // Use scale mode to map position to note
     let (note_index, octave) =
       scale_mode.y_to_scale_note(y_position, grid_height, consts::BASE_OCTAVE);
+
+    let max_vel = 100.0;
+    let min_vel = 20.0;
+
+    // Calculate velocity based on Y position (higher Y = lower velocity) min=27
+    let velocity = max_vel - (active_pos.y as f32 / grid_height as f32) * (max_vel - min_vel);
+    let vel = velocity.round() as u8;
 
     // Calculate dynamic note length based on BPM
     // Higher BPM = shorter notes, minimum length is 1
@@ -281,7 +295,7 @@ impl Midi {
       base_length
     };
     let note_length = (calculated_length as u8).min(127);
-    let midi_msg = MidiMsg::from(note_index, octave, note_length, 100, 0, false);
+    let midi_msg = MidiMsg::from(note_index, octave, note_length, vel, 0, false);
     let _ = self.trigger(&midi_msg, true);
     self.tx.send(Message::Push(midi_msg)).unwrap();
   }

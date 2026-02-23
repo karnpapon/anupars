@@ -536,6 +536,7 @@ impl PlayheadArea {
     let grid_height = self.grid_height.load(Ordering::Relaxed);
     let current_tempo = self.tempo.load(Ordering::Relaxed);
     let mut triggered = false;
+    let pos = self.pos.lock().unwrap();
 
     // Trigger MIDI for current playhead position if matched
     if let Some(matcher) = self.text_matcher.lock().unwrap().as_ref() {
@@ -547,6 +548,7 @@ impl PlayheadArea {
           grid_height,
           scale_mode,
           current_tempo,
+          *pos,
         )));
         triggered = true;
       }
@@ -581,6 +583,7 @@ impl PlayheadArea {
               grid_height,
               x_scale_mode,
               current_tempo,
+              *pos,
             )));
           }
         }
