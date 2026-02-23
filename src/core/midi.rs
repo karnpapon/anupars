@@ -1,4 +1,3 @@
-use cursive::Vec2;
 use midir::{MidiOutput, MidiOutputConnection, MidiOutputPort};
 use std::collections::HashMap;
 use std::error::Error;
@@ -25,9 +24,9 @@ pub enum Message {
       usize,
       crate::core::scale::ScaleMode,
       usize,
-      Vec2,
+      usize,
     ),
-  ), // (grid_index((curr*h)+w), y_position, grid_width, grid_height, scale_mode, bpm, active_pos)
+  ), // (grid_index((curr*h)+w), y_position, grid_width, grid_height, scale_mode, bpm, trigger_pos_y)
   SwitchDevice(usize),
   Panic(),
   SetTempo(usize),
@@ -266,7 +265,7 @@ impl Midi {
     grid_height: usize,
     scale_mode: crate::core::scale::ScaleMode,
     bpm: usize,
-    active_pos: Vec2,
+    trigger_pos_y: usize,
   ) {
     // Use the actual grid height passed as parameter
     if grid_height == 0 {
@@ -281,7 +280,7 @@ impl Midi {
     let min_vel = 20.0;
 
     // Calculate velocity based on Y position (higher Y = lower velocity) min=27
-    let velocity = max_vel - (active_pos.y as f32 / grid_height as f32) * (max_vel - min_vel);
+    let velocity = max_vel - (trigger_pos_y as f32 / grid_height as f32) * (max_vel - min_vel);
     let vel = velocity.round() as u8;
 
     // Calculate dynamic note length based on BPM

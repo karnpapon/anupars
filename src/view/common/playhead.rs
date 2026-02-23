@@ -550,7 +550,7 @@ impl PlayheadArea {
           grid_height,
           scale_mode,
           current_tempo,
-          *pos,
+          pos.y,
         )));
         triggered = true;
       }
@@ -585,7 +585,7 @@ impl PlayheadArea {
               grid_height,
               x_scale_mode,
               current_tempo,
-              *pos,
+              y,
             )));
           }
         }
