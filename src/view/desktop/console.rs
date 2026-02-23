@@ -46,7 +46,7 @@ impl Default for TopSection {
 impl TopSection {
   pub fn new() -> Self {
     TopSection {
-      bpm: 120,
+      bpm: consts::DEFAULT_TEMPO,
       ratio: (1, 16),
       pos: Vec2::zero(),
       len: (1, 1),

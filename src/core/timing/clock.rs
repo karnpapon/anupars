@@ -1,3 +1,5 @@
+use crate::core::consts::DEFAULT_TEMPO;
+
 use super::metronome;
 use num::integer::Integer;
 use num::rational::Ratio;
@@ -18,7 +20,7 @@ static NANOS_PER_SECOND: i64 = 1_000_000_000;
 static DEFAULT_TICKS_PER_BEAT: i64 = 4;
 static DEFAULT_BEATS_PER_BAR: i64 = 8;
 static DEFAULT_BARS_PER_LOOP: i64 = 8;
-static DEFAULT_BEATS_PER_MINUTE: i64 = 120;
+static DEFAULT_BEATS_PER_MINUTE: i64 = DEFAULT_TEMPO as i64;
 
 #[derive(Clone, Copy, Debug)]
 pub struct Signature {

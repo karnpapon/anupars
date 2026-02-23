@@ -77,7 +77,7 @@ impl Midi {
   pub fn new() -> Self {
     let (tx, rx) = channel();
     let throttler = Arc::new(Mutex::new(Throttler::new(Duration::from_millis(100))));
-    let tempo = Arc::new(Mutex::new(120));
+    let tempo = Arc::new(Mutex::new(consts::DEFAULT_TEMPO));
     let Ok(midi_out) = MidiOutput::new("client-midi-output") else {
       return Self {
         midi: None.into(),

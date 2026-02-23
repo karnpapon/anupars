@@ -63,7 +63,7 @@ impl Default for Console {
 impl Console {
   pub fn new() -> Self {
     Console {
-      bpm: 120,
+      bpm: consts::DEFAULT_TEMPO,
       ratio: (1, 16),
       pos: Vec2::zero(),
       len: (1, 1),

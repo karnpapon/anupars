@@ -201,7 +201,7 @@ impl PlayheadArea {
       midi_tx,
       grid_width: AtomicUsize::new(0),
       grid_height: AtomicUsize::new(0),
-      tempo: AtomicUsize::new(120),
+      tempo: AtomicUsize::new(consts::DEFAULT_TEMPO),
       prev_active_pos: Arc::new(Mutex::new(Vec2::zero())),
       scale_mode_left: Arc::new(Mutex::new(crate::core::scale::ScaleMode::default())),
       scale_mode_top: Arc::new(Mutex::new(crate::core::scale::ScaleMode::default())),
