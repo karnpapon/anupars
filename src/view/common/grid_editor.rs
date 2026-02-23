@@ -69,32 +69,40 @@ impl GridEditor {
 
   /// Map Y position to MIDI note information (for left keyboard)
   /// Y increases downward, so higher Y = lower note (inverted keyboard)
-  pub fn y_to_note_left(&self, y: usize) -> (u8, u8, &'static str) {
+  pub fn y_to_note_left(&self, y: usize) -> (f32, u8, &'static str) {
     let total_rows = self.grid.height;
     if total_rows == 0 {
-      return (0, BASE_OCTAVE, "C");
+      return (0.0, BASE_OCTAVE, "C");
     }
 
     let (note_index, octave) = self
       .scale_mode_left
       .y_to_scale_note(y, total_rows, BASE_OCTAVE);
 
-    (note_index, octave, NOTE_NAMES[note_index as usize])
+    (
+      note_index,
+      octave,
+      NOTE_NAMES[note_index.round() as usize % 12],
+    )
   }
 
   /// Map Y position to MIDI note information (for top keyboard)
   /// Y increases downward, so higher Y = lower note (inverted keyboard)
-  pub fn y_to_note_top(&self, y: usize) -> (u8, u8, &'static str) {
+  pub fn y_to_note_top(&self, y: usize) -> (f32, u8, &'static str) {
     let total_rows = self.grid.height;
     if total_rows == 0 {
-      return (0, BASE_OCTAVE, "C");
+      return (0.0, BASE_OCTAVE, "C");
     }
 
     let (note_index, octave) = self
       .scale_mode_top
       .y_to_scale_note(y, total_rows, BASE_OCTAVE);
 
-    (note_index, octave, NOTE_NAMES[note_index as usize])
+    (
+      note_index,
+      octave,
+      NOTE_NAMES[note_index.round() as usize % 12],
+    )
   }
 
   /// Draw the keyboard visualization on the top margin
@@ -108,7 +116,7 @@ impl GridEditor {
       let y_pos = x % self.grid.height;
       let (note_index, octave, note_name) = self.y_to_note_top(y_pos);
 
-      let is_black_key = matches!(note_index, 1 | 3 | 6 | 8 | 10); // C#, D#, F#, G#, A#
+      let is_black_key = matches!(note_index.round() as u8, 1 | 3 | 6 | 8 | 10); // C#, D#, F#, G#, A#
 
       let style = if x == abs_active_x {
         if note_name == "C" {
@@ -150,7 +158,7 @@ impl GridEditor {
       let (note_index, octave, note_name) = self.y_to_note_left(y);
 
       // Determine text color based on note (white/black keys)
-      let is_black_key = matches!(note_index, 1 | 3 | 6 | 8 | 10); // C#, D#, F#, G#, A#
+      let is_black_key = matches!(note_index.round() as u8, 1 | 3 | 6 | 8 | 10); // C#, D#, F#, G#, A#
 
       let text_color = if is_black_key {
         ColorType::rgb(50, 50, 50)

@@ -17,28 +17,30 @@ pub enum ScaleMode {
   Blues,
   WholeTone,
   Diminished,
+  Thai7Tet, // Thai 7-TET microtonal scale
 }
 
 impl ScaleMode {
   /// Get the intervals (in semitones from root) for this scale mode
   /// Returns which notes (0-11) are included in the scale
-  pub fn intervals(&self) -> &'static [u8] {
+  pub fn intervals(&self) -> &'static [f32] {
     match self {
-      ScaleMode::Chromatic => &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
-      ScaleMode::Major => &[0, 2, 4, 5, 7, 9, 11],
-      ScaleMode::Minor => &[0, 2, 3, 5, 7, 8, 10],
-      ScaleMode::HarmonicMinor => &[0, 2, 3, 5, 7, 8, 11],
-      ScaleMode::MelodicMinor => &[0, 2, 3, 5, 7, 9, 11],
-      ScaleMode::Dorian => &[0, 2, 3, 5, 7, 9, 10],
-      ScaleMode::Phrygian => &[0, 1, 3, 5, 7, 8, 10],
-      ScaleMode::Lydian => &[0, 2, 4, 6, 7, 9, 11],
-      ScaleMode::Mixolydian => &[0, 2, 4, 5, 7, 9, 10],
-      ScaleMode::Locrian => &[0, 1, 3, 5, 6, 8, 10],
-      ScaleMode::MajorPentatonic => &[0, 2, 4, 7, 9],
-      ScaleMode::MinorPentatonic => &[0, 3, 5, 7, 10],
-      ScaleMode::Blues => &[0, 3, 5, 6, 7, 10],
-      ScaleMode::WholeTone => &[0, 2, 4, 6, 8, 10],
-      ScaleMode::Diminished => &[0, 2, 3, 5, 6, 8, 9, 11],
+      ScaleMode::Chromatic => &[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0],
+      ScaleMode::Major => &[0.0, 2.0, 4.0, 5.0, 7.0, 9.0, 11.0],
+      ScaleMode::Minor => &[0.0, 2.0, 3.0, 5.0, 7.0, 8.0, 10.0],
+      ScaleMode::HarmonicMinor => &[0.0, 2.0, 3.0, 5.0, 7.0, 8.0, 11.0],
+      ScaleMode::MelodicMinor => &[0.0, 2.0, 3.0, 5.0, 7.0, 9.0, 11.0],
+      ScaleMode::Dorian => &[0.0, 2.0, 3.0, 5.0, 7.0, 9.0, 10.0],
+      ScaleMode::Phrygian => &[0.0, 1.0, 3.0, 5.0, 7.0, 8.0, 10.0],
+      ScaleMode::Lydian => &[0.0, 2.0, 4.0, 6.0, 7.0, 9.0, 11.0],
+      ScaleMode::Mixolydian => &[0.0, 2.0, 4.0, 5.0, 7.0, 9.0, 10.0],
+      ScaleMode::Locrian => &[0.0, 1.0, 3.0, 5.0, 6.0, 8.0, 10.0],
+      ScaleMode::MajorPentatonic => &[0.0, 2.0, 4.0, 7.0, 9.0],
+      ScaleMode::MinorPentatonic => &[0.0, 3.0, 5.0, 7.0, 10.0],
+      ScaleMode::Blues => &[0.0, 3.0, 5.0, 6.0, 7.0, 10.0],
+      ScaleMode::WholeTone => &[0.0, 2.0, 4.0, 6.0, 8.0, 10.0],
+      ScaleMode::Diminished => &[0.0, 2.0, 3.0, 5.0, 6.0, 8.0, 9.0, 11.0],
+      ScaleMode::Thai7Tet => &[0.0, 1.714, 3.429, 5.143, 6.857, 8.571, 10.286, 12.0],
     }
   }
 
@@ -60,12 +62,15 @@ impl ScaleMode {
       ScaleMode::Blues => "Blues",
       ScaleMode::WholeTone => "Whole Tone",
       ScaleMode::Diminished => "Diminished",
+      ScaleMode::Thai7Tet => "Thai 7-TET",
     }
   }
 
   /// Check if a note index (0-11) is in this scale
-  pub fn contains_note(&self, note_index: u8) -> bool {
-    self.intervals().contains(&(note_index % 12))
+  pub fn contains_note(&self, note_index: f32) -> bool {
+    let intervals = self.intervals();
+    let note_mod = note_index % 12.0;
+    intervals.iter().any(|&i| (i - note_mod).abs() < 0.01)
   }
 
   /// Get all available scale modes
@@ -86,14 +91,15 @@ impl ScaleMode {
       ScaleMode::Blues,
       ScaleMode::WholeTone,
       ScaleMode::Diminished,
+      ScaleMode::Thai7Tet,
     ]
   }
 
   /// Map a Y position to the nearest note in the scale
-  /// Returns (note_index, octave) where note_index is 0-11
-  pub fn y_to_scale_note(&self, y: usize, total_rows: usize, base_octave: u8) -> (u8, u8) {
+  /// Returns (note_index, octave) where note_index can be fractional for microtonal scales
+  pub fn y_to_scale_note(&self, y: usize, total_rows: usize, base_octave: u8) -> (f32, u8) {
     if total_rows == 0 {
-      return (0, base_octave);
+      return (0.0, base_octave);
     }
 
     // Invert Y so top = higher notes
@@ -101,7 +107,7 @@ impl ScaleMode {
 
     if *self == ScaleMode::Chromatic {
       // Chromatic: use all notes
-      let note_index = (inverted_y % 12) as u8;
+      let note_index = (inverted_y % 12) as f32;
       let octave = base_octave + ((inverted_y / 12) as u8);
       return (note_index, octave);
     }

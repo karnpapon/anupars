@@ -33,7 +33,7 @@ pub enum Message {
 
 #[derive(Clone, Debug)]
 pub struct MidiMsg {
-  note: u8,
+  note: f32, // Can be fractional for microtonal scales
   velocity: u8,
   octave: u8,
   channel: u8,
@@ -43,7 +43,7 @@ pub struct MidiMsg {
 
 impl MidiMsg {
   pub fn from(
-    note: u8,
+    note: f32,
     octave: u8,
     length: u8,
     velocity: u8,
@@ -294,16 +294,43 @@ impl Midi {
 
     [
       note_event,
-      convert_to_midi_note_num(midi_msg.octave, midi_msg.note),
+      convert_to_midi_note_num(midi_msg.octave, midi_msg.note).0,
       midi_msg.velocity,
     ]
   }
 
+  fn build_pitch_bend_msg(&self, midi_msg: &MidiMsg) -> Option<[u8; 3]> {
+    let (_, pitch_bend) = convert_to_midi_note_num(midi_msg.octave, midi_msg.note);
+    if pitch_bend.abs() < 0.01 {
+      return None; // No pitch bend needed
+    }
+
+    // MIDI pitch bend: 14-bit value, center = 8192, range typically ±2 semitones
+    // pitch_bend is in cents, convert to 14-bit MIDI value
+    let bend_range_semitones = 2.0; // Standard pitch bend range
+    let bend_ratio = pitch_bend / (bend_range_semitones * 100.0);
+    let bend_value = (8192.0 + (bend_ratio * 8192.0)).clamp(0.0, 16383.0) as u16;
+
+    let lsb = (bend_value & 0x7F) as u8;
+    let msb = ((bend_value >> 7) & 0x7F) as u8;
+
+    Some([0xE0 + midi_msg.channel, lsb, msb])
+  }
+
   pub fn trigger(&self, midi_msg: &MidiMsg, down: bool) -> Result<(), &str> {
-    let built_msg = self.build_midi_msg(midi_msg, down);
     match self.out_device.lock() {
       Ok(mut conn_out) => {
         let connection_out = conn_out.as_mut().unwrap();
+
+        // Send pitch bend first if needed (only on note-on)
+        if down {
+          if let Some(pitch_bend_msg) = self.build_pitch_bend_msg(midi_msg) {
+            connection_out.send(&pitch_bend_msg).unwrap();
+          }
+        }
+
+        // Send note-on or note-off
+        let built_msg = self.build_midi_msg(midi_msg, down);
         connection_out.send(&built_msg).unwrap();
         Ok(())
       }
@@ -328,6 +355,17 @@ impl Midi {
   }
 }
 
-pub fn convert_to_midi_note_num(octave: u8, note: u8) -> u8 {
-  24 + (octave * 12) + note // 60 = C3
+/// Convert octave and note (with fractional semitones) to MIDI note number and pitch bend in cents
+/// Returns (midi_note, pitch_bend_cents)
+pub fn convert_to_midi_note_num(octave: u8, note: f32) -> (u8, f32) {
+  let base_note = 24 + (octave * 12);
+  let total_note = base_note as f32 + note;
+
+  // Round to nearest MIDI note
+  let midi_note = total_note.round() as u8;
+
+  // Calculate pitch bend in cents (difference from rounded note)
+  let pitch_bend_cents = (total_note - midi_note as f32) * 100.0;
+
+  (midi_note, pitch_bend_cents)
 }
