@@ -528,17 +528,12 @@ impl PlayheadArea {
     curr_running_playhead: usize,
     note_position: usize,
     scale_mode: crate::core::scale::ScaleMode,
-    abs_x: usize,
   ) {
     let grid_width = self.grid_width.load(Ordering::Relaxed);
     let grid_height = self.grid_height.load(Ordering::Relaxed);
     let current_tempo = self.tempo.load(Ordering::Relaxed);
     let pos = self.pos.lock().unwrap();
 
-    // Trigger MIDI for current playhead position if matched
-    // if let Some(matcher) = self.text_matcher.lock().unwrap().as_ref() {
-    // if matcher.get(&curr_running_playhead).is_some() {
-    // Check if next note should be held
     let hold_next = self.hold_next_note.load(Ordering::Relaxed);
     let _ = self.midi_tx.send(midi::Message::TriggerWithPosition((
       curr_running_playhead,
@@ -550,9 +545,12 @@ impl PlayheadArea {
       pos.y,
       hold_next,
     )));
-    // }
-    // }
+  }
 
+  fn trigger_midi_if_matched_sweep(&self, curr_running_playhead: usize, abs_x: usize) {
+    let grid_width = self.grid_width.load(Ordering::Relaxed);
+    let grid_height = self.grid_height.load(Ordering::Relaxed);
+    let current_tempo = self.tempo.load(Ordering::Relaxed);
     // When sweep_mode is enabled, trigger MIDI for all positions along the vertical crosshair
     if self.sweep_mode.load(Ordering::Relaxed) {
       let x_scale_mode = *self.scale_mode_top.lock().unwrap();
@@ -574,7 +572,7 @@ impl PlayheadArea {
 
         // Check if this position matches and trigger MIDI
         if let Some(matcher) = self.text_matcher.lock().unwrap().as_ref() {
-          if matcher.get(&crosshair_index).is_some() {
+          if matcher.contains_key(&crosshair_index) {
             let _ = self.midi_tx.send(midi::Message::TriggerWithPosition((
               crosshair_index,
               x_note_position,
@@ -987,8 +985,8 @@ impl PlayheadArea {
     let operator = EVENT_OPERATORS[operator_index];
 
     match operator {
-      EventOperator::R => self.handle_r(),
-      EventOperator::C => self.handle_c(),
+      EventOperator::R => self.handle_x(),
+      EventOperator::C => self.handle_x(),
       EventOperator::X => self.handle_x(),
     }
   }
@@ -1321,14 +1319,11 @@ impl PlayheadArea {
                   if let Some(new_active_pos) = self.handle_accumulation_mode(abs_x, &cb_sink) {
                     active_pos = new_active_pos;
                   }
-                  self.trigger_midi_if_matched(
-                    curr_running_playhead,
-                    note_position,
-                    scale_mode,
-                    abs_x,
-                  );
+                  self.trigger_midi_if_matched(curr_running_playhead, note_position, scale_mode);
                 }
               }
+
+              self.trigger_midi_if_matched_sweep(curr_running_playhead, abs_x);
 
               self.update_active_pos_ui(active_pos, &cb_sink);
             }
