@@ -185,7 +185,7 @@ pub struct PlayheadArea {
   pushed_positions: Arc<Mutex<HashMap<(usize, usize), bool>>>,
   pub ui_update_queue: Arc<Mutex<VecDeque<UIUpdate>>>,
   step_index: Arc<Mutex<usize>>,
-  hold_next_note: Arc<Mutex<bool>>,
+  hold_next_note: AtomicBool,
   // #[cfg(debug_assertions)]
   // timing_stats: Arc<TimingStats>,
 }
@@ -221,7 +221,7 @@ impl PlayheadArea {
       pushed_positions: Arc::new(Mutex::new(HashMap::new())),
       ui_update_queue: Arc::new(Mutex::new(VecDeque::new())),
       step_index: Arc::new(Mutex::new(0)),
-      hold_next_note: Arc::new(Mutex::new(false)),
+      hold_next_note: AtomicBool::new(false),
       // #[cfg(debug_assertions)]
       // timing_stats: Arc::new(TimingStats::new()),
     }
@@ -536,17 +536,11 @@ impl PlayheadArea {
     let mut triggered = false;
     let pos = self.pos.lock().unwrap();
 
-    // Check if next note should be held
-    let mut hold_next = self.hold_next_note.lock().unwrap();
-    let should_hold = *hold_next;
-    if should_hold {
-      *hold_next = false; // Clear after reading
-    }
-    drop(hold_next);
-
     // Trigger MIDI for current playhead position if matched
     if let Some(matcher) = self.text_matcher.lock().unwrap().as_ref() {
       if matcher.get(&curr_running_playhead).is_some() {
+        // Check if next note should be held
+        let hold_next = self.hold_next_note.load(Ordering::Relaxed);
         let _ = self.midi_tx.send(midi::Message::TriggerWithPosition((
           curr_running_playhead,
           note_position,
@@ -555,7 +549,7 @@ impl PlayheadArea {
           scale_mode,
           current_tempo,
           pos.y,
-          should_hold,
+          hold_next,
         )));
         triggered = true;
       }
@@ -1015,6 +1009,23 @@ impl PlayheadArea {
     if let Some(event_op) = event_op {
       drop(event_queue);
 
+      // if front of queue is an event, we execute it immediately and remove from queue
+      let op_front = self.operator_queue.lock().unwrap().front().cloned();
+      if let Some(QueueItem::Event(ev_op)) = op_front {
+        match ev_op {
+          EventOperator::X => {
+            self.hold_next_note.store(
+              !self.hold_next_note.load(Ordering::Relaxed),
+              Ordering::Relaxed,
+            );
+          }
+          EventOperator::R | EventOperator::C => {
+            // NO OP for now.
+          }
+        }
+        self.operator_queue.lock().unwrap().pop_front();
+      }
+
       // Push the event to the main queue
       let mut queue = self.operator_queue.lock().unwrap();
       queue.push_back(QueueItem::Event(event_op));
@@ -1321,35 +1332,6 @@ impl PlayheadArea {
                   active_pos = new_active_pos;
                 }
               }
-              // let op_front = self.operator_queue.lock().unwrap().front().cloned();
-
-              // if let Some(QueueItem::Event(event_op)) = op_front {
-              //   match event_op {
-              //     EventOperator::X => {
-              //       let mut hold = self.hold_next_note.lock().unwrap();
-              //       *hold = true;
-              //     }
-              //     EventOperator::R | EventOperator::C => {
-              //       // NO OP for now.
-              //     }
-              //   }
-              //   self.operator_queue.lock().unwrap().pop_front();
-
-              //   let mut ui_queue = self.ui_update_queue.lock().unwrap();
-              //   let queue_display = if self.operator_queue.lock().unwrap().is_empty() {
-              //     "[]".to_string()
-              //   } else {
-              //     let items: Vec<String> = self
-              //       .operator_queue
-              //       .lock()
-              //       .unwrap()
-              //       .iter()
-              //       .map(|item| format!("{}", item))
-              //       .collect();
-              //     format!("[{}]", items.join(", "))
-              //   };
-              //   ui_queue.push_back(UIUpdate::OpQueueDisplay(queue_display));
-              // }
 
               self.update_active_pos_ui(active_pos, &cb_sink);
             }

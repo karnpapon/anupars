@@ -13,6 +13,8 @@ use crate::core::consts;
 #[derive(Clone, Debug)]
 pub enum Message {
   Push(MidiMsg),
+  Hold(MidiMsg),    // Hold a note indefinitely
+  Release(MidiMsg), // Release a held note
   Trigger(MidiMsg, bool),
   SetMsgConfig(MidiMsg), // ? maybe obsolete, TBD
   ClearMsgConfig(),
@@ -31,14 +33,15 @@ pub enum Message {
   SwitchDevice(usize),
   Panic(),
   SetTempo(usize),
+  AllNotesOff(),
 }
 
 #[derive(Clone, Debug)]
 pub struct MidiMsg {
-  note: f32, // Can be fractional for microtonal scales
-  velocity: u8,
-  octave: u8,
-  channel: u8,
+  pub note: f32, // Can be fractional for microtonal scales
+  pub velocity: u8,
+  pub octave: u8,
+  pub channel: u8,
   pub length: u8,
   pub is_played: bool,
 }
@@ -155,6 +158,15 @@ impl Midi {
         match control_message {
           Message::Push(midi_msg) => {
             let _ = stack_tx.send(stack::Message::Push(midi_msg));
+          }
+          Message::Hold(midi_msg) => {
+            let _ = stack_tx.send(stack::Message::Hold(midi_msg));
+          }
+          Message::Release(midi_msg) => {
+            let _ = stack_tx.send(stack::Message::Release(midi_msg));
+          }
+          Message::AllNotesOff() => {
+            self.send_all_notes_off();
           }
           Message::Trigger(msg, is_pressed) => {
             self.trigger(&msg, is_pressed).unwrap();
@@ -297,17 +309,22 @@ impl Midi {
       base_length
     };
 
-    // If hold is active, double the note length to last until next of next triggering
-    let final_length = if hold {
-      calculated_length * 2
-    } else {
-      calculated_length
-    };
-
-    let note_length = (final_length as u8).min(127);
+    let note_length = (calculated_length as u8).min(127);
     let midi_msg = MidiMsg::from(note_index, octave, note_length, vel, 0, false);
+
+    // Trigger the MIDI note on
     let _ = self.trigger(&midi_msg, true);
-    self.tx.send(Message::Push(midi_msg)).unwrap();
+
+    // Handle hold logic
+    if hold {
+      // Hold this note indefinitely (don't auto-release)
+      self.tx.send(Message::Hold(midi_msg)).unwrap();
+    } else {
+      // Check if we need to release a previously held note with the same pitch
+      // Then play this note normally (with auto-release)
+      self.tx.send(Message::Release(midi_msg.clone())).unwrap();
+      self.tx.send(Message::Push(midi_msg)).unwrap();
+    }
   }
 
   fn build_midi_msg(&self, midi_msg: &MidiMsg, down: bool) -> [u8; 3] {

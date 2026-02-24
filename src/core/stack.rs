@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::sync::mpsc::{channel, Sender};
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -5,13 +6,19 @@ use std::time::{Duration, Instant};
 
 use super::midi::{self, MidiMsg};
 
+type NoteKey = (u8, u8, u8); // (note, octave, channel)
+type HeldNotes = Arc<Mutex<HashMap<NoteKey, midi::MidiMsg>>>;
+
 #[derive(Clone, Debug)]
 pub enum Message {
   Push(MidiMsg),
+  Hold(MidiMsg),
+  Release(MidiMsg),
 }
 
 pub struct Stack {
   pub stack: Arc<Mutex<Vec<midi::MidiMsg>>>,
+  pub held_notes: HeldNotes,
   // pub stack_msg_config: Arc<Mutex<Vec<midi::MidiMsg>>>,
 }
 
@@ -19,6 +26,7 @@ impl Stack {
   pub fn new() -> Stack {
     Stack {
       stack: Arc::new(Mutex::new(vec![])),
+      held_notes: Arc::new(Mutex::new(HashMap::new())),
       // stack_msg_config: Arc::new(Mutex::new(vec![])),
     }
   }
@@ -31,6 +39,12 @@ impl Stack {
         match control_message {
           Message::Push(midi_msg) => {
             self.push(midi_msg);
+          }
+          Message::Hold(midi_msg) => {
+            self.hold(midi_msg);
+          }
+          Message::Release(midi_msg) => {
+            self.release(midi_msg, &_midi_tx);
           }
         }
       }
@@ -49,11 +63,18 @@ impl Stack {
 
         {
           let mut st = self.stack.lock().unwrap();
+          let held = self.held_notes.lock().unwrap();
 
           // Batch collect all note-offs to send at once (reduces lock time)
           let mut notes_to_release = Vec::new();
 
           st.retain_mut(|item| {
+            // Skip held notes - they should not be auto-released
+            let note_key = (item.note.round() as u8, item.octave, item.channel);
+            if held.contains_key(&note_key) {
+              return true; // Keep held notes in the stack
+            }
+
             if item.length < 2 {
               notes_to_release.push(item.clone());
             }
@@ -64,6 +85,7 @@ impl Stack {
 
           // Release lock before sending MIDI (reduces contention)
           drop(st);
+          drop(held);
 
           // Send all note-offs in batch
           for note in notes_to_release {
@@ -83,5 +105,53 @@ impl Stack {
   pub fn push(&self, midi_msg: MidiMsg) {
     let mut stack = self.stack.lock().unwrap();
     stack.push(midi_msg);
+  }
+
+  pub fn hold(&self, midi_msg: MidiMsg) {
+    use std::collections::hash_map::Entry;
+
+    let note_key = (
+      midi_msg.note.round() as u8,
+      midi_msg.octave,
+      midi_msg.channel,
+    );
+    let mut held = self.held_notes.lock().unwrap();
+
+    // Use Entry API to avoid duplicate lookups
+    if let Entry::Vacant(e) = held.entry(note_key) {
+      e.insert(midi_msg.clone());
+      drop(held);
+
+      // Push to stack with a very long length so it doesn't auto-release
+      let mut stack = self.stack.lock().unwrap();
+      let mut held_msg = midi_msg;
+      held_msg.length = 255; // Max length to prevent auto-release
+      stack.push(held_msg);
+    }
+  }
+
+  pub fn release(&self, midi_msg: MidiMsg, midi_tx: &Sender<midi::Message>) {
+    let note_key = (
+      midi_msg.note.round() as u8,
+      midi_msg.octave,
+      midi_msg.channel,
+    );
+    let mut held = self.held_notes.lock().unwrap();
+
+    // Remove from held notes and send note-off
+    if let Some(held_msg) = held.remove(&note_key) {
+      drop(held);
+
+      // Remove from stack
+      let mut stack = self.stack.lock().unwrap();
+      stack.retain(|item| {
+        let item_key = (item.note.round() as u8, item.octave, item.channel);
+        item_key != note_key
+      });
+      drop(stack);
+
+      // Send note-off immediately
+      let _ = midi_tx.send(midi::Message::Trigger(held_msg, false));
+    }
   }
 }
