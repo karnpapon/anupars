@@ -529,31 +529,29 @@ impl PlayheadArea {
     note_position: usize,
     scale_mode: crate::core::scale::ScaleMode,
     abs_x: usize,
-  ) -> bool {
+  ) {
     let grid_width = self.grid_width.load(Ordering::Relaxed);
     let grid_height = self.grid_height.load(Ordering::Relaxed);
     let current_tempo = self.tempo.load(Ordering::Relaxed);
-    let mut triggered = false;
     let pos = self.pos.lock().unwrap();
 
     // Trigger MIDI for current playhead position if matched
-    if let Some(matcher) = self.text_matcher.lock().unwrap().as_ref() {
-      if matcher.get(&curr_running_playhead).is_some() {
-        // Check if next note should be held
-        let hold_next = self.hold_next_note.load(Ordering::Relaxed);
-        let _ = self.midi_tx.send(midi::Message::TriggerWithPosition((
-          curr_running_playhead,
-          note_position,
-          grid_width,
-          grid_height,
-          scale_mode,
-          current_tempo,
-          pos.y,
-          hold_next,
-        )));
-        triggered = true;
-      }
-    }
+    // if let Some(matcher) = self.text_matcher.lock().unwrap().as_ref() {
+    // if matcher.get(&curr_running_playhead).is_some() {
+    // Check if next note should be held
+    let hold_next = self.hold_next_note.load(Ordering::Relaxed);
+    let _ = self.midi_tx.send(midi::Message::TriggerWithPosition((
+      curr_running_playhead,
+      note_position,
+      grid_width,
+      grid_height,
+      scale_mode,
+      current_tempo,
+      pos.y,
+      hold_next,
+    )));
+    // }
+    // }
 
     // When sweep_mode is enabled, trigger MIDI for all positions along the vertical crosshair
     if self.sweep_mode.load(Ordering::Relaxed) {
@@ -591,8 +589,6 @@ impl PlayheadArea {
         }
       }
     }
-
-    triggered
   }
 
   fn handle_accumulation_mode(&self, abs_x: usize, cb_sink: &cursive::CbSink) -> Option<Vec2> {
@@ -1318,18 +1314,19 @@ impl PlayheadArea {
               let (note_position, scale_mode) =
                 self.determine_note_position_and_scale(active_pos, abs_x, abs_y);
 
-              let matched = self.trigger_midi_if_matched(
-                curr_running_playhead,
-                note_position,
-                scale_mode,
-                abs_x,
-              );
-
               // ? should sweep mode effect accumulation value
               // Handle accumulation mode (for position operators)
-              if matched {
-                if let Some(new_active_pos) = self.handle_accumulation_mode(abs_x, &cb_sink) {
-                  active_pos = new_active_pos;
+              if let Some(matcher) = self.text_matcher.lock().unwrap().as_ref() {
+                if matcher.get(&curr_running_playhead).is_some() {
+                  if let Some(new_active_pos) = self.handle_accumulation_mode(abs_x, &cb_sink) {
+                    active_pos = new_active_pos;
+                  }
+                  self.trigger_midi_if_matched(
+                    curr_running_playhead,
+                    note_position,
+                    scale_mode,
+                    abs_x,
+                  );
                 }
               }
 
