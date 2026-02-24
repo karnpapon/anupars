@@ -40,7 +40,7 @@ pub enum Message {
   ToggleDrainQueueMode(),
   ToggleSweepMode(),
   SetTempo(usize),
-  SetRatio((i64, usize)),
+  SetRatio((usize, usize)),
 }
 
 pub struct Playhead {

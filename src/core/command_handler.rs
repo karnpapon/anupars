@@ -29,7 +29,7 @@ pub struct CommandManager {
   metronome_sender: Sender<Message>,
   cb_sink: cursive::CbSink,
   temp_tempo: Arc<Mutex<usize>>,
-  temp_ratio: Arc<Mutex<(i64, usize)>>,
+  temp_ratio: Arc<Mutex<(usize, usize)>>,
   pub last_key_time: Arc<Mutex<Option<Instant>>>,
   playhead_tx_cloned: Sender<playhead_controller::Message>,
 }
@@ -51,7 +51,7 @@ impl CommandManager {
       metronome_sender: m_tx,
       cb_sink,
       temp_tempo,
-      temp_ratio: Arc::new(Mutex::new((1, 16))),
+      temp_ratio: Arc::new(Mutex::new(consts::DEFAULT_RATIO)),
       last_key_time,
       playhead_tx_cloned,
     }
@@ -155,7 +155,7 @@ impl CommandManager {
         Ok(None)
       }
       Command::AdjustRatio(direction) => {
-        let ratios = [1, 2, 4, 8, 16, 32, 64];
+        let ratios = [1, 2, 4, 8, 16];
 
         let current_ratio = *self.temp_ratio.lock().unwrap();
         let current_denom = current_ratio.1;
@@ -190,6 +190,7 @@ impl CommandManager {
           .send(playhead_controller::Message::SetRatio(new_ratio))
           .unwrap();
 
+        self.metronome_sender.send(Message::Reset).unwrap();
         Ok(None)
       }
       Command::ToggleReverse => {

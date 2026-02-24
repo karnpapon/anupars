@@ -128,3 +128,5 @@ pub const QUEUE_OP_SPACING: usize = 2;
 pub const EVENT_OP_SPACING: usize = 10;
 
 pub const SYMBOL_DRAIN: &char = &'~';
+
+pub const DEFAULT_RATIO: (usize, usize) = (1, 8); // Default to 1/8 notes

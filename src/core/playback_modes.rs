@@ -18,11 +18,22 @@ pub fn calculate_normal_position(
   playhead_h: usize,
   actived_pos: &mut Vec2,
 ) {
-  actived_pos.x = adjusted_pos % playhead_w;
-  if actived_pos.x == 0 {
-    actived_pos.y += 1;
-    actived_pos.y %= playhead_h;
-  }
+  let total_positions = playhead_w * playhead_h;
+  let linear_pos = if total_positions > 0 {
+    adjusted_pos % total_positions
+  } else {
+    0
+  };
+  actived_pos.x = if playhead_w > 0 {
+    linear_pos % playhead_w
+  } else {
+    0
+  };
+  actived_pos.y = if playhead_w > 0 {
+    linear_pos / playhead_w
+  } else {
+    0
+  };
 }
 
 /// Calculate position for reverse sequential mode
@@ -32,14 +43,24 @@ pub fn calculate_reverse_position(
   playhead_h: usize,
   actived_pos: &mut Vec2,
 ) {
-  actived_pos.x = playhead_w - 1 - (adjusted_pos % playhead_w);
-  if actived_pos.x == playhead_w - 1 {
-    if actived_pos.y == 0 {
-      actived_pos.y = playhead_h - 1;
-    } else {
-      actived_pos.y -= 1;
-    }
+  let total_positions = playhead_w * playhead_h;
+  if total_positions == 0 {
+    actived_pos.x = 0;
+    actived_pos.y = 0;
+    return;
   }
+  let linear_pos = adjusted_pos % total_positions;
+  let reverse_linear = total_positions - 1 - linear_pos;
+  actived_pos.x = if playhead_w > 0 {
+    reverse_linear % playhead_w
+  } else {
+    0
+  };
+  actived_pos.y = if playhead_w > 0 {
+    reverse_linear / playhead_w
+  } else {
+    0
+  };
 }
 
 /// Calculate random position within playhead area using deterministic hashing

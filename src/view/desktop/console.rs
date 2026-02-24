@@ -32,7 +32,7 @@ pub enum RegexMode {
 #[derive(Clone)]
 pub struct TopSection {
   bpm: usize,
-  ratio: (i64, usize),
+  ratio: (usize, usize),
   pos: Vec2,
   len: (usize, usize),
 }
@@ -47,7 +47,7 @@ impl TopSection {
   pub fn new() -> Self {
     TopSection {
       bpm: consts::DEFAULT_TEMPO,
-      ratio: (1, 16),
+      ratio: consts::DEFAULT_RATIO,
       pos: Vec2::zero(),
       len: (1, 1),
     }

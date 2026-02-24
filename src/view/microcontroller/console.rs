@@ -49,7 +49,7 @@ pub enum RegexMode {
 #[derive(Clone)]
 pub struct Console {
   bpm: usize,
-  ratio: (i64, usize),
+  ratio: (usize, usize),
   pos: Vec2,
   len: (usize, usize),
 }
@@ -64,7 +64,7 @@ impl Console {
   pub fn new() -> Self {
     Console {
       bpm: consts::DEFAULT_TEMPO,
-      ratio: (1, 16),
+      ratio: consts::DEFAULT_RATIO,
       pos: Vec2::zero(),
       len: (1, 1),
     }

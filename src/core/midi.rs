@@ -4,10 +4,10 @@ use std::error::Error;
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::{Arc, Mutex};
 use std::thread;
-use std::time::Duration;
+// use std::time::Duration;
 
 use super::stack::{self, Stack};
-use super::utils::Throttler;
+// use super::utils::Throttler;
 use crate::core::consts;
 
 #[derive(Clone, Debug)]
@@ -70,14 +70,14 @@ pub struct Midi {
   pub msg_config_list: Arc<Mutex<Vec<MidiMsg>>>,
   pub tx: Sender<Message>,
   pub rx: Receiver<Message>,
-  throttler: Arc<Mutex<Throttler>>,
+  // throttler: Arc<Mutex<Throttler>>,
   tempo: Arc<Mutex<usize>>,
 }
 
 impl Midi {
   pub fn new() -> Self {
     let (tx, rx) = channel();
-    let throttler = Arc::new(Mutex::new(Throttler::new(Duration::from_millis(100))));
+    // let throttler = Arc::new(Mutex::new(Throttler::new(Duration::from_millis(100))));
     let tempo = Arc::new(Mutex::new(consts::DEFAULT_TEMPO));
     let Ok(midi_out) = MidiOutput::new("client-midi-output") else {
       return Self {
@@ -88,7 +88,7 @@ impl Midi {
         tx,
         rx,
         msg_config_list: Arc::new(Mutex::new(Vec::new())),
-        throttler,
+        // throttler,
         tempo,
       };
     };
@@ -100,7 +100,7 @@ impl Midi {
       tx,
       rx,
       msg_config_list: Arc::new(Mutex::new(Vec::new())),
-      throttler,
+      // throttler,
       tempo,
     }
   }
@@ -125,7 +125,6 @@ impl Midi {
         for (i, p) in out_ports.iter().enumerate() {
           println!("{}: {}", i, midi_out.port_name(p).unwrap());
         }
-        // print!("Please select output port: ");
         // stdout().flush()?;
         let input = String::from("0");
         // stdin().read_line(&mut input)?;

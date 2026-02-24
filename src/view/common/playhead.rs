@@ -153,7 +153,7 @@ pub enum Message {
   ToggleDrainQueueMode(cursive::CbSink),
   ToggleSweepMode(cursive::CbSink),
   SetTempo(usize),
-  SetRatio((i64, usize), cursive::CbSink),
+  SetRatio((usize, usize), cursive::CbSink),
 }
 
 pub struct PlayheadArea {
@@ -179,12 +179,12 @@ pub struct PlayheadArea {
   event_operator_mode: AtomicBool,
   drain_queue_mode: AtomicBool,
   sweep_mode: AtomicBool,
-  ratio: Arc<Mutex<(i64, usize)>>,
+  ratio: Arc<Mutex<(usize, usize)>>,
   operator_queue: Arc<Mutex<VecDeque<QueueItem>>>,
   event_queue: Arc<Mutex<VecDeque<EventOperator>>>,
   pushed_positions: Arc<Mutex<HashMap<(usize, usize), bool>>>,
   pub ui_update_queue: Arc<Mutex<VecDeque<UIUpdate>>>,
-  last_active_pos: Arc<Mutex<Option<Vec2>>>,
+  step_index: Arc<Mutex<usize>>,
   // #[cfg(debug_assertions)]
   // timing_stats: Arc<TimingStats>,
 }
@@ -214,12 +214,12 @@ impl PlayheadArea {
       event_operator_mode: AtomicBool::new(false),
       drain_queue_mode: AtomicBool::new(false),
       sweep_mode: AtomicBool::new(false),
-      ratio: Arc::new(Mutex::new((1, 16))),
+      ratio: Arc::new(Mutex::new(consts::DEFAULT_RATIO)),
       operator_queue: Arc::new(Mutex::new(VecDeque::new())),
       event_queue: Arc::new(Mutex::new(VecDeque::new())),
       pushed_positions: Arc::new(Mutex::new(HashMap::new())),
       ui_update_queue: Arc::new(Mutex::new(VecDeque::new())),
-      last_active_pos: Arc::new(Mutex::new(None)),
+      step_index: Arc::new(Mutex::new(0)),
       // #[cfg(debug_assertions)]
       // timing_stats: Arc::new(TimingStats::new()),
     }
@@ -510,8 +510,10 @@ impl PlayheadArea {
     drop(prev_active);
 
     let grid_height = self.grid_height.load(Ordering::Relaxed);
+    let is_horizontal =
+      self.area.lock().unwrap().width() >= 1 && self.area.lock().unwrap().height() == 1;
 
-    if x_diff > y_diff {
+    if (x_diff > y_diff) || is_horizontal {
       // Horizontal movement: use top keyboard mapping
       let pos = if grid_height > 0 {
         abs_x % grid_height
@@ -1276,21 +1278,23 @@ impl PlayheadArea {
             // #[cfg(debug_assertions)]
             // let start = Instant::now();
 
-            self.set_actived_pos(tick);
+            let ratio = self.ratio.lock().unwrap();
+            let reciprocal = 16 / ratio.1;
+            drop(ratio);
+
+            // Only advance step_index when ratio triggers
+            let should_advance = tick % reciprocal == 0;
+            if should_advance {
+              let mut step_idx = self.step_index.lock().unwrap();
+              *step_idx += 1;
+              self.set_actived_pos(*step_idx);
+            }
 
             let active_pos_mutex = self.actived_pos.lock().unwrap();
             let mut active_pos = *active_pos_mutex;
             drop(active_pos_mutex);
 
-            // ? not sure this is the best way to handle unwanted retriggering
-            // ? in case ratio is not 1/16 (metronome tick's ratio)
-            // ? might be a better solution
-            let arpeggiator = self
-              .arpeggiator_mode
-              .load(std::sync::atomic::Ordering::Relaxed);
-            let mut last_active = self.last_active_pos.lock().unwrap();
-            let should_trigger = arpeggiator || last_active.is_none_or(|p| p != active_pos);
-            if should_trigger {
+            if should_advance {
               let (abs_x, abs_y, curr_running_playhead) =
                 self.calculate_absolute_position(active_pos);
 
@@ -1309,11 +1313,6 @@ impl PlayheadArea {
                 if let Some(new_active_pos) = self.handle_accumulation_mode(abs_x, &cb_sink) {
                   active_pos = new_active_pos;
                 }
-              }
-
-              // Only update last_active if not in arpeggiator mode
-              if !arpeggiator {
-                *last_active = Some(active_pos);
               }
             }
 
