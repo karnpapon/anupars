@@ -25,8 +25,9 @@ pub enum Message {
       crate::core::scale::ScaleMode,
       usize,
       usize,
+      bool,
     ),
-  ), // (grid_index((curr*h)+w), y_position, grid_width, grid_height, scale_mode, bpm, trigger_pos_y)
+  ), // (grid_index((curr*h)+w), y_position, grid_width, grid_height, scale_mode, bpm, trigger_pos_y, hold)
   SwitchDevice(usize),
   Panic(),
   SetTempo(usize),
@@ -172,6 +173,7 @@ impl Midi {
             scale_mode,
             bpm,
             active_pos,
+            hold,
           )) => {
             self.trigger_w_position(
               grid_index,
@@ -181,6 +183,7 @@ impl Midi {
               scale_mode,
               bpm,
               active_pos,
+              hold,
             );
           }
           Message::SetTempo(bpm) => {
@@ -265,6 +268,7 @@ impl Midi {
     scale_mode: crate::core::scale::ScaleMode,
     bpm: usize,
     trigger_pos_y: usize,
+    hold: bool,
   ) {
     // Use the actual grid height passed as parameter
     if grid_height == 0 {
@@ -292,7 +296,15 @@ impl Midi {
     } else {
       base_length
     };
-    let note_length = (calculated_length as u8).min(127);
+
+    // If hold is active, double the note length to last until next of next triggering
+    let final_length = if hold {
+      calculated_length * 2
+    } else {
+      calculated_length
+    };
+
+    let note_length = (final_length as u8).min(127);
     let midi_msg = MidiMsg::from(note_index, octave, note_length, vel, 0, false);
     let _ = self.trigger(&midi_msg, true);
     self.tx.send(Message::Push(midi_msg)).unwrap();

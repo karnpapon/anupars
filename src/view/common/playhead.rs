@@ -185,6 +185,7 @@ pub struct PlayheadArea {
   pushed_positions: Arc<Mutex<HashMap<(usize, usize), bool>>>,
   pub ui_update_queue: Arc<Mutex<VecDeque<UIUpdate>>>,
   step_index: Arc<Mutex<usize>>,
+  hold_next_note: Arc<Mutex<bool>>,
   // #[cfg(debug_assertions)]
   // timing_stats: Arc<TimingStats>,
 }
@@ -220,6 +221,7 @@ impl PlayheadArea {
       pushed_positions: Arc::new(Mutex::new(HashMap::new())),
       ui_update_queue: Arc::new(Mutex::new(VecDeque::new())),
       step_index: Arc::new(Mutex::new(0)),
+      hold_next_note: Arc::new(Mutex::new(false)),
       // #[cfg(debug_assertions)]
       // timing_stats: Arc::new(TimingStats::new()),
     }
@@ -534,6 +536,14 @@ impl PlayheadArea {
     let mut triggered = false;
     let pos = self.pos.lock().unwrap();
 
+    // Check if next note should be held
+    let mut hold_next = self.hold_next_note.lock().unwrap();
+    let should_hold = *hold_next;
+    if should_hold {
+      *hold_next = false; // Clear after reading
+    }
+    drop(hold_next);
+
     // Trigger MIDI for current playhead position if matched
     if let Some(matcher) = self.text_matcher.lock().unwrap().as_ref() {
       if matcher.get(&curr_running_playhead).is_some() {
@@ -545,6 +555,7 @@ impl PlayheadArea {
           scale_mode,
           current_tempo,
           pos.y,
+          should_hold,
         )));
         triggered = true;
       }
@@ -580,6 +591,7 @@ impl PlayheadArea {
               x_scale_mode,
               current_tempo,
               y,
+              false, // sweep mode notes don't use hold
             )));
           }
         }
@@ -935,14 +947,17 @@ impl PlayheadArea {
       return;
     }
 
-    if abs_x.is_multiple_of(consts::QUEUE_OP_SPACING) {
+    // Check if this is a "space" position (where event operators are defined)
+    let is_space = abs_x.is_multiple_of(consts::EVENT_OP_SPACING);
+
+    // Only execute queue operators if NOT on a space position
+    if abs_x.is_multiple_of(consts::QUEUE_OP_SPACING) && !is_space {
       let position_index = abs_x / consts::QUEUE_OP_SPACING;
       self.execute_queue_operator(position_index);
     }
 
-    if abs_x.is_multiple_of(consts::EVENT_OP_SPACING)
-      && self.event_operator_mode.load(Ordering::Relaxed)
-    {
+    // Event operators only execute on space positions when event_operator_mode is enabled
+    if is_space && self.event_operator_mode.load(Ordering::Relaxed) {
       let position_index = abs_x / consts::EVENT_OP_SPACING;
       self.execute_event_operator(position_index);
     }
@@ -1300,11 +1315,41 @@ impl PlayheadArea {
               );
 
               // ? should sweep mode effect accumulation value
+              // Handle accumulation mode (for position operators)
               if matched {
                 if let Some(new_active_pos) = self.handle_accumulation_mode(abs_x, &cb_sink) {
                   active_pos = new_active_pos;
                 }
               }
+              // let op_front = self.operator_queue.lock().unwrap().front().cloned();
+
+              // if let Some(QueueItem::Event(event_op)) = op_front {
+              //   match event_op {
+              //     EventOperator::X => {
+              //       let mut hold = self.hold_next_note.lock().unwrap();
+              //       *hold = true;
+              //     }
+              //     EventOperator::R | EventOperator::C => {
+              //       // NO OP for now.
+              //     }
+              //   }
+              //   self.operator_queue.lock().unwrap().pop_front();
+
+              //   let mut ui_queue = self.ui_update_queue.lock().unwrap();
+              //   let queue_display = if self.operator_queue.lock().unwrap().is_empty() {
+              //     "[]".to_string()
+              //   } else {
+              //     let items: Vec<String> = self
+              //       .operator_queue
+              //       .lock()
+              //       .unwrap()
+              //       .iter()
+              //       .map(|item| format!("{}", item))
+              //       .collect();
+              //     format!("[{}]", items.join(", "))
+              //   };
+              //   ui_queue.push_back(UIUpdate::OpQueueDisplay(queue_display));
+              // }
 
               self.update_active_pos_ui(active_pos, &cb_sink);
             }
