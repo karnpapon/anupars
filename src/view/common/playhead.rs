@@ -419,12 +419,6 @@ impl PlayheadArea {
     self.drag_start_y.store(top_left.y, Ordering::Relaxed);
   }
 
-  fn calculate_adjusted_pos(&self, pos: usize) -> usize {
-    let ratio = *self.ratio.lock().unwrap();
-    let divisor = std::cmp::max(1, 16 / ratio.1);
-    pos / divisor
-  }
-
   pub fn set_actived_pos(&self, pos: usize) {
     let area = self.area.lock().unwrap();
     let mut actived_pos = self.actived_pos.lock().unwrap();
@@ -436,8 +430,6 @@ impl PlayheadArea {
     let playhead_x = area.left();
     let playhead_y = area.top();
     let canvas_w = self.grid_width.load(Ordering::Relaxed);
-
-    let adjusted_pos = self.calculate_adjusted_pos(pos);
 
     if arpeggiator {
       let regex_indexes = self.regex_indexes.lock().unwrap();
@@ -454,9 +446,9 @@ impl PlayheadArea {
 
       if !matches.is_empty() {
         let step = if random {
-          playback_modes::get_random_index(adjusted_pos, matches.len())
+          playback_modes::get_random_index(pos, matches.len())
         } else {
-          adjusted_pos % matches.len()
+          pos % matches.len()
         };
         let (x, y) = matches[step];
         actived_pos.x = x;
@@ -464,7 +456,7 @@ impl PlayheadArea {
       } else {
         // No matches, fallback to normal running
         playback_modes::calculate_position_fallback(
-          adjusted_pos,
+          pos,
           playhead_w,
           playhead_h,
           reverse,
@@ -475,7 +467,7 @@ impl PlayheadArea {
     } else {
       // Normal running without arpeggiator
       playback_modes::calculate_position_fallback(
-        adjusted_pos,
+        pos,
         playhead_w,
         playhead_h,
         reverse,
@@ -1279,22 +1271,21 @@ impl PlayheadArea {
             // let start = Instant::now();
 
             let ratio = self.ratio.lock().unwrap();
-            let reciprocal = 16 / ratio.1;
+            let divider = 16 / ratio.1;
             drop(ratio);
 
             // Only advance step_index when ratio triggers
-            let should_advance = tick % reciprocal == 0;
+            let should_advance = tick % divider == 0;
             if should_advance {
               let mut step_idx = self.step_index.lock().unwrap();
               *step_idx += 1;
               self.set_actived_pos(*step_idx);
-            }
+              drop(step_idx);
 
-            let active_pos_mutex = self.actived_pos.lock().unwrap();
-            let mut active_pos = *active_pos_mutex;
-            drop(active_pos_mutex);
+              let active_pos_mutex = self.actived_pos.lock().unwrap();
+              let mut active_pos = *active_pos_mutex;
+              drop(active_pos_mutex);
 
-            if should_advance {
               let (abs_x, abs_y, curr_running_playhead) =
                 self.calculate_absolute_position(active_pos);
 
@@ -1314,9 +1305,9 @@ impl PlayheadArea {
                   active_pos = new_active_pos;
                 }
               }
-            }
 
-            self.update_active_pos_ui(active_pos, &cb_sink);
+              self.update_active_pos_ui(active_pos, &cb_sink);
+            }
 
             // #[cfg(debug_assertions)]
             // {
