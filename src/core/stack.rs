@@ -14,6 +14,7 @@ pub enum Message {
   Push(MidiMsg),
   Hold(MidiMsg),
   Release(MidiMsg),
+  ReleaseAll(),
 }
 
 pub struct Stack {
@@ -45,6 +46,21 @@ impl Stack {
           }
           Message::Release(midi_msg) => {
             self.release(midi_msg, &_midi_tx);
+          }
+          Message::ReleaseAll() => {
+            let mut held = self.held_notes.lock().unwrap();
+            let mut stack = self.stack.lock().unwrap();
+            let notes_to_release: Vec<midi::MidiMsg> = held.values().cloned().collect();
+
+            held.clear();
+            stack.clear();
+
+            drop(held);
+            drop(stack);
+
+            for msg in notes_to_release {
+              let _ = _midi_tx.send(midi::Message::Trigger(msg, false));
+            }
           }
         }
       }

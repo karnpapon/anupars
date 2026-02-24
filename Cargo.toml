@@ -31,6 +31,7 @@ nom_locate = "4.0.0"
 rosc = "0.8.1"
 rand = "0.8.5"
 ctrlc = "3.5.2"
+ringbuffer = "0.16.0"
 
 [profile.release]
 panic = "abort"   # Strip expensive panic clean-up logic

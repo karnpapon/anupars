@@ -1,3 +1,4 @@
+use ringbuffer::{ConstGenericRingBuffer, RingBuffer};
 use std::collections::hash_map::Entry;
 use std::collections::BTreeSet;
 use std::collections::HashMap;
@@ -181,7 +182,7 @@ pub struct PlayheadArea {
   sweep_mode: AtomicBool,
   ratio: Arc<Mutex<(usize, usize)>>,
   operator_queue: Arc<Mutex<VecDeque<QueueItem>>>,
-  event_queue: Arc<Mutex<VecDeque<EventOperator>>>,
+  event_queue: Arc<Mutex<ConstGenericRingBuffer<EventOperator, 12>>>,
   pushed_positions: Arc<Mutex<HashMap<(usize, usize), bool>>>,
   pub ui_update_queue: Arc<Mutex<VecDeque<UIUpdate>>>,
   step_index: Arc<Mutex<usize>>,
@@ -217,7 +218,7 @@ impl PlayheadArea {
       sweep_mode: AtomicBool::new(false),
       ratio: Arc::new(Mutex::new(consts::DEFAULT_RATIO)),
       operator_queue: Arc::new(Mutex::new(VecDeque::new())),
-      event_queue: Arc::new(Mutex::new(VecDeque::new())),
+      event_queue: Arc::new(Mutex::new(ConstGenericRingBuffer::new())),
       pushed_positions: Arc::new(Mutex::new(HashMap::new())),
       ui_update_queue: Arc::new(Mutex::new(VecDeque::new())),
       step_index: Arc::new(Mutex::new(0)),
@@ -985,8 +986,8 @@ impl PlayheadArea {
     let operator = EVENT_OPERATORS[operator_index];
 
     match operator {
-      EventOperator::R => self.handle_x(),
-      EventOperator::C => self.handle_x(),
+      EventOperator::R => self.handle_r(),
+      EventOperator::C => self.handle_c(),
       EventOperator::X => self.handle_x(),
     }
   }
@@ -994,11 +995,7 @@ impl PlayheadArea {
   fn handle_push(&self) {
     // Check event queue first (FIFO)
     let mut event_queue = self.event_queue.lock().unwrap();
-    let event_op = if !event_queue.is_empty() {
-      event_queue.pop_front()
-    } else {
-      None
-    };
+    let event_op = event_queue.dequeue();
 
     if let Some(event_op) = event_op {
       drop(event_queue);
@@ -1124,7 +1121,7 @@ impl PlayheadArea {
 
   fn handle_r(&self) {
     let mut event_queue = self.event_queue.lock().unwrap();
-    event_queue.push_back(EventOperator::R);
+    event_queue.enqueue(EventOperator::R);
     drop(event_queue);
 
     self.update_queue_display();
@@ -1132,7 +1129,7 @@ impl PlayheadArea {
 
   fn handle_c(&self) {
     let mut event_queue = self.event_queue.lock().unwrap();
-    event_queue.push_back(EventOperator::C);
+    event_queue.enqueue(EventOperator::C);
     drop(event_queue);
 
     self.update_queue_display();
@@ -1140,7 +1137,7 @@ impl PlayheadArea {
 
   fn handle_x(&self) {
     let mut event_queue = self.event_queue.lock().unwrap();
-    event_queue.push_back(EventOperator::X);
+    event_queue.enqueue(EventOperator::X);
     drop(event_queue);
 
     self.update_queue_display();

@@ -155,11 +155,11 @@ impl Menubar {
         );
       })
       .delimiter()
-      .leaf("Reset", move |s| {
+      .leaf("Release All", move |s| {
         s.reset_default_callbacks();
         // Clear MIDI config and stop all notes
         let _ = midi_tx_reset.send(crate::core::midi::Message::ClearMsgConfig());
-        let _ = midi_tx_reset.send(crate::core::midi::Message::Panic());
+        let _ = midi_tx_reset.send(crate::core::midi::Message::ReleaseAll());
       })
       .delimiter()
       .leaf("About", build_about_view)

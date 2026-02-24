@@ -33,7 +33,7 @@ pub enum Message {
   SwitchDevice(usize),
   Panic(),
   SetTempo(usize),
-  AllNotesOff(),
+  ReleaseAll(),
 }
 
 #[derive(Clone, Debug)]
@@ -165,8 +165,8 @@ impl Midi {
           Message::Release(midi_msg) => {
             let _ = stack_tx.send(stack::Message::Release(midi_msg));
           }
-          Message::AllNotesOff() => {
-            self.send_all_notes_off();
+          Message::ReleaseAll() => {
+            let _ = stack_tx.send(stack::Message::ReleaseAll());
           }
           Message::Trigger(msg, is_pressed) => {
             self.trigger(&msg, is_pressed).unwrap();
