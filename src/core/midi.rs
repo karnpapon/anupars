@@ -28,8 +28,10 @@ pub enum Message {
       usize,
       usize,
       bool,
+      bool,
+      usize,
     ),
-  ), // (grid_index((curr*h)+w), y_position, grid_width, grid_height, scale_mode, bpm, trigger_pos_y, hold)
+  ), // (grid_index((curr*h)+w), y_position, grid_width, grid_height, scale_mode, bpm, trigger_pos_y, hold, is_sweep, active_pos_y)
   SwitchDevice(usize),
   Panic(),
   SetTempo(usize),
@@ -186,6 +188,8 @@ impl Midi {
             bpm,
             active_pos,
             hold,
+            is_sweep,
+            active_pos_y,
           )) => {
             self.trigger_w_position(
               grid_index,
@@ -196,6 +200,8 @@ impl Midi {
               bpm,
               active_pos,
               hold,
+              is_sweep,
+              active_pos_y,
             );
           }
           Message::SetTempo(bpm) => {
@@ -281,6 +287,8 @@ impl Midi {
     bpm: usize,
     trigger_pos_y: usize,
     hold: bool,
+    is_sweep: bool,
+    active_pos_y: usize,
   ) {
     // Use the actual grid height passed as parameter
     if grid_height == 0 {
@@ -292,11 +300,23 @@ impl Midi {
       scale_mode.y_to_scale_note(y_position, grid_height, consts::BASE_OCTAVE);
 
     let max_vel = 100.0;
-    let min_vel = 20.0;
+    let min_vel = 10.0;
 
-    // Calculate velocity based on Y position (higher Y = lower velocity) min=27
-    let velocity = max_vel - (trigger_pos_y as f32 / grid_height as f32) * (max_vel - min_vel);
-    let vel = velocity.round() as u8;
+    // Calculate reference velocity at active_pos_y (higher Y = lower velocity)
+    let ref_velocity = max_vel - (active_pos_y as f32 / grid_height as f32) * (max_vel - min_vel);
+
+    let mut vel = if is_sweep {
+      // For sweep mode, scale velocity based on distance from active_pos_y
+      // Closer to active_pos_y = higher velocity (max at active_pos_y)
+      let distance = (trigger_pos_y as i32 - active_pos_y as i32).abs() as f32;
+      let max_distance = grid_height as f32;
+      let proximity_ratio = (1.0 - (distance / max_distance)).max(0.0);
+      (ref_velocity * proximity_ratio).round() as u8 / 2
+    } else {
+      ref_velocity.round() as u8
+    };
+
+    vel = vel.max(min_vel as u8);
 
     // Calculate dynamic note length based on BPM
     // Higher BPM = shorter notes, minimum length is 1

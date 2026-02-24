@@ -545,6 +545,8 @@ impl PlayheadArea {
       current_tempo,
       pos.y,
       hold_next,
+      false, // no sweep mode for normal triggers
+      pos.y, // active_pos_y (same as trigger_pos_y for normal triggers)
     )));
   }
 
@@ -552,6 +554,7 @@ impl PlayheadArea {
     let grid_width = self.grid_width.load(Ordering::Relaxed);
     let grid_height = self.grid_height.load(Ordering::Relaxed);
     let current_tempo = self.tempo.load(Ordering::Relaxed);
+    let active_pos_y = self.pos.lock().unwrap().y;
     // When sweep_mode is enabled, trigger MIDI for all positions along the vertical crosshair
     if self.sweep_mode.load(Ordering::Relaxed) {
       let x_scale_mode = *self.scale_mode_top.lock().unwrap();
@@ -582,7 +585,9 @@ impl PlayheadArea {
               x_scale_mode,
               current_tempo,
               y,
-              false, // sweep mode notes don't use hold
+              false,        // sweep mode notes don't use hold
+              true,         // is_sweep
+              active_pos_y, // reference Y position for velocity calculation
             )));
           }
         }
