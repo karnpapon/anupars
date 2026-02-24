@@ -596,10 +596,6 @@ impl PlayheadArea {
   }
 
   fn handle_accumulation_mode(&self, abs_x: usize, cb_sink: &cursive::CbSink) -> Option<Vec2> {
-    if !self.accumulation_mode.load(Ordering::Relaxed) {
-      return None;
-    }
-
     self.check_operators(abs_x);
 
     let area = self.area.lock().unwrap();
@@ -937,10 +933,6 @@ impl PlayheadArea {
   // Queue operators: P (Push), S (Swap), O (pOp), D (Duplicate) with narrow spacing
   // Event operators: r, c, x with wider spacing
   fn check_operators(&self, abs_x: usize) {
-    if !self.accumulation_mode.load(Ordering::Relaxed) {
-      return;
-    }
-
     // Check if this is a "space" position (where event operators are defined)
     let is_space = abs_x.is_multiple_of(consts::EVENT_OP_SPACING);
 
@@ -954,6 +946,25 @@ impl PlayheadArea {
     if is_space && self.event_operator_mode.load(Ordering::Relaxed) {
       let position_index = abs_x / consts::EVENT_OP_SPACING;
       self.execute_event_operator(position_index);
+    }
+  }
+
+  fn execute_front_event_op_in_queue(&self) {
+    // if front of queue is an event, we execute it immediately and remove from queue
+    let op_front = self.operator_queue.lock().unwrap().front().cloned();
+    if let Some(QueueItem::Event(ev_op)) = op_front {
+      match ev_op {
+        EventOperator::X => {
+          self.hold_next_note.store(
+            !self.hold_next_note.load(Ordering::Relaxed),
+            Ordering::Relaxed,
+          );
+        }
+        EventOperator::R | EventOperator::C => {
+          // NO OP for now.
+        }
+      }
+      // self.operator_queue.lock().unwrap().pop_front();
     }
   }
 
@@ -992,7 +1003,7 @@ impl PlayheadArea {
 
     match operator {
       EventOperator::R => self.handle_r(),
-      EventOperator::C => self.handle_c(),
+      EventOperator::C => self.handle_x(),
       EventOperator::X => self.handle_x(),
     }
   }
@@ -1004,23 +1015,6 @@ impl PlayheadArea {
 
     if let Some(event_op) = event_op {
       drop(event_queue);
-
-      // if front of queue is an event, we execute it immediately and remove from queue
-      let op_front = self.operator_queue.lock().unwrap().front().cloned();
-      if let Some(QueueItem::Event(ev_op)) = op_front {
-        match ev_op {
-          EventOperator::X => {
-            self.hold_next_note.store(
-              !self.hold_next_note.load(Ordering::Relaxed),
-              Ordering::Relaxed,
-            );
-          }
-          EventOperator::R | EventOperator::C => {
-            // NO OP for now.
-          }
-        }
-        self.operator_queue.lock().unwrap().pop_front();
-      }
 
       // Push the event to the main queue
       let mut queue = self.operator_queue.lock().unwrap();
@@ -1318,10 +1312,18 @@ impl PlayheadArea {
               // Handle accumulation mode (for position operators)
               if let Some(matcher) = self.text_matcher.lock().unwrap().as_ref() {
                 if matcher.get(&curr_running_playhead).is_some() {
-                  if let Some(new_active_pos) = self.handle_accumulation_mode(abs_x, &cb_sink) {
-                    active_pos = new_active_pos;
+                  if self.accumulation_mode.load(Ordering::Relaxed) {
+                    if let Some(new_active_pos) = self.handle_accumulation_mode(abs_x, &cb_sink) {
+                      active_pos = new_active_pos;
+                    }
+                    self.execute_front_event_op_in_queue();
                   }
                   self.trigger_midi_if_matched(curr_running_playhead, note_position, scale_mode);
+                  if self.hold_next_note.load(Ordering::Relaxed) {
+                    self.hold_next_note.store(false, Ordering::Relaxed);
+                    self.operator_queue.lock().unwrap().pop_front();
+                    self.update_queue_display();
+                  }
                 }
               }
 

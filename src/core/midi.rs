@@ -332,17 +332,12 @@ impl Midi {
     let note_length = (calculated_length as u8).min(127);
     let midi_msg = MidiMsg::from(note_index, octave, note_length, vel, 0, false);
 
-    // Trigger the MIDI note on
     let _ = self.trigger(&midi_msg, true);
 
-    // Handle hold logic
     if hold {
-      // Hold this note indefinitely (don't auto-release)
       self.tx.send(Message::Hold(midi_msg)).unwrap();
     } else {
-      // Check if we need to release a previously held note with the same pitch
-      // Then play this note normally (with auto-release)
-      self.tx.send(Message::Release(midi_msg.clone())).unwrap();
+      self.tx.send(Message::ReleaseAll()).unwrap();
       self.tx.send(Message::Push(midi_msg)).unwrap();
     }
   }
