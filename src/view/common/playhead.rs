@@ -2,6 +2,7 @@ use ringbuffer::{ConstGenericRingBuffer, RingBuffer};
 use std::collections::hash_map::Entry;
 use std::collections::BTreeSet;
 use std::collections::HashMap;
+use std::collections::HashSet;
 use std::collections::VecDeque;
 use std::fmt;
 use std::sync::atomic::AtomicBool;
@@ -181,7 +182,7 @@ pub struct PlayheadArea {
   drain_queue_mode: AtomicBool,
   sweep_mode: AtomicBool,
   ratio: Arc<Mutex<(usize, usize)>>,
-  operator_queue: Arc<Mutex<VecDeque<QueueItem>>>,
+  operator_queue: Arc<Mutex<VecDeque<QueueItem>>>, // ? hmm, should this be a ring buff
   event_queue: Arc<Mutex<ConstGenericRingBuffer<EventOperator, 12>>>,
   pushed_positions: Arc<Mutex<HashMap<(usize, usize), bool>>>,
   pub ui_update_queue: Arc<Mutex<VecDeque<UIUpdate>>>,
@@ -555,6 +556,10 @@ impl PlayheadArea {
     let grid_height = self.grid_height.load(Ordering::Relaxed);
     let current_tempo = self.tempo.load(Ordering::Relaxed);
     let active_pos_y = self.pos.lock().unwrap().y;
+
+    // for preventing duplicate MIDI triggers in sweep mode
+    let mut tmp_midi_dict: HashSet<usize> = HashSet::new();
+
     // When sweep_mode is enabled, trigger MIDI for all positions along the vertical crosshair
     if self.sweep_mode.load(Ordering::Relaxed) {
       let x_scale_mode = *self.scale_mode_top.lock().unwrap();
@@ -576,7 +581,8 @@ impl PlayheadArea {
 
         // Check if this position matches and trigger MIDI
         if let Some(matcher) = self.text_matcher.lock().unwrap().as_ref() {
-          if matcher.contains_key(&crosshair_index) {
+          if matcher.contains_key(&crosshair_index) && !tmp_midi_dict.contains(&crosshair_index) {
+            tmp_midi_dict.insert(crosshair_index);
             let _ = self.midi_tx.send(midi::Message::TriggerWithPosition((
               crosshair_index,
               x_note_position,
