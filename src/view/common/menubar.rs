@@ -30,7 +30,7 @@ use cursive::Cursive;
 use cursive::With;
 
 use super::grid_editor::GridEditor;
-use crate::core::{consts, disspress, utils};
+use crate::core::{consts, disspress};
 
 #[derive(Clone, Copy)]
 pub struct Menubar {
@@ -76,7 +76,8 @@ impl Menubar {
       OnEventView::new(Dialog::text(format!(
         "{}\n\n{}",
         "DOCUMENTATION",
-        utils::build_doc_string(&consts::APP_DOCS)
+        // utils::build_doc_string(&consts::APP_DOCS)
+        "soon..."
       )))
       .on_event(Event::Key(Key::Esc), |s| {
         // Menubar::show_doc_view(s, false);
