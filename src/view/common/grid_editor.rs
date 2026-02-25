@@ -39,6 +39,7 @@ pub struct GridEditor {
   pub show_keyboard: bool,
   pub scale_mode_left: crate::core::scale::ScaleMode,
   pub scale_mode_top: crate::core::scale::ScaleMode,
+  pub scale_root_top: crate::core::scale::ScaleRoot,
   pub reverse_mode: bool,
   pub arpeggiator_mode: bool,
   pub random_mode: bool,
@@ -58,6 +59,7 @@ impl GridEditor {
       show_keyboard: true,
       scale_mode_left: crate::core::scale::ScaleMode::default(),
       scale_mode_top: crate::core::scale::ScaleMode::default(),
+      scale_root_top: crate::core::scale::ScaleRoot::default(),
       reverse_mode: false,
       arpeggiator_mode: false,
       random_mode: false,
@@ -75,9 +77,12 @@ impl GridEditor {
       return (0.0, BASE_OCTAVE, "C");
     }
 
-    let (note_index, octave) = self
-      .scale_mode_left
-      .y_to_scale_note(y, total_rows, BASE_OCTAVE);
+    let (note_index, octave) = self.scale_mode_left.pos_to_scale_note(
+      y,
+      total_rows,
+      BASE_OCTAVE,
+      self.scale_root_top.to_root_offset(),
+    );
 
     (
       note_index,
@@ -94,9 +99,12 @@ impl GridEditor {
       return (0.0, BASE_OCTAVE, "C");
     }
 
-    let (note_index, octave) = self
-      .scale_mode_top
-      .y_to_scale_note(y, total_rows, BASE_OCTAVE);
+    let (note_index, octave) = self.scale_mode_top.pos_to_scale_note(
+      y,
+      total_rows,
+      BASE_OCTAVE,
+      self.scale_root_top.to_root_offset(),
+    );
 
     (
       note_index,

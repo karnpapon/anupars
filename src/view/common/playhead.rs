@@ -147,6 +147,7 @@ pub enum Message {
   SetGridSize(usize, usize),
   SetScaleModeLeft(crate::core::scale::ScaleMode),
   SetScaleModeTop(crate::core::scale::ScaleMode),
+  SetScaleRootTop(crate::core::scale::ScaleRoot),
   ToggleAccumulationMode(cursive::CbSink),
   ToggleReverseMode(cursive::CbSink),
   ToggleArpeggiatorMode(cursive::CbSink),
@@ -173,6 +174,7 @@ pub struct PlayheadArea {
   prev_active_pos: Arc<Mutex<Vec2>>,
   scale_mode_left: Arc<Mutex<crate::core::scale::ScaleMode>>,
   scale_mode_top: Arc<Mutex<crate::core::scale::ScaleMode>>,
+  scale_root_top: Arc<Mutex<crate::core::scale::ScaleRoot>>,
   accumulation_counter: Arc<Mutex<usize>>,
   accumulation_mode: AtomicBool,
   reverse_mode: AtomicBool,
@@ -209,6 +211,7 @@ impl PlayheadArea {
       prev_active_pos: Arc::new(Mutex::new(Vec2::zero())),
       scale_mode_left: Arc::new(Mutex::new(crate::core::scale::ScaleMode::default())),
       scale_mode_top: Arc::new(Mutex::new(crate::core::scale::ScaleMode::default())),
+      scale_root_top: Arc::new(Mutex::new(crate::core::scale::ScaleRoot::default())),
       accumulation_counter: Arc::new(Mutex::new(0)),
       accumulation_mode: AtomicBool::new(false),
       reverse_mode: AtomicBool::new(false),
@@ -548,6 +551,7 @@ impl PlayheadArea {
       hold_next,
       false, // no sweep mode for normal triggers
       pos.y, // active_pos_y (same as trigger_pos_y for normal triggers)
+      self.scale_root_top.lock().unwrap().to_root_offset(),
     )));
   }
 
@@ -594,6 +598,7 @@ impl PlayheadArea {
               false,        // sweep mode notes don't use hold
               true,         // is_sweep
               active_pos_y, // reference Y position for velocity calculation
+              self.scale_root_top.lock().unwrap().to_root_offset(),
             )));
           }
         }
@@ -1413,6 +1418,10 @@ impl PlayheadArea {
           Message::SetScaleModeLeft(scale_mode) => {
             let mut mode = self.scale_mode_left.lock().unwrap();
             *mode = scale_mode;
+          }
+          Message::SetScaleRootTop(scale_root) => {
+            let mut root = self.scale_root_top.lock().unwrap();
+            *root = scale_root;
           }
           Message::SetScaleModeTop(scale_mode) => {
             let mut mode = self.scale_mode_top.lock().unwrap();

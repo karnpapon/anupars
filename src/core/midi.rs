@@ -30,6 +30,7 @@ pub enum Message {
       bool,
       bool,
       usize,
+      u8,
     ),
   ), // (grid_index((curr*h)+w), y_position, grid_width, grid_height, scale_mode, bpm, trigger_pos_y, hold, is_sweep, active_pos_y)
   SwitchDevice(usize),
@@ -190,6 +191,7 @@ impl Midi {
             hold,
             is_sweep,
             active_pos_y,
+            scale_root_offset,
           )) => {
             self.trigger_w_position(
               grid_index,
@@ -202,6 +204,7 @@ impl Midi {
               hold,
               is_sweep,
               active_pos_y,
+              scale_root_offset,
             );
           }
           Message::SetTempo(bpm) => {
@@ -289,6 +292,7 @@ impl Midi {
     hold: bool,
     is_sweep: bool,
     active_pos_y: usize,
+    scale_root_offset: u8,
   ) {
     // Use the actual grid height passed as parameter
     if grid_height == 0 {
@@ -296,8 +300,12 @@ impl Midi {
     }
 
     // Use scale mode to map position to note
-    let (note_index, octave) =
-      scale_mode.y_to_scale_note(y_position, grid_height, consts::BASE_OCTAVE);
+    let (note_index, octave) = scale_mode.pos_to_scale_note(
+      y_position,
+      grid_height,
+      consts::BASE_OCTAVE,
+      scale_root_offset,
+    );
 
     let max_vel = 100.0;
     let min_vel = 10.0;

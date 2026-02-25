@@ -129,6 +129,7 @@ impl Menubar {
       .delimiter()
       .subtree("Scale (Left)", build_scale_menu_left())
       .subtree("Scale (Top)", build_scale_menu_top())
+      .subtree("Scale Root (Top)", build_scale_root_menu_top())
       .delimiter()
       .leaf("Reverse", |s| {
         s.call_on_name(
@@ -248,6 +249,30 @@ fn build_scale_menu_top() -> cursive::menu::Tree {
               .playhead_tx
               .send(super::playhead_controller::Message::SetScaleModeTop(
                 scale_clone,
+              ))
+              .unwrap();
+          },
+        );
+      }));
+    }
+  })
+}
+
+fn build_scale_root_menu_top() -> cursive::menu::Tree {
+  use crate::core::scale::ScaleRoot;
+
+  menu::Tree::new().with(|tree| {
+    for root in ScaleRoot::all() {
+      let root_clone = *root;
+      tree.add_item(menu::Item::leaf(root.name(), move |s| {
+        s.call_on_name(
+          consts::canvas_editor_section_view,
+          |canvas: &mut Canvas<GridEditor>| {
+            canvas
+              .state_mut()
+              .playhead_tx
+              .send(super::playhead_controller::Message::SetScaleRootTop(
+                root_clone,
               ))
               .unwrap();
           },

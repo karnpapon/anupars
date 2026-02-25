@@ -32,6 +32,7 @@ pub enum Message {
   SetGridSize(usize, usize),
   SetScaleModeLeft(crate::core::scale::ScaleMode),
   SetScaleModeTop(crate::core::scale::ScaleMode),
+  SetScaleRootTop(crate::core::scale::ScaleRoot),
   ToggleAccumulationMode(),
   ToggleReverseMode(),
   ToggleArpeggiatorMode(),
@@ -174,6 +175,25 @@ impl Playhead {
                   move |canvas: &mut Canvas<GridEditor>| {
                     let editor = canvas.state_mut();
                     editor.scale_mode_top = scale_mode;
+                  },
+                );
+              }))
+              .unwrap();
+          }
+          Message::SetScaleRootTop(scale_root) => {
+            let cb_sink = self.cb_sink.clone();
+
+            playhead_area_tx
+              .send(playhead::Message::SetScaleRootTop(scale_root))
+              .unwrap();
+
+            cb_sink
+              .send(Box::new(move |siv| {
+                siv.call_on_name(
+                  consts::canvas_editor_section_view,
+                  move |canvas: &mut Canvas<GridEditor>| {
+                    let editor = canvas.state_mut();
+                    editor.scale_root_top = scale_root;
                   },
                 );
               }))

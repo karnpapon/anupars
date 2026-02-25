@@ -20,6 +20,81 @@ pub enum ScaleMode {
   Thai7Tet, // Thai 7-TET microtonal scale
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum ScaleRoot {
+  #[default]
+  C = 0,
+  CSharp = 1,
+  D = 2,
+  DSharp = 3,
+  E = 4,
+  F = 5,
+  FSharp = 6,
+  G = 7,
+  GSharp = 8,
+  A = 9,
+  ASharp = 10,
+  B = 11,
+}
+
+impl ScaleRoot {
+  /// Get human-readable name
+  pub fn name(&self) -> &'static str {
+    match self {
+      ScaleRoot::C => "C",
+      ScaleRoot::CSharp => "C#",
+      ScaleRoot::D => "D",
+      ScaleRoot::DSharp => "D#",
+      ScaleRoot::E => "E",
+      ScaleRoot::F => "F",
+      ScaleRoot::FSharp => "F#",
+      ScaleRoot::G => "G",
+      ScaleRoot::GSharp => "G#",
+      ScaleRoot::A => "A",
+      ScaleRoot::ASharp => "A#",
+      ScaleRoot::B => "B",
+    }
+  }
+
+  /// Get all available scale roots
+  pub fn all() -> &'static [ScaleRoot] {
+    &[
+      ScaleRoot::C,
+      ScaleRoot::CSharp,
+      ScaleRoot::D,
+      ScaleRoot::DSharp,
+      ScaleRoot::E,
+      ScaleRoot::F,
+      ScaleRoot::FSharp,
+      ScaleRoot::G,
+      ScaleRoot::GSharp,
+      ScaleRoot::A,
+      ScaleRoot::ASharp,
+      ScaleRoot::B,
+    ]
+  }
+
+  /// Get the root note offset (0-11) for this scale root
+  /// This is added to the intervals of the scale mode to get the actual note indices
+  #[allow(clippy::wrong_self_convention)]
+  pub fn to_root_offset(&self) -> u8 {
+    match self {
+      ScaleRoot::C => 0,
+      ScaleRoot::CSharp => 1,
+      ScaleRoot::D => 2,
+      ScaleRoot::DSharp => 3,
+      ScaleRoot::E => 4,
+      ScaleRoot::F => 5,
+      ScaleRoot::FSharp => 6,
+      ScaleRoot::G => 7,
+      ScaleRoot::GSharp => 8,
+      ScaleRoot::A => 9,
+      ScaleRoot::ASharp => 10,
+      ScaleRoot::B => 11,
+    }
+  }
+}
+
 impl ScaleMode {
   /// Get the intervals (in semitones from root) for this scale mode
   /// Returns which notes (0-11) are included in the scale
@@ -95,9 +170,26 @@ impl ScaleMode {
     ]
   }
 
+  pub fn get_root_note(&self, note_index: f32) -> f32 {
+    let intervals = self.intervals();
+    let note_mod = note_index % 12.0;
+    for &interval in intervals {
+      if (interval - note_mod).abs() < 0.01 {
+        return interval;
+      }
+    }
+    note_index
+  }
+
   /// Map a Y position to the nearest note in the scale
   /// Returns (note_index, octave) where note_index can be fractional for microtonal scales
-  pub fn y_to_scale_note(&self, y: usize, total_rows: usize, base_octave: u8) -> (f32, u8) {
+  pub fn pos_to_scale_note(
+    &self,
+    y: usize,
+    total_rows: usize,
+    base_octave: u8,
+    root_note: u8,
+  ) -> (f32, u8) {
     if total_rows == 0 {
       return (0.0, base_octave);
     }
@@ -118,11 +210,16 @@ impl ScaleMode {
 
     // Calculate which scale degree and octave
     let scale_degree = inverted_y % scale_length;
-    let octave_offset = inverted_y / scale_length;
+    let octave_offset = (inverted_y / scale_length) as u8;
+    let interval = intervals[scale_degree];
 
-    let note_index = intervals[scale_degree];
-    let octave = base_octave + (octave_offset as u8);
+    // Add the root note (0-11) to find the real pitch class
+    let raw_pitch = interval + (root_note % 12) as f32;
 
-    (note_index, octave)
+    // If the root + interval > 12, it pushes into the next octave
+    let final_note_index = raw_pitch % 12.0;
+    let extra_octave = (raw_pitch / 12.0).floor() as u8;
+
+    (final_note_index, base_octave + octave_offset + extra_octave)
   }
 }
