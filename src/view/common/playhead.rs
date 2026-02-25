@@ -1,3 +1,4 @@
+use arrayvec::ArrayVec;
 use ringbuffer::{ConstGenericRingBuffer, RingBuffer};
 use std::collections::hash_map::Entry;
 use std::collections::BTreeSet;
@@ -21,6 +22,7 @@ use cursive::Vec2;
 use cursive::XY;
 
 use crate::app::AppMode;
+use crate::core::regex;
 use crate::core::{consts, midi, playback_modes, rect::Rect, regex::Match, utils};
 use crate::view::common::grid_editor::GridEditor;
 use crate::view::common::playhead_controller::Direction;
@@ -160,10 +162,13 @@ pub enum Message {
 }
 
 pub struct PlayheadArea {
+  /// position of the top-left corner of the playhead area in the grid
   pos: Arc<Mutex<Vec2>>,
+  /// area of the playhead, defined by the top-left corner (pos) and its width and height
   area: Arc<Mutex<Rect>>,
   drag_start_x: AtomicUsize,
   drag_start_y: AtomicUsize,
+  /// current running position of the playhead within, relative to the playhead area (0,0)
   actived_pos: Arc<Mutex<Vec2>>,
   regex_indexes: Arc<Mutex<BTreeSet<usize>>>,
   text_matcher: Arc<Mutex<Option<HashMap<usize, Match>>>>,
@@ -184,8 +189,8 @@ pub struct PlayheadArea {
   drain_queue_mode: AtomicBool,
   sweep_mode: AtomicBool,
   ratio: Arc<Mutex<(usize, usize)>>,
-  operator_queue: Arc<Mutex<VecDeque<QueueItem>>>, // ? hmm, should this be a ring buff
-  event_queue: Arc<Mutex<ConstGenericRingBuffer<EventOperator, 12>>>,
+  operator_queue: Arc<Mutex<ArrayVec<QueueItem, { consts::OP_QUEUE_CAPACITY }>>>,
+  event_queue: Arc<Mutex<ConstGenericRingBuffer<EventOperator, { consts::EVENT_QUEUE_CAPACITY }>>>,
   pushed_positions: Arc<Mutex<HashMap<(usize, usize), bool>>>,
   pub ui_update_queue: Arc<Mutex<VecDeque<UIUpdate>>>,
   step_index: Arc<Mutex<usize>>,
@@ -221,7 +226,7 @@ impl PlayheadArea {
       drain_queue_mode: AtomicBool::new(false),
       sweep_mode: AtomicBool::new(false),
       ratio: Arc::new(Mutex::new(consts::DEFAULT_RATIO)),
-      operator_queue: Arc::new(Mutex::new(VecDeque::new())),
+      operator_queue: Arc::new(Mutex::new(ArrayVec::new())),
       event_queue: Arc::new(Mutex::new(ConstGenericRingBuffer::new())),
       pushed_positions: Arc::new(Mutex::new(HashMap::new())),
       ui_update_queue: Arc::new(Mutex::new(VecDeque::new())),
@@ -484,6 +489,7 @@ impl PlayheadArea {
     }
   }
 
+  /// get absolute position the same way it being displayed in console "POS: (x,y)" and flattened index
   fn calculate_absolute_position(&self, active_pos: Vec2) -> (usize, usize, usize) {
     let pos = self.pos.lock().unwrap();
     let grid_width = self.grid_width.load(Ordering::Relaxed);
@@ -493,6 +499,7 @@ impl PlayheadArea {
     (abs_x, abs_y, curr_running_playhead)
   }
 
+  // TODO: revisit keyboard-left
   fn determine_note_position_and_scale(
     &self,
     active_pos: Vec2,
@@ -500,32 +507,39 @@ impl PlayheadArea {
     abs_y: usize,
   ) -> (usize, crate::core::scale::ScaleMode) {
     let mut prev_active = self.prev_active_pos.lock().unwrap();
-    let prev_active_pos = *prev_active;
+    // let prev_active_pos = *prev_active;
 
-    let x_diff = active_pos.x.abs_diff(prev_active_pos.x);
-    let y_diff = active_pos.y.abs_diff(prev_active_pos.y);
+    // let x_diff = active_pos.x.abs_diff(prev_active_pos.x);
+    // let y_diff = active_pos.y.abs_diff(prev_active_pos.y);
 
     *prev_active = active_pos;
     drop(prev_active);
 
     let grid_height = self.grid_height.load(Ordering::Relaxed);
-    let is_horizontal =
-      self.area.lock().unwrap().width() >= 1 && self.area.lock().unwrap().height() == 1;
+    // let is_horizontal =
+    //   self.area.lock().unwrap().width() >= 1 && self.area.lock().unwrap().height() == 1;
 
-    if (x_diff > y_diff) || is_horizontal {
-      // Horizontal movement: use top keyboard mapping
-      let pos = if grid_height > 0 {
-        abs_x % grid_height
-      } else {
-        abs_y
-      };
-      let scale = *self.scale_mode_top.lock().unwrap();
-      (pos, scale)
+    // if (x_diff > y_diff) || is_horizontal {
+    //   // Horizontal movement: use top keyboard mapping
+    //   let pos = if grid_height > 0 {
+    //     abs_x % grid_height
+    //   } else {
+    //     abs_y
+    //   };
+    //   let scale = *self.scale_mode_top.lock().unwrap();
+    //   (pos, scale)
+    // } else {
+    //   // Vertical movement: use left keyboard mapping
+    //   let scale = *self.scale_mode_left.lock().unwrap();
+    //   (abs_y, scale)
+    // }
+    let pos = if grid_height > 0 {
+      abs_x % grid_height
     } else {
-      // Vertical movement: use left keyboard mapping
-      let scale = *self.scale_mode_left.lock().unwrap();
-      (abs_y, scale)
-    }
+      abs_y
+    };
+    let scale = *self.scale_mode_top.lock().unwrap();
+    (pos, scale)
   }
 
   fn trigger_midi_if_matched(
@@ -603,6 +617,45 @@ impl PlayheadArea {
           }
         }
       }
+    }
+  }
+
+  fn check_contains(&self, area: &Rect, matcher: &HashMap<usize, regex::Match>) -> bool {
+    for dx in 0..area.width() {
+      for dy in 0..area.height() {
+        let x = area.top_left.x + dx;
+        let y = area.top_left.y + dy;
+        let pos_index = x * self.grid_height.load(Ordering::Relaxed) + y;
+        if matcher.contains_key(&pos_index) {
+          return true;
+        }
+      }
+    }
+    false
+  }
+
+  fn handle_silent_step(&self, matcher: &HashMap<usize, regex::Match>, cb_sink: &cursive::CbSink) {
+    let area = self.area.lock().unwrap();
+    let has_some_pos = self.check_contains(&area, matcher);
+    let playhead_area_size = area.width() * area.height();
+    drop(area);
+
+    if has_some_pos {
+      return;
+    };
+
+    let mut counter = self.accumulation_counter.lock().unwrap();
+    *counter += 1;
+    let current_count = *counter;
+    self.update_accumulation_ui(current_count, playhead_area_size, cb_sink);
+    if *counter >= playhead_area_size {
+      *counter = 0;
+      drop(counter);
+      self.update_accumulation_ui(0, playhead_area_size, cb_sink);
+      self.perform_accumulation_jump();
+    } else {
+      drop(counter);
+      self.update_accumulation_ui(current_count, playhead_area_size, cb_sink);
     }
   }
 
@@ -692,7 +745,7 @@ impl PlayheadArea {
   ) -> (usize, usize) {
     let mut queue = self.operator_queue.lock().unwrap();
 
-    if let Some(first_item) = queue.front() {
+    if let Some(first_item) = queue.first() {
       match first_item {
         QueueItem::Position(x, y) => {
           let first_pos = (*x, *y);
@@ -708,7 +761,7 @@ impl PlayheadArea {
             )
           } else {
             // Use position from queue (pop from front - FIFO)
-            let item = queue.pop_front().unwrap();
+            let item = queue.remove(0);
             let is_drain = self.drain_queue_mode.load(Ordering::Relaxed);
 
             // Format queue using Display trait for consistency
@@ -961,8 +1014,8 @@ impl PlayheadArea {
   }
 
   fn execute_front_event_op_in_queue(&self) {
-    // if front of queue is an event, we execute it immediately and remove from queue
-    let op_front = self.operator_queue.lock().unwrap().front().cloned();
+    // if front of queue is an event, we execute it immediately
+    let op_front = self.operator_queue.lock().unwrap().first().cloned();
     if let Some(QueueItem::Event(ev_op)) = op_front {
       match ev_op {
         EventOperator::X => {
@@ -975,7 +1028,6 @@ impl PlayheadArea {
           // NO OP for now.
         }
       }
-      // self.operator_queue.lock().unwrap().pop_front();
     }
   }
 
@@ -1029,7 +1081,9 @@ impl PlayheadArea {
 
       // Push the event to the main queue
       let mut queue = self.operator_queue.lock().unwrap();
-      queue.push_back(QueueItem::Event(event_op));
+      if queue.len() < queue.capacity() {
+        queue.push(QueueItem::Event(event_op));
+      }
       drop(queue);
 
       self.update_queue_display();
@@ -1047,7 +1101,9 @@ impl PlayheadArea {
         drop(pushed);
 
         let mut queue = self.operator_queue.lock().unwrap();
-        queue.push_back(QueueItem::Position(push_pos.0, push_pos.1));
+        if queue.len() < queue.capacity() {
+          queue.push(QueueItem::Position(push_pos.0, push_pos.1));
+        }
         drop(queue);
 
         self.update_queue_display();
@@ -1068,7 +1124,8 @@ impl PlayheadArea {
 
   fn handle_pop(&self) {
     let mut queue = self.operator_queue.lock().unwrap();
-    if let Some(item) = queue.pop_front() {
+    if !queue.is_empty() {
+      let item = queue.remove(0);
       drop(queue);
 
       // Only remove from pushed_positions if it was a position
@@ -1084,8 +1141,10 @@ impl PlayheadArea {
 
   fn handle_duplicate(&self) {
     let mut queue = self.operator_queue.lock().unwrap();
-    if let Some(item) = queue.back().cloned() {
-      queue.push_back(item);
+    if let Some(item) = queue.last().cloned() {
+      if queue.len() < queue.capacity() {
+        queue.push(item);
+      }
     }
     drop(queue);
 
@@ -1332,14 +1391,13 @@ impl PlayheadArea {
                   self.trigger_midi_if_matched(curr_running_playhead, note_position, scale_mode);
                   if self.hold_next_note.load(Ordering::Relaxed) {
                     self.hold_next_note.store(false, Ordering::Relaxed);
-                    self.operator_queue.lock().unwrap().pop_front();
+                    self.operator_queue.lock().unwrap().remove(0);
                     self.update_queue_display();
                   }
                 }
+                // self.handle_silent_step(matcher, &cb_sink);
               }
-
               self.trigger_midi_if_matched_sweep(curr_running_playhead, abs_x);
-
               self.update_active_pos_ui(active_pos, &cb_sink);
             }
 
