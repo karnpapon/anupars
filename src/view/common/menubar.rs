@@ -109,18 +109,6 @@ impl Menubar {
       .leaf("Generate Text", generate_contents)
       .leaf("Insert File", build_file_explorer_view)
       .delimiter()
-      .leaf("Arpeggiator", |s| {
-        s.call_on_name(
-          consts::canvas_editor_section_view,
-          |canvas: &mut Canvas<GridEditor>| {
-            canvas
-              .state_mut()
-              .playhead_tx
-              .send(super::playhead_controller::Message::ToggleArpeggiatorMode())
-              .unwrap();
-          },
-        );
-      })
       .subtree(
         "MIDI",
         build_midi_menu(midi_devices.to_vec(), midi_tx.clone()),
@@ -130,31 +118,6 @@ impl Menubar {
       .subtree("Scale (Left)", build_scale_menu_left())
       .subtree("Scale (Top)", build_scale_menu_top())
       .subtree("Scale Root (Top)", build_scale_root_menu_top())
-      .delimiter()
-      .leaf("Reverse", |s| {
-        s.call_on_name(
-          consts::canvas_editor_section_view,
-          |canvas: &mut Canvas<GridEditor>| {
-            canvas
-              .state_mut()
-              .playhead_tx
-              .send(super::playhead_controller::Message::ToggleReverseMode())
-              .unwrap();
-          },
-        );
-      })
-      .leaf("Toggle Accumulation Mode", |s| {
-        s.call_on_name(
-          consts::canvas_editor_section_view,
-          |canvas: &mut Canvas<GridEditor>| {
-            canvas
-              .state_mut()
-              .playhead_tx
-              .send(super::playhead_controller::Message::ToggleAccumulationMode())
-              .unwrap();
-          },
-        );
-      })
       .delimiter()
       .leaf("Release All", move |s| {
         s.reset_default_callbacks();
