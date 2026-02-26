@@ -252,6 +252,13 @@ impl CommandManager {
           .unwrap();
         Ok(None)
       }
+      Command::ChangeScaleMode(dir) => {
+        self
+          .playhead_tx_cloned
+          .send(playhead_controller::Message::CycleScaleMode(*dir))
+          .unwrap();
+        Ok(None)
+      }
     }
   }
 
@@ -342,11 +349,19 @@ impl CommandManager {
     kb.insert("Ctrl+n".into(), vec![Command::ToggleDrainQueue]);
     kb.insert("Ctrl+s".into(), vec![Command::ToggleSweep]);
     kb.insert(
-      "Ctrl+y".into(),
+      "Shift+Plus".into(),
+      vec![Command::ChangeScaleMode(Adjustment::Increase)],
+    );
+    kb.insert(
+      "Shift+Underscore".into(),
+      vec![Command::ChangeScaleMode(Adjustment::Decrease)],
+    );
+    kb.insert(
+      "Equal".into(),
       vec![Command::ChangeRootNote(Adjustment::Increase)],
     );
     kb.insert(
-      "Ctrl+t".into(),
+      "Minus".into(),
       vec![Command::ChangeRootNote(Adjustment::Decrease)],
     );
     kb
@@ -371,6 +386,10 @@ impl CommandManager {
       "PageDown" => Event::Key(Key::PageDown),
       "PauseBreak" => Event::Key(Key::PauseBreak),
       "NumpadCenter" => Event::Key(Key::NumpadCenter),
+      "Plus" => Event::Char('+'),
+      "Underscore" => Event::Char('_'),
+      "Equal" => Event::Char('='),
+      "Minus" => Event::Char('-'),
       "F0" => Event::Key(Key::F0),
       "F1" => Event::Key(Key::F1),
       "F2" => Event::Key(Key::F2),

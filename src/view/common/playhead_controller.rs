@@ -34,6 +34,7 @@ pub enum Message {
   SetScaleModeTop(crate::core::scale::ScaleMode),
   SetScaleRootTop(crate::core::scale::ScaleRoot),
   CycleScaleRootTop(crate::core::command::Adjustment),
+  CycleScaleMode(crate::core::command::Adjustment),
   ToggleAccumulationMode(),
   ToggleReverseMode(),
   ToggleArpeggiatorMode(),
@@ -259,6 +260,12 @@ impl Playhead {
             let cb_sink = self.cb_sink.clone();
             playhead_area_tx
               .send(playhead::Message::CycleScaleRootTop(cb_sink, dir))
+              .unwrap();
+          }
+          Message::CycleScaleMode(dir) => {
+            let cb_sink = self.cb_sink.clone();
+            playhead_area_tx
+              .send(playhead::Message::CycleScaleMode(cb_sink, dir))
               .unwrap();
           }
         }

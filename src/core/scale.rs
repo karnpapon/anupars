@@ -166,6 +166,27 @@ impl ScaleMode {
     }
   }
 
+  pub fn short_name(&self) -> &'static str {
+    match self {
+      ScaleMode::Chromatic => "CHR",
+      ScaleMode::Major => "MAJ",
+      ScaleMode::Minor => "MIN",
+      ScaleMode::HarmonicMinor => "HRM",
+      ScaleMode::MelodicMinor => "MLD",
+      ScaleMode::Dorian => "DRN",
+      ScaleMode::Phrygian => "PHR",
+      ScaleMode::Lydian => "LYD",
+      ScaleMode::Mixolydian => "MIX",
+      ScaleMode::Locrian => "LOC",
+      ScaleMode::MajorPentatonic => "MJP",
+      ScaleMode::MinorPentatonic => "MNP",
+      ScaleMode::Blues => "BLU",
+      ScaleMode::WholeTone => "WHO",
+      ScaleMode::Diminished => "DIM",
+      ScaleMode::Thai7Tet => "THA",
+    }
+  }
+
   /// Check if a note index (0-11) is in this scale
   pub fn contains_note(&self, note_index: f32) -> bool {
     let intervals = self.intervals();
@@ -204,6 +225,15 @@ impl ScaleMode {
       }
     }
     note_index
+  }
+
+  pub fn cycle(&self, adjustment: crate::core::command::Adjustment) -> ScaleMode {
+    let all = Self::all();
+    let idx = all.iter().position(|&m| m == *self).unwrap_or(0);
+    match adjustment {
+      crate::core::command::Adjustment::Increase => all[(idx + 1) % all.len()],
+      crate::core::command::Adjustment::Decrease => all[(idx + all.len() - 1) % all.len()],
+    }
   }
 
   /// Map a Y position to the nearest note in the scale

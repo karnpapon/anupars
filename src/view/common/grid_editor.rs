@@ -387,9 +387,15 @@ fn draw(canvas: &GridEditor, printer: &Printer) {
     // Draw corner symbol where keyboards meet
     let root_note_top = canvas.scale_root_top;
     let root_note_pos = if root_note_top.is_natural() { 1 } else { 0 };
-    let style = Style::from(ColorStyle::front(ColorType::rgb(200, 200, 200)));
+    let style = Style::from(ColorStyle::front(ColorType::rgb(100, 100, 100)));
     printer.with_style(style, |printer| {
-      printer.print((root_note_pos, 0), root_note_top.name());
+      printer.print((root_note_pos, 1), root_note_top.name());
+    });
+
+    let scale_mode_top = canvas.scale_mode_top;
+    let style = Style::from(ColorStyle::front(ColorType::rgb(100, 100, 100)));
+    printer.with_style(style, |printer| {
+      printer.print((0, 0), scale_mode_top.short_name());
     });
 
     let left_keyboard_printer = printer.offset((0, KEYBOARD_MARGIN_TOP));

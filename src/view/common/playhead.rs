@@ -158,6 +158,7 @@ pub enum Message {
   ToggleDrainQueueMode(cursive::CbSink),
   ToggleSweepMode(cursive::CbSink),
   CycleScaleRootTop(cursive::CbSink, crate::core::command::Adjustment),
+  CycleScaleMode(cursive::CbSink, crate::core::command::Adjustment),
   SetTempo(usize),
   SetRatio((usize, usize), cursive::CbSink),
 }
@@ -1002,6 +1003,25 @@ impl PlayheadArea {
       .unwrap();
   }
 
+  pub fn cycle_scale_mode(&self, cb_sink: cursive::CbSink, dir: crate::core::command::Adjustment) {
+    let mut mode = self.scale_mode_top.lock().unwrap();
+    *mode = mode.cycle(dir);
+    let new_mode = *mode;
+    drop(mode);
+
+    cb_sink
+      .send(Box::new(move |siv| {
+        siv.call_on_name(
+          consts::canvas_editor_section_view,
+          |canvas: &mut Canvas<GridEditor>| {
+            let editor = canvas.state_mut();
+            editor.scale_mode_top = new_mode;
+          },
+        );
+      }))
+      .unwrap();
+  }
+
   pub fn scale(&self, (w, h): (i32, i32)) {
     let pos = self.pos.lock().unwrap();
     let mut area = self.area.lock().unwrap();
@@ -1585,6 +1605,9 @@ impl PlayheadArea {
           }
           Message::CycleScaleRootTop(cb_sink, dir) => {
             self.cycle_scale_root(cb_sink, dir);
+          }
+          Message::CycleScaleMode(cb_sink, dir) => {
+            self.cycle_scale_mode(cb_sink, dir);
           }
         }
       }
