@@ -84,6 +84,8 @@ impl Console {
       })
       .with_name(consts::regex_input_unit_view)
       .min_width(10);
+    let regex_matches_amount_unit_view =
+      TextView::new("-").with_name(consts::regex_matches_amount_unit_view);
 
     let flag_view = LinearLayout::horizontal()
       .child(
@@ -111,6 +113,7 @@ impl Console {
         "ERRR:",
         TextView::new("-").with_name(consts::regex_err_display_unit_view),
       )
+      .child("TOTL: ", regex_matches_amount_unit_view)
       .child(
         "MIDI:",
         TextView::new("-").with_name(consts::midi_status_unit_view),
@@ -140,6 +143,7 @@ impl Console {
         TextView::new(utils::build_pos_status_str(app.top_section.pos))
           .with_name(consts::pos_status_unit_view),
       )
+      .child("LCK:", TextView::new("-").with_name(consts::luck_unit_view))
       .full_width()
       .max_width(20)
       .min_width(10);
@@ -147,7 +151,11 @@ impl Console {
     let protocol_controller_section_view = ListView::new()
       .child(
         "MDE:",
-        TextView::new(app.mode.print_modes()).with_name(consts::osc_status_unit_view),
+        TextView::new(app.mode.print_modes()).with_name(consts::mode_unit_view),
+      )
+      .child(
+        "MVT:",
+        TextView::new(app.movement.print_movements()).with_name(consts::movement_unit_view),
       )
       .child("STE: ", input_status_unit_view)
       // .child(
@@ -171,7 +179,7 @@ impl Console {
       .child(DummyView.fixed_width(1))
       .child(
         LinearLayout::vertical()
-          .child(DummyView.fixed_height(1))
+          // .child(DummyView.fixed_height(1))
           .child(
             LinearLayout::horizontal()
               .child(input_controller_section_view.with_name(consts::input_controller_section_view))
@@ -356,7 +364,7 @@ impl Console {
     regex_tx: Sender<regex::Message>,
   ) -> ResizedView<FocusTracker<NamedView<TabPanel>>> {
     let tab = Self::build_tab(app, regex_tx);
-    FocusTracker::new(tab).fixed_height(8)
+    FocusTracker::new(tab).fixed_height(7)
   }
 }
 fn input_submit_note(s: &mut Cursive, midi_msg: &[MidiMsg]) {

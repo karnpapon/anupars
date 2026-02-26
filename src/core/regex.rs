@@ -181,6 +181,11 @@ impl RegExpHandler {
                 },
               )
               .unwrap();
+
+            s.call_on_name(
+              consts::regex_matches_amount_unit_view,
+              |c: &mut TextView| c.set_content("-"),
+            );
           }));
         }
         Message::Solve(data) => {
@@ -189,6 +194,7 @@ impl RegExpHandler {
             .send(Box::new(move |s| {
               let res = match Self::process_event(&data) {
                 Ok(matches) => {
+                  let total_matches = matches.len();
                   let mm = if matches.is_empty() {
                     None
                   } else {
@@ -205,6 +211,11 @@ impl RegExpHandler {
                       },
                     )
                     .unwrap();
+
+                  s.call_on_name(
+                    consts::regex_matches_amount_unit_view,
+                    |c: &mut TextView| c.set_content(total_matches.to_string()),
+                  );
 
                   "".to_string()
                 }

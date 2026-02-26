@@ -75,12 +75,15 @@ pub fn app_empty_dir() -> &'static str {
 //      CATEGORY = "unit" | "section"
 //      IDENTIFIER = short and concise meaningful words
 pub static regex_input_unit_view: &str = "regex_input_unit_view";
+pub static regex_matches_amount_unit_view: &str = "regex_matches_amount_unit_view";
 pub static input_status_unit_view: &str = "input_status_unit_view";
 pub static bpm_status_unit_view: &str = "bpm_status_unit_view";
 pub static ratio_status_unit_view: &str = "ratio_status_unit_view";
 pub static len_status_unit_view: &str = "len_status_unit_view";
 pub static pos_status_unit_view: &str = "pos_status_unit_view";
-pub static osc_status_unit_view: &str = "osc_status_unit_view";
+pub static mode_unit_view: &str = "mode_unit_view";
+pub static movement_unit_view: &str = "movement_unit_view";
+pub static luck_unit_view: &str = "luck_unit_view";
 pub static midi_status_unit_view: &str = "midi_status_unit_view";
 pub static op_queue_status_unit_view: &str = "op_queue_status_unit_view";
 pub static ev_queue_status_unit_view: &str = "ev_queue_status_unit_view";

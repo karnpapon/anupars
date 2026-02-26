@@ -22,6 +22,7 @@ use cursive::Vec2;
 use cursive::XY;
 
 use crate::app::AppMode;
+use crate::app::Movement;
 use crate::core::regex;
 use crate::core::{consts, midi, playback_modes, rect::Rect, regex::Match, utils};
 use crate::view::common::grid_editor::GridEditor;
@@ -151,6 +152,7 @@ pub enum Message {
   SetScaleModeTop(crate::core::scale::ScaleMode),
   SetScaleRootTop(crate::core::scale::ScaleRoot),
   ToggleAccumulationMode(cursive::CbSink),
+  ToggleForwardMode(cursive::CbSink),
   ToggleReverseMode(cursive::CbSink),
   ToggleArpeggiatorMode(cursive::CbSink),
   ToggleRandomMode(cursive::CbSink),
@@ -183,10 +185,9 @@ pub struct PlayheadArea {
   scale_mode_top: Arc<Mutex<crate::core::scale::ScaleMode>>,
   scale_root_top: Arc<Mutex<crate::core::scale::ScaleRoot>>,
   accumulation_counter: Arc<Mutex<usize>>,
+  movement: Arc<Mutex<Movement>>,
   accumulation_mode: AtomicBool,
-  reverse_mode: AtomicBool,
   arpeggiator_mode: AtomicBool,
-  random_mode: AtomicBool,
   event_operator_mode: AtomicBool,
   drain_queue_mode: AtomicBool,
   sweep_mode: AtomicBool,
@@ -220,10 +221,11 @@ impl PlayheadArea {
       scale_mode_top: Arc::new(Mutex::new(crate::core::scale::ScaleMode::default())),
       scale_root_top: Arc::new(Mutex::new(crate::core::scale::ScaleRoot::default())),
       accumulation_counter: Arc::new(Mutex::new(0)),
+      movement: Arc::new(Mutex::new(Movement::Forward)),
+      // reverse_mode: AtomicBool::new(false),
+      // random_mode: AtomicBool::new(false),
       accumulation_mode: AtomicBool::new(false),
-      reverse_mode: AtomicBool::new(false),
       arpeggiator_mode: AtomicBool::new(false),
-      random_mode: AtomicBool::new(false),
       event_operator_mode: AtomicBool::new(false),
       drain_queue_mode: AtomicBool::new(false),
       sweep_mode: AtomicBool::new(false),
@@ -319,53 +321,59 @@ impl PlayheadArea {
   }
 
   fn build_mode_status_string(&self) -> String {
-    let reverse = self.reverse_mode.load(Ordering::Relaxed);
     let arpeggiator = self.arpeggiator_mode.load(Ordering::Relaxed);
     let accumulation = self.accumulation_mode.load(Ordering::Relaxed);
-    let random = self.random_mode.load(Ordering::Relaxed);
     let event_op = self.event_operator_mode.load(Ordering::Relaxed);
     let drain_queue = self.drain_queue_mode.load(Ordering::Relaxed);
     let sweep = self.sweep_mode.load(Ordering::Relaxed);
 
-    let r = format!("{}", AppMode::Reverse);
     let a = format!("{}", AppMode::Arpeggiator);
     let u = format!("{}", AppMode::Accumulation);
-    let d = format!("{}", AppMode::Random);
     let e = format!("{}", AppMode::EventOperator);
     let n = format!("{}", AppMode::DrainQueue);
     let s = format!("{}", AppMode::Sweep);
 
     format!(
-      "{}{}{}{}{}{}{}",
-      if reverse { "R" } else { &r },
+      "{}{}{}{}{}",
       if arpeggiator { "A" } else { &a },
       if accumulation { "U" } else { &u },
-      if random { "D" } else { &d },
       if event_op { "E" } else { &e },
       if drain_queue { "N" } else { &n },
       if sweep { "S" } else { &s }
     )
   }
 
-  pub fn toggle_reverse_mode(&self, cb_sink: cursive::CbSink) {
-    let is_reversed = !self.reverse_mode.load(Ordering::Relaxed);
-    self.reverse_mode.store(is_reversed, Ordering::Relaxed);
+  fn build_movement_status_string(&self) -> String {
+    let movements = [Movement::Forward, Movement::Reverse, Movement::Random];
+    movements
+      .iter()
+      .map(|mv| {
+        let movement = self.movement.lock().unwrap();
+        if *mv == *movement {
+          format!("[{}]", mv.to_string().to_uppercase())
+        } else {
+          format!("{}", mv)
+        }
+      })
+      .collect::<Vec<_>>()
+      .join("")
+  }
 
+  pub fn switch_movement(&self, new_movement: Movement, cb_sink: cursive::CbSink) {
+    let mut movement = self.movement.lock().unwrap();
+    *movement = new_movement;
+    drop(movement);
+
+    let movement_status = self.build_movement_status_string();
     let mode_status = self.build_mode_status_string();
 
     cb_sink
       .send(Box::new(move |siv| {
-        siv.call_on_name(
-          consts::canvas_editor_section_view,
-          |canvas: &mut Canvas<GridEditor>| {
-            let editor = canvas.state_mut();
-            editor.reverse_mode = is_reversed;
-            editor.playhead_ui.reverse_mode = is_reversed;
-          },
-        );
-
-        siv.call_on_name(consts::osc_status_unit_view, |view: &mut TextView| {
+        siv.call_on_name(consts::mode_unit_view, |view: &mut TextView| {
           view.set_content(mode_status);
+        });
+        siv.call_on_name(consts::movement_unit_view, |view: &mut TextView| {
+          view.set_content(movement_status);
         });
       }))
       .unwrap();
@@ -436,9 +444,7 @@ impl PlayheadArea {
   pub fn set_actived_pos(&self, pos: usize) {
     let area = self.area.lock().unwrap();
     let mut actived_pos = self.actived_pos.lock().unwrap();
-    let reverse = self.reverse_mode.load(Ordering::Relaxed);
     let arpeggiator = self.arpeggiator_mode.load(Ordering::Relaxed);
-    let random = self.random_mode.load(Ordering::Relaxed);
     let playhead_w = area.width();
     let playhead_h = area.height();
     let playhead_x = area.left();
@@ -447,6 +453,9 @@ impl PlayheadArea {
 
     if arpeggiator {
       let regex_indexes = self.regex_indexes.lock().unwrap();
+      let movement = self.movement.lock().unwrap();
+      let reverse = *movement == Movement::Reverse;
+      let random = *movement == Movement::Random;
       let matches = playback_modes::get_arpeggiator_matches(
         &regex_indexes,
         playhead_x,
@@ -457,6 +466,7 @@ impl PlayheadArea {
         reverse,
       );
       drop(regex_indexes);
+      drop(movement);
 
       if !matches.is_empty() {
         let step = if random {
@@ -479,15 +489,17 @@ impl PlayheadArea {
         );
       }
     } else {
+      let movement = self.movement.lock().unwrap();
       // Normal running without arpeggiator
       playback_modes::calculate_position_fallback(
         pos,
         playhead_w,
         playhead_h,
-        reverse,
-        random,
+        *movement == Movement::Reverse,
+        *movement == Movement::Random,
         &mut actived_pos,
       );
+      drop(movement);
     }
   }
 
@@ -868,31 +880,7 @@ impl PlayheadArea {
           },
         );
 
-        siv.call_on_name(consts::osc_status_unit_view, |view: &mut TextView| {
-          view.set_content(mode_status);
-        });
-      }))
-      .unwrap();
-  }
-
-  pub fn toggle_random_mode(&self, cb_sink: cursive::CbSink) {
-    let is_rand = !self.random_mode.load(Ordering::Relaxed);
-    self.random_mode.store(is_rand, Ordering::Relaxed);
-
-    let mode_status = self.build_mode_status_string();
-
-    cb_sink
-      .send(Box::new(move |siv| {
-        siv.call_on_name(
-          consts::canvas_editor_section_view,
-          |canvas: &mut Canvas<GridEditor>| {
-            let editor = canvas.state_mut();
-            editor.random_mode = is_rand;
-            editor.playhead_ui.random_mode = is_rand;
-          },
-        );
-
-        siv.call_on_name(consts::osc_status_unit_view, |view: &mut TextView| {
+        siv.call_on_name(consts::mode_unit_view, |view: &mut TextView| {
           view.set_content(mode_status);
         });
       }))
@@ -917,7 +905,7 @@ impl PlayheadArea {
           },
         );
 
-        siv.call_on_name(consts::osc_status_unit_view, |view: &mut TextView| {
+        siv.call_on_name(consts::mode_unit_view, |view: &mut TextView| {
           view.set_content(mode_status);
         });
       }))
@@ -940,7 +928,7 @@ impl PlayheadArea {
           },
         );
 
-        siv.call_on_name(consts::osc_status_unit_view, |view: &mut TextView| {
+        siv.call_on_name(consts::mode_unit_view, |view: &mut TextView| {
           view.set_content(mode_status);
         });
         siv.call_on_name(consts::op_queue_status_unit_view, |view: &mut TextView| {
@@ -977,7 +965,7 @@ impl PlayheadArea {
           },
         );
 
-        siv.call_on_name(consts::osc_status_unit_view, |view: &mut TextView| {
+        siv.call_on_name(consts::mode_unit_view, |view: &mut TextView| {
           view.set_content(mode_status);
         });
       }))
@@ -1563,7 +1551,7 @@ impl PlayheadArea {
                   });
                 }
 
-                siv.call_on_name(consts::osc_status_unit_view, |view: &mut TextView| {
+                siv.call_on_name(consts::mode_unit_view, |view: &mut TextView| {
                   view.set_content(mode_status);
                 });
               }))
@@ -1585,14 +1573,17 @@ impl PlayheadArea {
               }))
               .unwrap();
           }
+          Message::ToggleForwardMode(cb_sink) => {
+            self.switch_movement(Movement::Forward, cb_sink);
+          }
           Message::ToggleReverseMode(cb_sink) => {
-            self.toggle_reverse_mode(cb_sink);
+            self.switch_movement(Movement::Reverse, cb_sink);
           }
           Message::ToggleArpeggiatorMode(cb_sink) => {
             self.toggle_arpeggiator_mode(cb_sink);
           }
           Message::ToggleRandomMode(cb_sink) => {
-            self.toggle_random_mode(cb_sink);
+            self.switch_movement(Movement::Random, cb_sink);
           }
           Message::ToggleEventOperatorMode(cb_sink) => {
             self.toggle_event_operator_mode(cb_sink);

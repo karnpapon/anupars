@@ -24,6 +24,7 @@ pub enum Command {
   AdjustPlayhead(MoveDirection),
   AdjustBPM(Adjustment),
   AdjustRatio(Adjustment),
+  ToggleForward,
   ToggleReverse,
   ToggleArpeggiator,
   ToggleAccumulation,
@@ -46,6 +47,7 @@ impl fmt::Display for Command {
       | Self::AdjustBPM(_)
       | Self::AdjustRatio(_)
       | Self::AdjustPlayhead(_)
+      | Self::ToggleForward
       | Self::ToggleReverse
       | Self::ToggleArpeggiator
       | Self::ToggleAccumulation
@@ -71,6 +73,7 @@ impl Command {
       Self::AdjustPlayhead(_) => "adjustplayhead",
       Self::AdjustBPM(_) => "adjustbpm",
       Self::AdjustRatio(_) => "adjustratio",
+      Self::ToggleForward => "toggleforward",
       Self::ToggleReverse => "togglereverse",
       Self::ToggleArpeggiator => "togglearpeggiator",
       Self::ToggleAccumulation => "toggleaccumulation",

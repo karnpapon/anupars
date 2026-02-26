@@ -196,6 +196,13 @@ impl CommandManager {
           .unwrap();
         Ok(None)
       }
+      Command::ToggleForward => {
+        self
+          .playhead_tx_cloned
+          .send(playhead_controller::Message::ToggleForwardMode())
+          .unwrap();
+        Ok(None)
+      }
       Command::ToggleReverse => {
         self
           .playhead_tx_cloned
@@ -341,10 +348,11 @@ impl CommandManager {
     kb.insert("<".into(), vec![Command::AdjustBPM(Adjustment::Decrease)]);
     kb.insert("}".into(), vec![Command::AdjustRatio(Adjustment::Increase)]);
     kb.insert("{".into(), vec![Command::AdjustRatio(Adjustment::Decrease)]);
+    kb.insert("Ctrl+f".into(), vec![Command::ToggleForward]);
     kb.insert("Ctrl+r".into(), vec![Command::ToggleReverse]);
+    kb.insert("Ctrl+d".into(), vec![Command::ToggleRandom]);
     kb.insert("Ctrl+a".into(), vec![Command::ToggleArpeggiator]);
     kb.insert("Ctrl+u".into(), vec![Command::ToggleAccumulation]);
-    kb.insert("Ctrl+d".into(), vec![Command::ToggleRandom]);
     kb.insert("Ctrl+e".into(), vec![Command::ToggleEventOperator]);
     kb.insert("Ctrl+n".into(), vec![Command::ToggleDrainQueue]);
     kb.insert("Ctrl+s".into(), vec![Command::ToggleSweep]);

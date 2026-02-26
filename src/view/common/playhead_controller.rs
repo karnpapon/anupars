@@ -36,6 +36,7 @@ pub enum Message {
   CycleScaleRootTop(crate::core::command::Adjustment),
   CycleScaleMode(crate::core::command::Adjustment),
   ToggleAccumulationMode(),
+  ToggleForwardMode(),
   ToggleReverseMode(),
   ToggleArpeggiatorMode(),
   ToggleRandomMode(),
@@ -205,6 +206,12 @@ impl Playhead {
             let cb_sink = self.cb_sink.clone();
             playhead_area_tx
               .send(playhead::Message::ToggleAccumulationMode(cb_sink))
+              .unwrap();
+          }
+          Message::ToggleForwardMode() => {
+            let cb_sink = self.cb_sink.clone();
+            playhead_area_tx
+              .send(playhead::Message::ToggleForwardMode(cb_sink))
               .unwrap();
           }
           Message::ToggleReverseMode() => {

@@ -9,6 +9,7 @@ use std::sync::Arc;
 use std::sync::RwLock;
 
 use crate::app::AppMode;
+use crate::app::Movement;
 use crate::core::consts;
 use crate::core::regex;
 use crate::view::common::grid::GridSection;
@@ -22,6 +23,7 @@ use super::display::MiddleSection;
 #[derive(Clone)]
 pub struct Anu {
   pub mode: AppMode,
+  pub movement: Movement,
   pub mode_state: RadioGroup<RegexMode>,
   pub flag_state: RadioGroup<RegexFlag>,
   pub input_regex: String,
@@ -38,6 +40,7 @@ impl Anu {
       toggle_regex_input: Arc::new(RwLock::new(false)),
       top_section: TopSection::new(),
       mode: AppMode::None,
+      movement: Movement::Forward,
     }
   }
 

@@ -36,23 +36,43 @@ pub struct UserDataInner {
 
 #[derive(Clone)]
 pub enum AppMode {
-  Reverse,       // r
   Arpeggiator,   // a
   Accumulation,  // u
-  Random,        // d
   EventOperator, // e
   DrainQueue,    // n
   Sweep,         // s
   None,
 }
 
+#[derive(Clone, PartialEq, Copy)]
+pub enum Movement {
+  Forward,
+  Reverse,
+  Random,
+}
+
+impl fmt::Display for Movement {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    match self {
+      Movement::Forward => write!(f, "f"),
+      Movement::Reverse => write!(f, "r"),
+      Movement::Random => write!(f, "d"),
+    }
+  }
+}
+
+impl Movement {
+  pub fn print_movements(&self) -> String {
+    let movements = [Movement::Forward, Movement::Reverse, Movement::Random];
+    movements.iter().map(|mv| mv.to_string()).collect()
+  }
+}
+
 impl fmt::Display for AppMode {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     match self {
-      AppMode::Reverse => write!(f, "r"),
       AppMode::Arpeggiator => write!(f, "a"),
       AppMode::Accumulation => write!(f, "u"),
-      AppMode::Random => write!(f, "d"),
       AppMode::EventOperator => write!(f, "e"),
       AppMode::DrainQueue => write!(f, "n"),
       AppMode::Sweep => write!(f, "s"),
@@ -64,10 +84,8 @@ impl fmt::Display for AppMode {
 impl AppMode {
   pub fn print_modes(&self) -> String {
     let modes = [
-      AppMode::Reverse,
       AppMode::Arpeggiator,
       AppMode::Accumulation,
-      AppMode::Random,
       AppMode::EventOperator,
       AppMode::DrainQueue,
       AppMode::Sweep,

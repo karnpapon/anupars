@@ -68,6 +68,9 @@ impl TopSection {
       .with_name(consts::regex_input_unit_view)
       .fixed_width(25);
 
+    let regex_matches_amount_unit_view =
+      TextView::new("-").with_name(consts::regex_matches_amount_unit_view);
+
     let flag_view = LinearLayout::horizontal()
       .child(
         app
@@ -106,6 +109,7 @@ impl TopSection {
         "ERRR:",
         TextView::new("-").with_name(consts::regex_err_display_unit_view),
       )
+      .child("TOTL: ", regex_matches_amount_unit_view)
       .child(
         "MIDI: ",
         TextView::new("-").with_name(consts::midi_status_unit_view),
@@ -133,12 +137,17 @@ impl TopSection {
         TextView::new(utils::build_pos_status_str(app.top_section.pos))
           .with_name(consts::pos_status_unit_view),
       )
+      .child("LCK:", TextView::new("-").with_name(consts::luck_unit_view))
       .full_width();
 
     let protocol_controller_section_view = ListView::new()
       .child(
         "MDE:",
-        TextView::new(app.mode.print_modes()).with_name(consts::osc_status_unit_view),
+        TextView::new(app.mode.print_modes()).with_name(consts::mode_unit_view),
+      )
+      .child(
+        "MVT:",
+        TextView::new(app.movement.print_movements()).with_name(consts::movement_unit_view),
       )
       .child("STE: ", input_status_unit_view)
       .child(
