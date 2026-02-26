@@ -1,10 +1,10 @@
 use std::fmt;
 
+use crate::core::command_handler::CommandManager;
 use crate::core::consts;
-use crate::core::midi::Midi;
+use crate::core::midi;
 use crate::core::regex::RegExpHandler;
 use crate::core::timing::metronome::{Message, Metronome};
-use crate::core::{command_handler::CommandManager, midi};
 use crate::view::common::menubar::Menubar;
 use crate::view::common::playhead_controller::Playhead;
 #[cfg(feature = "microcontroller")]
@@ -79,7 +79,7 @@ impl AppMode {
 /// Application components bundle
 pub struct AppComponents {
   pub cursive: Cursive,
-  pub midi: Midi,
+  pub midi: midi::Midi,
   pub regex_handler: RegExpHandler,
   pub anu: Anu,
   pub playhead: Playhead,
@@ -103,7 +103,7 @@ pub fn initialize_components() -> AppComponents {
   let mut cursive = Cursive::new();
   init_cursive_theme(&mut cursive);
 
-  let mut midi = Midi::new();
+  let mut midi = midi::Midi::new();
   midi.init().unwrap();
 
   let regex_handler = RegExpHandler::new(cursive.cb_sink().clone());
@@ -113,6 +113,14 @@ pub fn initialize_components() -> AppComponents {
 
   let playhead = Playhead::new(cursive.cb_sink().clone(), midi.tx.clone());
   let metronome = Metronome::new(cursive.cb_sink().clone(), playhead.tx.clone());
+
+  let midi_tx = midi.tx.clone();
+
+  cursive.set_on_pre_event_inner(cursive::event::Event::CtrlChar('c'), move |_| {
+    let _ = midi_tx.send(midi::Message::ClearMsgConfig());
+    let _ = midi_tx.send(midi::Message::Panic());
+    None
+  });
 
   AppComponents {
     cursive,
