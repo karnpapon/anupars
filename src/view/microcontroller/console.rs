@@ -127,7 +127,7 @@ impl Console {
       )
       .child(
         "RTO:",
-        TextView::new(utils::build_ratio_status_str(app.top_section.ratio, ""))
+        TextView::new(utils::build_ratio_status_str(app.top_section.ratio))
           .with_name(consts::ratio_status_unit_view),
       )
       .child(

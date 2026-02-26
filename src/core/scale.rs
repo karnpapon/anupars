@@ -1,3 +1,5 @@
+use serde::{Deserialize, Serialize};
+
 /// Musical scale modes and their interval patterns
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub enum ScaleMode {
@@ -20,7 +22,7 @@ pub enum ScaleMode {
   Thai7Tet, // Thai 7-TET microtonal scale
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub enum ScaleRoot {
   #[default]
   C = 0,
@@ -74,6 +76,19 @@ impl ScaleRoot {
     ]
   }
 
+  pub fn is_natural(&self) -> bool {
+    matches!(
+      self,
+      ScaleRoot::C
+        | ScaleRoot::D
+        | ScaleRoot::E
+        | ScaleRoot::F
+        | ScaleRoot::G
+        | ScaleRoot::A
+        | ScaleRoot::B
+    )
+  }
+
   /// Get the root note offset (0-11) for this scale root
   /// This is added to the intervals of the scale mode to get the actual note indices
   #[allow(clippy::wrong_self_convention)]
@@ -91,6 +106,16 @@ impl ScaleRoot {
       ScaleRoot::A => 9,
       ScaleRoot::ASharp => 10,
       ScaleRoot::B => 11,
+    }
+  }
+
+  /// Cycle to the next or previous root note based on adjustment
+  pub fn cycle(&self, adjustment: crate::core::command::Adjustment) -> ScaleRoot {
+    let all = Self::all();
+    let idx = all.iter().position(|&r| r == *self).unwrap_or(0);
+    match adjustment {
+      crate::core::command::Adjustment::Increase => all[(idx + 1) % all.len()],
+      crate::core::command::Adjustment::Decrease => all[(idx + all.len() - 1) % all.len()],
     }
   }
 }

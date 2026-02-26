@@ -384,6 +384,14 @@ fn draw(canvas: &GridEditor, printer: &Printer) {
     let top_keyboard_printer = printer.offset((KEYBOARD_MARGIN_LEFT, 0));
     canvas.draw_keyboard_top(&top_keyboard_printer);
 
+    // Draw corner symbol where keyboards meet
+    let root_note_top = canvas.scale_root_top;
+    let root_note_pos = if root_note_top.is_natural() { 1 } else { 0 };
+    let style = Style::from(ColorStyle::front(ColorType::rgb(200, 200, 200)));
+    printer.with_style(style, |printer| {
+      printer.print((root_note_pos, 0), root_note_top.name());
+    });
+
     let left_keyboard_printer = printer.offset((0, KEYBOARD_MARGIN_TOP));
     canvas.draw_keyboard_left(&left_keyboard_printer);
 

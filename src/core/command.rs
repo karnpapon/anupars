@@ -31,6 +31,7 @@ pub enum Command {
   ToggleEventOperator,
   ToggleDrainQueue,
   ToggleSweep,
+  ChangeRootNote(Adjustment),
 }
 
 impl fmt::Display for Command {
@@ -50,6 +51,7 @@ impl fmt::Display for Command {
       | Self::ToggleEventOperator
       | Self::ToggleDrainQueue
       | Self::ToggleSweep
+      | Self::ChangeRootNote(_)
       | Self::ToggleRandom => vec![],
     };
     repr_tokens.append(&mut extras_args);
@@ -74,6 +76,7 @@ impl Command {
       Self::ToggleEventOperator => "toggleeventoperator",
       Self::ToggleDrainQueue => "toggledrainqueue",
       Self::ToggleSweep => "togglesweep",
+      Self::ChangeRootNote(_) => "changerootnote",
     }
   }
 }

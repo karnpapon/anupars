@@ -157,6 +157,7 @@ pub enum Message {
   ToggleEventOperatorMode(cursive::CbSink),
   ToggleDrainQueueMode(cursive::CbSink),
   ToggleSweepMode(cursive::CbSink),
+  CycleScaleRootTop(cursive::CbSink, crate::core::command::Adjustment),
   SetTempo(usize),
   SetRatio((usize, usize), cursive::CbSink),
 }
@@ -982,6 +983,25 @@ impl PlayheadArea {
       .unwrap();
   }
 
+  pub fn cycle_scale_root(&self, cb_sink: cursive::CbSink, dir: crate::core::command::Adjustment) {
+    let mut root = self.scale_root_top.lock().unwrap();
+    *root = root.cycle(dir);
+    let new_root = *root;
+    drop(root);
+
+    cb_sink
+      .send(Box::new(move |siv| {
+        siv.call_on_name(
+          consts::canvas_editor_section_view,
+          |canvas: &mut Canvas<GridEditor>| {
+            let editor = canvas.state_mut();
+            editor.scale_root_top = new_root;
+          },
+        );
+      }))
+      .unwrap();
+  }
+
   pub fn scale(&self, (w, h): (i32, i32)) {
     let pos = self.pos.lock().unwrap();
     let mut area = self.area.lock().unwrap();
@@ -1540,7 +1560,7 @@ impl PlayheadArea {
             cb_sink
               .send(Box::new(move |siv| {
                 siv.call_on_name(consts::ratio_status_unit_view, |view: &mut TextView| {
-                  view.set_content(utils::build_ratio_status_str(new_ratio, ""));
+                  view.set_content(utils::build_ratio_status_str(new_ratio));
                 });
               }))
               .unwrap();
@@ -1562,6 +1582,9 @@ impl PlayheadArea {
           }
           Message::ToggleSweepMode(cb_sink) => {
             self.toggle_sweep_mode(cb_sink);
+          }
+          Message::CycleScaleRootTop(cb_sink, dir) => {
+            self.cycle_scale_root(cb_sink, dir);
           }
         }
       }

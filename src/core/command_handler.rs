@@ -13,7 +13,7 @@ use crate::view::desktop::app::Anu;
 use crate::view::microcontroller::app::Anu;
 
 use super::command::{Adjustment, Command, MoveDirection};
-use super::timing::metronome::Message;
+use super::timing::metronome;
 use super::{consts, utils};
 
 use cursive::event::{Event, Key};
@@ -26,7 +26,7 @@ pub struct CommandManager {
   aliases: HashMap<String, String>,
   bindings: RefCell<HashMap<String, Vec<Command>>>,
   pub anu: Arc<Anu>,
-  metronome_sender: Sender<Message>,
+  metronome_sender: Sender<metronome::Message>,
   cb_sink: cursive::CbSink,
   temp_tempo: Arc<Mutex<usize>>,
   temp_ratio: Arc<Mutex<(usize, usize)>>,
@@ -37,7 +37,7 @@ pub struct CommandManager {
 impl CommandManager {
   pub fn new(
     anu: Anu,
-    m_tx: Sender<Message>,
+    m_tx: Sender<metronome::Message>,
     cb_sink: cursive::CbSink,
     temp_tempo: Arc<Mutex<usize>>,
     last_key_time: Arc<Mutex<Option<Instant>>>,
@@ -82,7 +82,7 @@ impl CommandManager {
     match cmd {
       Command::Quit => Ok(None),
       Command::TogglePlay => {
-        let _ = self.metronome_sender.send(Message::StartStop);
+        let _ = self.metronome_sender.send(metronome::Message::StartStop);
         Ok(None)
       }
       Command::ShowMenubar => {
@@ -190,7 +190,10 @@ impl CommandManager {
           .send(playhead_controller::Message::SetRatio(new_ratio))
           .unwrap();
 
-        self.metronome_sender.send(Message::Reset).unwrap();
+        self
+          .metronome_sender
+          .send(metronome::Message::Reset)
+          .unwrap();
         Ok(None)
       }
       Command::ToggleReverse => {
@@ -239,6 +242,13 @@ impl CommandManager {
         self
           .playhead_tx_cloned
           .send(playhead_controller::Message::ToggleSweepMode())
+          .unwrap();
+        Ok(None)
+      }
+      Command::ChangeRootNote(dir) => {
+        self
+          .playhead_tx_cloned
+          .send(playhead_controller::Message::CycleScaleRootTop(*dir))
           .unwrap();
         Ok(None)
       }
@@ -331,6 +341,14 @@ impl CommandManager {
     kb.insert("Ctrl+e".into(), vec![Command::ToggleEventOperator]);
     kb.insert("Ctrl+n".into(), vec![Command::ToggleDrainQueue]);
     kb.insert("Ctrl+s".into(), vec![Command::ToggleSweep]);
+    kb.insert(
+      "Ctrl+y".into(),
+      vec![Command::ChangeRootNote(Adjustment::Increase)],
+    );
+    kb.insert(
+      "Ctrl+t".into(),
+      vec![Command::ChangeRootNote(Adjustment::Decrease)],
+    );
     kb
   }
 
