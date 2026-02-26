@@ -621,11 +621,11 @@ impl PlayheadArea {
   }
 
   fn check_contains(&self, area: &Rect, matcher: &HashMap<usize, regex::Match>) -> bool {
-    for dx in 0..area.width() {
-      for dy in 0..area.height() {
+    for dy in 0..area.height() {
+      for dx in 0..area.width() {
         let x = area.top_left.x + dx;
         let y = area.top_left.y + dy;
-        let pos_index = x * self.grid_height.load(Ordering::Relaxed) + y;
+        let pos_index = y * self.grid_width.load(Ordering::Relaxed) + x;
         if matcher.contains_key(&pos_index) {
           return true;
         }
@@ -635,6 +635,9 @@ impl PlayheadArea {
   }
 
   fn handle_silent_step(&self, matcher: &HashMap<usize, regex::Match>, cb_sink: &cursive::CbSink) {
+    if !self.accumulation_mode.load(Ordering::Relaxed) {
+      return;
+    }
     let area = self.area.lock().unwrap();
     let has_some_pos = self.check_contains(&area, matcher);
     let playhead_area_size = area.width() * area.height();
@@ -660,7 +663,7 @@ impl PlayheadArea {
   }
 
   fn handle_accumulation_mode(&self, abs_x: usize, cb_sink: &cursive::CbSink) -> Option<Vec2> {
-    self.check_operators(abs_x);
+    self.check_n_execute_operators(abs_x);
 
     let area = self.area.lock().unwrap();
     let playhead_area_size = area.width() * area.height();
@@ -996,7 +999,7 @@ impl PlayheadArea {
 
   // Queue operators: P (Push), S (Swap), O (pOp), D (Duplicate) with narrow spacing
   // Event operators: r, c, x with wider spacing
-  fn check_operators(&self, abs_x: usize) {
+  fn check_n_execute_operators(&self, abs_x: usize) {
     // Check if this is a "space" position (where event operators are defined)
     let is_space = abs_x.is_multiple_of(consts::EVENT_OP_SPACING);
 
@@ -1395,7 +1398,7 @@ impl PlayheadArea {
                     self.update_queue_display();
                   }
                 }
-                // self.handle_silent_step(matcher, &cb_sink);
+                self.handle_silent_step(matcher, &cb_sink);
               }
               self.trigger_midi_if_matched_sweep(curr_running_playhead, abs_x);
               self.update_active_pos_ui(active_pos, &cb_sink);
