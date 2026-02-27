@@ -3,7 +3,6 @@ use ringbuffer::{ConstGenericRingBuffer, RingBuffer};
 use std::collections::hash_map::Entry;
 use std::collections::BTreeSet;
 use std::collections::HashMap;
-use std::collections::HashSet;
 use std::collections::VecDeque;
 use std::fmt;
 use std::sync::atomic::AtomicBool;
@@ -578,12 +577,12 @@ impl PlayheadArea {
     let current_tempo = self.tempo.load(Ordering::Relaxed);
     let active_pos_y = self.pos.lock().unwrap().y;
 
-    // for preventing duplicate MIDI triggers in sweep mode
-    let mut tmp_midi_dict: HashSet<usize> = HashSet::new();
-
     // When sweep_mode is enabled, trigger MIDI for all positions along the vertical crosshair
     if self.sweep_mode.load(Ordering::Relaxed) {
       let x_scale_mode = *self.scale_mode_top.lock().unwrap();
+
+      // Collect all matched y positions for the current x
+      let mut matched_y_positions: Vec<usize> = Vec::new();
 
       // Iterate through all y positions for the current x (vertical crosshair)
       for y in 0..grid_height {
@@ -594,31 +593,42 @@ impl PlayheadArea {
           continue;
         }
 
+        // Check if this position matches
+        if let Some(matcher) = self.text_matcher.lock().unwrap().as_ref() {
+          if matcher.contains_key(&crosshair_index) {
+            matched_y_positions.push(y);
+          }
+        }
+      }
+
+      // If we have matched positions, send a single MIDI trigger with average velocity
+      if !matched_y_positions.is_empty() {
+        // Calculate average y position for velocity reference
+        let avg_y = matched_y_positions.iter().sum::<usize>() / matched_y_positions.len();
+
         let x_note_position = if grid_height > 0 {
           abs_x % grid_height
         } else {
-          y
+          avg_y
         };
 
-        // Check if this position matches and trigger MIDI
-        if let Some(matcher) = self.text_matcher.lock().unwrap().as_ref() {
-          if matcher.contains_key(&crosshair_index) && !tmp_midi_dict.contains(&crosshair_index) {
-            tmp_midi_dict.insert(crosshair_index);
-            let _ = self.midi_tx.send(midi::Message::TriggerWithPosition((
-              crosshair_index,
-              x_note_position,
-              grid_width,
-              grid_height,
-              x_scale_mode,
-              current_tempo,
-              y,
-              false,        // sweep mode notes don't use hold
-              true,         // is_sweep
-              active_pos_y, // reference Y position for velocity calculation
-              self.scale_root_top.lock().unwrap().to_root_offset(),
-            )));
-          }
-        }
+        // Use the first matched index for reference (they all share the same x)
+        let first_y = matched_y_positions[0];
+        let reference_index = first_y * grid_width + abs_x;
+
+        let _ = self.midi_tx.send(midi::Message::TriggerWithPosition((
+          reference_index,
+          x_note_position,
+          grid_width,
+          grid_height,
+          x_scale_mode,
+          current_tempo,
+          avg_y,        // Use average y position for velocity calculation
+          false,        // sweep mode notes don't use hold
+          true,         // is_sweep
+          active_pos_y, // reference Y position for velocity calculation
+          self.scale_root_top.lock().unwrap().to_root_offset(),
+        )));
       }
     }
   }
