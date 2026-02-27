@@ -115,9 +115,7 @@ pub struct PlayheadUI {
   pub actived_pos: Vec2,
   pub text_matcher: Option<HashMap<usize, Match>>,
   pub regex_indexes: Arc<Mutex<BTreeSet<usize>>>,
-  pub reverse_mode: bool,
   pub arpeggiator_mode: bool,
-  pub random_mode: bool,
   pub sweep_mode: bool,
 }
 
@@ -129,9 +127,7 @@ impl PlayheadUI {
       actived_pos: Vec2::zero(),
       text_matcher: None,
       regex_indexes: Arc::new(Mutex::new(BTreeSet::new())),
-      reverse_mode: false,
       arpeggiator_mode: false,
-      random_mode: false,
       sweep_mode: false,
     }
   }
@@ -451,7 +447,7 @@ impl PlayheadArea {
         playhead_w,
         playhead_h,
         canvas_w,
-        *movement == Movement::Reverse,
+        *movement,
       );
       drop(regex_indexes);
       drop(movement);

@@ -109,7 +109,7 @@ pub fn get_arpeggiator_matches(
   playhead_w: usize,
   playhead_h: usize,
   canvas_w: usize,
-  reverse: bool,
+  movement: Movement,
 ) -> Vec<(usize, usize)> {
   let mut matches: Vec<(usize, usize)> = regex_indexes
     .iter()
@@ -129,8 +129,16 @@ pub fn get_arpeggiator_matches(
     .collect();
 
   matches.sort_by_key(|&(x, y)| (y, x));
-  if reverse {
-    matches.reverse();
+  match movement {
+    Movement::Reverse => matches.reverse(),
+    Movement::Pendulum => {
+      if matches.len() > 1 {
+        let mut pendulum_matches = matches.clone();
+        pendulum_matches.extend(matches.iter().rev().skip(1).take(matches.len() - 1));
+        return pendulum_matches;
+      }
+    }
+    _ => {} // Forward and Random use normal order
   }
   matches
 }
