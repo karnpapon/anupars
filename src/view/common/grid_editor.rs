@@ -205,7 +205,10 @@ impl GridEditor {
     // Top half: EVQ (Event Queue)
     // Read and display event queue items (bottom-aligned)
     let event_queue = self.playhead_ui.event_queue.lock().unwrap();
-    let evq_items: Vec<String> = event_queue.iter().map(|op| format!("{}", op)).collect();
+    let evq_items: Vec<String> = event_queue
+      .iter()
+      .map(|op| op.get_event_name().to_string())
+      .collect();
     drop(event_queue);
 
     let evq_start_y = if evq_items.len() >= half_height - 2 {

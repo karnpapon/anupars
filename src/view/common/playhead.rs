@@ -72,6 +72,16 @@ impl fmt::Display for EventOperator {
   }
 }
 
+impl EventOperator {
+  pub fn get_event_name(&self) -> &'static str {
+    match self {
+      EventOperator::R => ">rrrrr",
+      EventOperator::C => ">chord",
+      EventOperator::X => ">hold",
+    }
+  }
+}
+
 pub const EVENT_OPERATORS: [EventOperator; 3] =
   [EventOperator::R, EventOperator::C, EventOperator::X];
 
@@ -86,7 +96,7 @@ impl fmt::Display for QueueItem {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     match self {
       QueueItem::Position(x, y) => write!(f, "{},{}", x, y),
-      QueueItem::Event(op) => write!(f, "{}", op),
+      QueueItem::Event(op) => write!(f, "{}", op.get_event_name()),
     }
   }
 }
@@ -1097,7 +1107,7 @@ impl PlayheadArea {
 
     match operator {
       EventOperator::R => self.handle_r(),
-      EventOperator::C => self.handle_x(),
+      EventOperator::C => self.handle_c(),
       EventOperator::X => self.handle_x(),
     }
   }
@@ -1229,11 +1239,70 @@ impl PlayheadArea {
   }
 
   fn handle_c(&self) {
-    let mut event_queue = self.event_queue.lock().unwrap();
-    event_queue.enqueue(EventOperator::C);
-    drop(event_queue);
+    let actived_pos = *self.actived_pos.lock().unwrap();
+    let playhead_pos = *self.pos.lock().unwrap();
+    let abs_x = playhead_pos.x + actived_pos.x;
+    let abs_y = playhead_pos.y + actived_pos.y;
 
-    self.update_queue_display();
+    let scale_mode = *self.scale_mode_top.lock().unwrap();
+    let scale_root_offset = self.scale_root_top.lock().unwrap().to_root_offset();
+    let grid_height = self.grid_height.load(Ordering::Relaxed);
+
+    if grid_height == 0 {
+      return;
+    }
+
+    let note_position = abs_x % grid_height;
+
+    // Get the base note
+    let (_base_note_index, base_octave) = scale_mode.pos_to_scale_note(
+      note_position,
+      grid_height,
+      consts::BASE_OCTAVE,
+      scale_root_offset,
+    );
+
+    // For a triad: root (0), third (2 scale degrees up), fifth (4 scale degrees up)
+    let scale_intervals = scale_mode.intervals();
+    let scale_length = scale_intervals.len();
+
+    // Calculate base scale degree
+    let inverted_y = grid_height.saturating_sub(1).saturating_sub(note_position);
+    let base_scale_degree = inverted_y % scale_length;
+
+    // maybe duplicated code, just dynamic velo based on y-axis
+    let max_vel = 100.0;
+    let min_vel = 10.0;
+    let ref_velocity = max_vel - (abs_y as f32 / grid_height as f32) * (max_vel - min_vel);
+    let velocity = ref_velocity.round().max(min_vel) as u8;
+
+    // Chord notes: root, third, fifth
+    let chord_degrees = [0, 2, 4];
+    let channel = 0;
+
+    for &degree_offset in &chord_degrees {
+      let target_scale_degree = (base_scale_degree + degree_offset) % scale_length;
+      let octave_jump = (base_scale_degree + degree_offset) / scale_length;
+
+      let interval = scale_intervals[target_scale_degree];
+      let raw_pitch = interval + (scale_root_offset % 12) as f32;
+      let note_index = raw_pitch % 12.0;
+      let extra_octave = (raw_pitch / 12.0).floor() as u8;
+      let final_octave = base_octave + octave_jump as u8 + extra_octave;
+
+      let midi_msg = midi::MidiMsg::from(note_index, final_octave, 0, velocity, channel, false);
+
+      let _ = self
+        .midi_tx
+        .send(midi::Message::Trigger(midi_msg.clone(), true));
+
+      // Schedule note off
+      let midi_tx_clone = self.midi_tx.clone();
+      thread::spawn(move || {
+        thread::sleep(Duration::from_millis(400));
+        let _ = midi_tx_clone.send(midi::Message::Trigger(midi_msg, false));
+      });
+    }
   }
 
   fn handle_x(&self) {
