@@ -162,14 +162,14 @@ impl Console {
       //   "MIDI:",
       //   TextView::new("-").with_name(consts::midi_status_unit_view),
       // )
-      .child(
-        "OPQ:",
-        TextView::new("[]").with_name(consts::op_queue_status_unit_view),
-      )
-      .child(
-        "EVQ:",
-        TextView::new("[]").with_name(consts::ev_queue_status_unit_view),
-      )
+      // .child(
+      //   "OPQ:",
+      //   TextView::new("[]").with_name(consts::op_queue_status_unit_view),
+      // )
+      // .child(
+      //   "EVQ:",
+      //   TextView::new("[]").with_name(consts::ev_queue_status_unit_view),
+      // )
       .fixed_width(100);
 
     let padding_section_1 = DummyView::new().fixed_width(2);

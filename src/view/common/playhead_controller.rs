@@ -143,7 +143,11 @@ impl Playhead {
           }
           Message::SetGridSize(width, height) => {
             playhead_area_tx
-              .send(playhead::Message::SetGridSize(width, height))
+              .send(playhead::Message::SetGridSize(
+                width,
+                height,
+                self.cb_sink.clone(),
+              ))
               .unwrap();
           }
           Message::SetScaleModeLeft(scale_mode) => {

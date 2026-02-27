@@ -85,8 +85,8 @@ pub static mode_unit_view: &str = "mode_unit_view";
 pub static movement_unit_view: &str = "movement_unit_view";
 pub static luck_unit_view: &str = "luck_unit_view";
 pub static midi_status_unit_view: &str = "midi_status_unit_view";
-pub static op_queue_status_unit_view: &str = "op_queue_status_unit_view";
-pub static ev_queue_status_unit_view: &str = "ev_queue_status_unit_view";
+// pub static op_queue_status_unit_view: &str = "op_queue_status_unit_view";
+// pub static ev_queue_status_unit_view: &str = "ev_queue_status_unit_view";
 
 pub static input_controller_section_view: &str = "input_controller_section_view";
 pub static status_controller_section_view: &str = "status_controller_section_view";
@@ -120,7 +120,8 @@ pub const DEFAULT_TEMPO: usize = 120;
 
 // Keyboard visualization constants
 pub const KEYBOARD_MARGIN_TOP: usize = 3;
-pub const KEYBOARD_MARGIN_LEFT: usize = 4;
+pub const KEYBOARD_MARGIN_LEFT: usize = 8;
+pub const QUEUE_MARGIN_RIGHT: usize = 8;
 pub const KEYBOARD_MARGIN_BOTTOM: usize = 3; // Increased to accommodate event operators row
 pub const BASE_OCTAVE: u8 = 2; // Starting octave (C2 = MIDI 48)
 pub const NOTE_NAMES: [&str; 12] = [
@@ -135,4 +136,6 @@ pub const SYMBOL_DRAIN: &char = &'~';
 pub const DEFAULT_RATIO: (usize, usize) = (1, 8); // Default to 1/8 notes
 
 pub const EVENT_QUEUE_CAPACITY: usize = 12;
-pub const OP_QUEUE_CAPACITY: usize = 6;
+pub const OP_QUEUE_CAPACITY: usize = 12;
+
+pub const QUEUE_PLACEHOLDER_SYMBOL: &str = ":";

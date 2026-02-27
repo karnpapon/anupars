@@ -85,7 +85,7 @@ pub enum QueueItem {
 impl fmt::Display for QueueItem {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     match self {
-      QueueItem::Position(x, y) => write!(f, "({},{})", x, y),
+      QueueItem::Position(x, y) => write!(f, "{},{}", x, y),
       QueueItem::Event(op) => write!(f, "{}", op),
     }
   }
@@ -96,8 +96,8 @@ impl fmt::Display for QueueItem {
 pub enum UIUpdate {
   ActivePos(Vec2),
   AccumulationCounter(usize, usize), // (count, total)
-  OpQueueDisplay(String),
-  EvQueueDisplay(String),
+  // OpQueueDisplay(String),
+  // EvQueueDisplay(String),
   PlayheadPosAndArea(Vec2, Rect),
 }
 
@@ -117,6 +117,9 @@ pub struct PlayheadUI {
   pub regex_indexes: Arc<Mutex<BTreeSet<usize>>>,
   pub arpeggiator_mode: bool,
   pub sweep_mode: bool,
+  pub operator_queue: Arc<Mutex<ArrayVec<QueueItem, { consts::OP_QUEUE_CAPACITY }>>>,
+  pub event_queue:
+    Arc<Mutex<ConstGenericRingBuffer<EventOperator, { consts::EVENT_QUEUE_CAPACITY }>>>,
 }
 
 impl PlayheadUI {
@@ -129,6 +132,8 @@ impl PlayheadUI {
       regex_indexes: Arc::new(Mutex::new(BTreeSet::new())),
       arpeggiator_mode: false,
       sweep_mode: false,
+      operator_queue: Arc::new(Mutex::new(ArrayVec::new())),
+      event_queue: Arc::new(Mutex::new(ConstGenericRingBuffer::new())),
     }
   }
 }
@@ -142,7 +147,7 @@ pub enum Message {
   SetActivePos(usize, cursive::CbSink),
   Scale((i32, i32), cursive::CbSink),
   SetMatcher(Option<HashMap<usize, Match>>, cursive::CbSink),
-  SetGridSize(usize, usize),
+  SetGridSize(usize, usize, cursive::CbSink),
   SetScaleModeLeft(crate::core::scale::ScaleMode),
   SetScaleModeTop(crate::core::scale::ScaleMode),
   SetScaleRootTop(crate::core::scale::ScaleRoot),
@@ -275,22 +280,22 @@ impl PlayheadArea {
                     },
                   );
                 }
-                UIUpdate::OpQueueDisplay(queue_str) => {
-                  siv.call_on_name(
-                    consts::op_queue_status_unit_view,
-                    move |view: &mut TextView| {
-                      view.set_content(queue_str);
-                    },
-                  );
-                }
-                UIUpdate::EvQueueDisplay(queue_str) => {
-                  siv.call_on_name(
-                    consts::ev_queue_status_unit_view,
-                    move |view: &mut TextView| {
-                      view.set_content(queue_str);
-                    },
-                  );
-                }
+                // UIUpdate::OpQueueDisplay(queue_str) => {
+                //   siv.call_on_name(
+                //     consts::op_queue_status_unit_view,
+                //     move |view: &mut TextView| {
+                //       view.set_content(queue_str);
+                //     },
+                //   );
+                // }
+                // UIUpdate::EvQueueDisplay(queue_str) => {
+                //   siv.call_on_name(
+                //     consts::ev_queue_status_unit_view,
+                //     move |view: &mut TextView| {
+                //       view.set_content(queue_str);
+                //     },
+                //   );
+                // }
                 UIUpdate::PlayheadPosAndArea(pos, area) => {
                   siv.call_on_name(
                     consts::canvas_editor_section_view,
@@ -774,24 +779,24 @@ impl PlayheadArea {
           } else {
             // Use position from queue (pop from front - FIFO)
             let item = queue.remove(0);
-            let is_drain = self.drain_queue_mode.load(Ordering::Relaxed);
+            // let is_drain = self.drain_queue_mode.load(Ordering::Relaxed);
 
             // Format queue using Display trait for consistency
-            let queue_display = if queue.is_empty() {
-              if is_drain {
-                format!("{}[]", consts::SYMBOL_DRAIN)
-              } else {
-                "[]".to_string()
-              }
-            } else {
-              let items: Vec<String> = queue.iter().map(|item| format!("{}", item)).collect();
-              if is_drain {
-                format!("{}[{}]", consts::SYMBOL_DRAIN, items.join(", "))
-              } else {
-                format!("[{}]", items.join(", "))
-              }
-            };
-            drop(queue);
+            // let queue_display = if queue.is_empty() {
+            //   if is_drain {
+            //     format!("{}[]", consts::SYMBOL_DRAIN)
+            //   } else {
+            //     "[]".to_string()
+            //   }
+            // } else {
+            //   let items: Vec<String> = queue.iter().map(|item| format!("{}", item)).collect();
+            //   if is_drain {
+            //     format!("{}[{}]", consts::SYMBOL_DRAIN, items.join(", "))
+            //   } else {
+            //     format!("[{}]", items.join(", "))
+            //   }
+            // };
+            // drop(queue);
 
             if let QueueItem::Position(x, y) = item {
               let mut pushed = self.pushed_positions.lock().unwrap();
@@ -799,9 +804,9 @@ impl PlayheadArea {
               drop(pushed);
 
               // Queue UI update (batched processing)
-              let mut ui_queue = self.ui_update_queue.lock().unwrap();
-              ui_queue.push_back(UIUpdate::OpQueueDisplay(queue_display));
-              drop(ui_queue);
+              // let mut ui_queue = self.ui_update_queue.lock().unwrap();
+              // ui_queue.push_back(UIUpdate::OpQueueDisplay(queue_display));
+              // drop(ui_queue);
 
               (x, y)
             } else {
@@ -926,19 +931,19 @@ impl PlayheadArea {
         siv.call_on_name(consts::mode_unit_view, |view: &mut TextView| {
           view.set_content(mode_status);
         });
-        siv.call_on_name(consts::op_queue_status_unit_view, |view: &mut TextView| {
-          let current = view.get_content().source().to_string();
-          if is_drain {
-            view.set_content(format!("{}{}", consts::SYMBOL_DRAIN, current));
-          } else if current.starts_with(*consts::SYMBOL_DRAIN) {
-            let unlocked = current
-              .trim_start_matches(*consts::SYMBOL_DRAIN)
-              .to_string();
-            view.set_content(unlocked);
-          } else {
-            view.set_content(current);
-          }
-        });
+        // siv.call_on_name(consts::op_queue_status_unit_view, |view: &mut TextView| {
+        //   let current = view.get_content().source().to_string();
+        //   if is_drain {
+        //     view.set_content(format!("{}{}", consts::SYMBOL_DRAIN, current));
+        //   } else if current.starts_with(*consts::SYMBOL_DRAIN) {
+        //     let unlocked = current
+        //       .trim_start_matches(*consts::SYMBOL_DRAIN)
+        //       .to_string();
+        //     view.set_content(unlocked);
+        //   } else {
+        //     view.set_content(current);
+        //   }
+        // });
       }))
       .unwrap();
   }
@@ -1161,7 +1166,7 @@ impl PlayheadArea {
         drop(pushed);
       }
 
-      self.update_queue_display();
+      // self.update_queue_display();
     }
   }
 
@@ -1174,44 +1179,45 @@ impl PlayheadArea {
     }
     drop(queue);
 
-    self.update_queue_display();
+    // self.update_queue_display();
   }
 
+  // TODO: ? maybe obsolete
   fn update_queue_display(&self) {
     let queue = self.operator_queue.lock().unwrap();
     let event_queue = self.event_queue.lock().unwrap();
-    let drain_queue = self.drain_queue_mode.load(Ordering::Relaxed);
+    // let drain_queue = self.drain_queue_mode.load(Ordering::Relaxed);
 
     // Format operator queue with Display trait for clean output
-    let queue_display = if queue.is_empty() {
-      if drain_queue {
-        format!("{}[]", consts::SYMBOL_DRAIN)
-      } else {
-        "[]".to_string()
-      }
-    } else {
-      let items: Vec<String> = queue.iter().map(|item| format!("{}", item)).collect();
-      if drain_queue {
-        format!("{}[{}]", consts::SYMBOL_DRAIN, items.join(", "))
-      } else {
-        format!("[{}]", items.join(", "))
-      }
-    };
+    // let queue_display = if queue.is_empty() {
+    //   if drain_queue {
+    //     format!("{}[]", consts::SYMBOL_DRAIN)
+    //   } else {
+    //     "[]".to_string()
+    //   }
+    // } else {
+    //   let items: Vec<String> = queue.iter().map(|item| format!("{}", item)).collect();
+    //   if drain_queue {
+    //     format!("{}[{}]", consts::SYMBOL_DRAIN, items.join(", "))
+    //   } else {
+    //     format!("[{}]", items.join(", "))
+    //   }
+    // };
 
     // Format event queue with Display trait
-    let event_queue_display = if event_queue.is_empty() {
-      "[]".to_string()
-    } else {
-      let items: Vec<String> = event_queue.iter().map(|op| format!("{}", op)).collect();
-      format!("[{}]", items.join(", "))
-    };
+    // let event_queue_display = if event_queue.is_empty() {
+    //   "[]".to_string()
+    // } else {
+    //   let items: Vec<String> = event_queue.iter().map(|op| format!("{}", op)).collect();
+    //   format!("[{}]", items.join(", "))
+    // };
 
     drop(queue);
     drop(event_queue);
 
-    let mut ui_queue = self.ui_update_queue.lock().unwrap();
-    ui_queue.push_back(UIUpdate::OpQueueDisplay(queue_display));
-    ui_queue.push_back(UIUpdate::EvQueueDisplay(event_queue_display));
+    // let mut ui_queue = self.ui_update_queue.lock().unwrap();
+    // ui_queue.push_back(UIUpdate::OpQueueDisplay(queue_display));
+    // ui_queue.push_back(UIUpdate::EvQueueDisplay(event_queue_display));
   }
 
   fn handle_r(&self) {
@@ -1495,9 +1501,26 @@ impl PlayheadArea {
               }))
               .unwrap();
           }
-          Message::SetGridSize(width, height) => {
+          Message::SetGridSize(width, height, cb_sink) => {
             self.grid_width.store(width, Ordering::Relaxed);
             self.grid_height.store(height, Ordering::Relaxed);
+
+            // Clone queue references to share with PlayheadUI
+            let operator_queue_cloned = self.operator_queue.clone();
+            let event_queue_cloned = self.event_queue.clone();
+
+            cb_sink
+              .send(Box::new(move |siv| {
+                siv.call_on_name(
+                  consts::canvas_editor_section_view,
+                  move |canvas: &mut Canvas<GridEditor>| {
+                    let editor = canvas.state_mut();
+                    editor.playhead_ui.operator_queue = operator_queue_cloned;
+                    editor.playhead_ui.event_queue = event_queue_cloned;
+                  },
+                );
+              }))
+              .unwrap();
           }
           Message::SetScaleModeLeft(scale_mode) => {
             let mut mode = self.scale_mode_left.lock().unwrap();
@@ -1540,11 +1563,11 @@ impl PlayheadArea {
                   view.set_content("-");
                 });
 
-                if !is_enabled {
-                  siv.call_on_name(consts::op_queue_status_unit_view, |view: &mut TextView| {
-                    view.set_content("[]");
-                  });
-                }
+                // if !is_enabled {
+                //   siv.call_on_name(consts::op_queue_status_unit_view, |view: &mut TextView| {
+                //     view.set_content("[]");
+                //   });
+                // }
 
                 siv.call_on_name(consts::mode_unit_view, |view: &mut TextView| {
                   view.set_content(mode_status);

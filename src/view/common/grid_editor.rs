@@ -17,6 +17,8 @@ use cursive::views::ResizedView;
 use cursive::Printer;
 use cursive::Vec2;
 
+use ringbuffer::RingBuffer;
+
 use crate::core::{consts, traits::Matrix};
 use crate::view::common::playhead::PlayheadUI;
 use crate::view::common::playhead::EVENT_OPERATORS;
@@ -27,6 +29,7 @@ use consts::KEYBOARD_MARGIN_BOTTOM;
 use consts::KEYBOARD_MARGIN_LEFT;
 use consts::KEYBOARD_MARGIN_TOP;
 use consts::NOTE_NAMES;
+use consts::QUEUE_MARGIN_RIGHT;
 
 use super::playhead_controller::{self, Direction, Message};
 
@@ -182,9 +185,133 @@ impl GridEditor {
 
       printer.with_style(style, |printer| {
         printer.print((0, y), &label);
-        printer.print((2, y), symbol);
+        printer.print((3, y), &":".repeat(KEYBOARD_MARGIN_LEFT - 6));
+        printer.print((KEYBOARD_MARGIN_LEFT - 2, y), symbol);
       });
     }
+  }
+
+  fn draw_queue_right(&self, printer: &Printer) {
+    if !self.show_keyboard || self.grid.height == 0 {
+      return;
+    }
+
+    let total_height = self.grid.height;
+    let half_height = total_height / 2;
+
+    let style = Style::from(ColorStyle::front(ColorType::rgb(100, 100, 100)));
+    let label_style = Style::from(ColorStyle::front(ColorType::rgb(150, 150, 150)));
+
+    // Top half: EVQ (Event Queue)
+    // Read and display event queue items (bottom-aligned)
+    let event_queue = self.playhead_ui.event_queue.lock().unwrap();
+    let evq_items: Vec<String> = event_queue.iter().map(|op| format!("{}", op)).collect();
+    drop(event_queue);
+
+    let evq_start_y = if evq_items.len() >= half_height - 2 {
+      0
+    } else {
+      half_height.saturating_sub(evq_items.len() + 2)
+    };
+
+    // Draw empty queue placeholder blocks for EVQ
+    for y in 0..(evq_start_y + 1) {
+      let placeholder_color = if y % 2 == 0 {
+        ColorType::rgb(50, 50, 50)
+      } else {
+        ColorType::rgb(70, 70, 70)
+      };
+      let placeholder_style = Style::from(ColorStyle::front(placeholder_color));
+      printer.with_style(placeholder_style, |printer| {
+        for x in 1..QUEUE_MARGIN_RIGHT {
+          printer.print((x, y), consts::QUEUE_PLACEHOLDER_SYMBOL);
+        }
+      });
+    }
+
+    // Draw EVQ items
+    for (idx, item) in evq_items.iter().enumerate() {
+      let y = evq_start_y + idx;
+      if y >= half_height - 1 {
+        break;
+      }
+      printer.with_style(style, |printer| {
+        printer.print((3, y), item);
+      });
+    }
+
+    // EVQ label at bottom of top half
+    printer.with_style(label_style, |printer| {
+      printer.print((4, half_height - 1), "EVQ");
+    });
+
+    // // Draw separator line between EVQ and OPQ
+    // printer.with_style(style, |printer| {
+    //   for x in 0..QUEUE_MARGIN_RIGHT {
+    //     printer.print((x, half_height), ".");
+    //   }
+    // });
+
+    // Bottom half: OPQ (Operator Queue)
+    let opq_start_y = half_height;
+
+    // Read and display operator queue items (bottom-aligned)
+    let operator_queue = self.playhead_ui.operator_queue.lock().unwrap();
+    let opq_items: Vec<String> = operator_queue
+      .iter()
+      .map(|item| format!("{}", item))
+      .collect();
+    drop(operator_queue);
+
+    let opq_display_start_y = if opq_items.len() >= total_height - opq_start_y - 2 {
+      opq_start_y + 1 // Start after separator line
+    } else {
+      total_height.saturating_sub(opq_items.len() + 1)
+    };
+
+    // Draw empty queue placeholder blocks for OPQ
+    for y in (opq_start_y + 1)..(opq_display_start_y) {
+      let placeholder_color = if y % 2 == 0 {
+        ColorType::rgb(70, 70, 70)
+      } else {
+        ColorType::rgb(50, 50, 50)
+      };
+      let placeholder_style = Style::from(ColorStyle::front(placeholder_color));
+      printer.with_style(placeholder_style, |printer| {
+        for x in 1..QUEUE_MARGIN_RIGHT {
+          printer.print((x, y), consts::QUEUE_PLACEHOLDER_SYMBOL);
+        }
+      });
+    }
+
+    // Draw OPQ items
+    for (idx, item) in opq_items.iter().enumerate() {
+      let y = opq_display_start_y + idx;
+      if y >= total_height - 1 {
+        break;
+      }
+      printer.with_style(style, |printer| {
+        printer.print((3, y), item);
+      });
+    }
+
+    // Draw vertical separator
+    for y in 0..total_height {
+      let placeholder_color = if y % 2 == 0 {
+        ColorType::rgb(50, 50, 50)
+      } else {
+        ColorType::rgb(70, 70, 70)
+      };
+      let placeholder_style = Style::from(ColorStyle::front(placeholder_color));
+      printer.with_style(placeholder_style, |printer| {
+        printer.print((0, y), " ┃ ");
+      });
+    }
+
+    // OPQ label at bottom of bottom half
+    printer.with_style(label_style, |printer| {
+      printer.print((4, total_height - 1), "OPQ");
+    });
   }
 
   fn draw_queue_operators_bottom(&self, printer: &Printer) {
@@ -340,7 +467,9 @@ impl GridEditor {
 
   pub fn resize(&mut self, size: Vec2) {
     let grid_width = if self.show_keyboard {
-      size.x.saturating_sub(KEYBOARD_MARGIN_LEFT)
+      size
+        .x
+        .saturating_sub(KEYBOARD_MARGIN_LEFT + QUEUE_MARGIN_RIGHT)
     } else {
       size.x
     };
@@ -403,6 +532,11 @@ fn draw(canvas: &GridEditor, printer: &Printer) {
     let bottom_y = KEYBOARD_MARGIN_TOP + canvas.grid.height;
     let bottom_operators_printer = printer.offset((KEYBOARD_MARGIN_LEFT, bottom_y));
     canvas.draw_queue_operators_bottom(&bottom_operators_printer);
+
+    // Draw right queue display
+    let right_x = KEYBOARD_MARGIN_LEFT + canvas.grid.width;
+    let right_queue_printer = printer.offset((right_x, KEYBOARD_MARGIN_TOP));
+    canvas.draw_queue_right(&right_queue_printer);
   }
 
   let x_offset = if canvas.show_keyboard {

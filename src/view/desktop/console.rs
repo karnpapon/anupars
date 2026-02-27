@@ -150,14 +150,14 @@ impl TopSection {
         TextView::new(app.movement.print_movements()).with_name(consts::movement_unit_view),
       )
       .child("STE: ", input_status_unit_view)
-      .child(
-        "OPQ:",
-        TextView::new("[]").with_name(consts::op_queue_status_unit_view),
-      )
-      .child(
-        "EVQ:",
-        TextView::new("[]").with_name(consts::ev_queue_status_unit_view),
-      )
+      // .child(
+      //   "OPQ:",
+      //   TextView::new("[]").with_name(consts::op_queue_status_unit_view),
+      // )
+      // .child(
+      //   "EVQ:",
+      //   TextView::new("[]").with_name(consts::ev_queue_status_unit_view),
+      // )
       .full_width();
 
     FocusTracker::new(
