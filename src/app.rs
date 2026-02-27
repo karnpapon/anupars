@@ -49,6 +49,7 @@ pub enum Movement {
   Forward,
   Reverse,
   Random,
+  Pendulum,
 }
 
 impl fmt::Display for Movement {
@@ -57,19 +58,25 @@ impl fmt::Display for Movement {
       Movement::Forward => write!(f, "f"),
       Movement::Reverse => write!(f, "r"),
       Movement::Random => write!(f, "d"),
+      Movement::Pendulum => write!(f, "p"),
     }
   }
 }
 
 impl Movement {
   pub fn print_movements(&self) -> String {
-    let movements = [Movement::Forward, Movement::Reverse, Movement::Random];
+    let movements = [
+      Movement::Forward,
+      Movement::Reverse,
+      Movement::Random,
+      Movement::Pendulum,
+    ];
     movements
       .iter()
       .map(|mv| {
         let movement = self;
         if *mv == *movement {
-          format!("[{}]", mv.to_string().to_uppercase())
+          format!("[{}]", mv)
         } else {
           format!("{}", mv)
         }

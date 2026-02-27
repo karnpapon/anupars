@@ -40,6 +40,7 @@ pub enum Message {
   ToggleReverseMode(),
   ToggleArpeggiatorMode(),
   ToggleRandomMode(),
+  TogglePendulumMode(),
   ToggleEventOperatorMode(),
   ToggleDrainQueueMode(),
   ToggleSweepMode(),
@@ -218,6 +219,12 @@ impl Playhead {
             let cb_sink = self.cb_sink.clone();
             playhead_area_tx
               .send(playhead::Message::ToggleReverseMode(cb_sink))
+              .unwrap();
+          }
+          Message::TogglePendulumMode() => {
+            let cb_sink = self.cb_sink.clone();
+            playhead_area_tx
+              .send(playhead::Message::TogglePendulumMode(cb_sink))
               .unwrap();
           }
           Message::SetTempo(bpm) => {

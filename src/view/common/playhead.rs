@@ -154,6 +154,7 @@ pub enum Message {
   ToggleAccumulationMode(cursive::CbSink),
   ToggleForwardMode(cursive::CbSink),
   ToggleReverseMode(cursive::CbSink),
+  TogglePendulumMode(cursive::CbSink),
   ToggleArpeggiatorMode(cursive::CbSink),
   ToggleRandomMode(cursive::CbSink),
   ToggleEventOperatorMode(cursive::CbSink),
@@ -443,8 +444,7 @@ impl PlayheadArea {
     if arpeggiator {
       let regex_indexes = self.regex_indexes.lock().unwrap();
       let movement = self.movement.lock().unwrap();
-      let reverse = *movement == Movement::Reverse;
-      let random = *movement == Movement::Random;
+      let movement_random = *movement == Movement::Random;
       let matches = playback_modes::get_arpeggiator_matches(
         &regex_indexes,
         playhead_x,
@@ -452,13 +452,13 @@ impl PlayheadArea {
         playhead_w,
         playhead_h,
         canvas_w,
-        reverse,
+        *movement == Movement::Reverse,
       );
       drop(regex_indexes);
       drop(movement);
 
       if !matches.is_empty() {
-        let step = if random {
+        let step = if movement_random {
           playback_modes::get_random_index(pos, matches.len())
         } else {
           pos % matches.len()
@@ -467,15 +467,16 @@ impl PlayheadArea {
         actived_pos.x = x;
         actived_pos.y = y;
       } else {
+        let movement = self.movement.lock().unwrap();
         // No matches, fallback to normal running
         playback_modes::calculate_position_fallback(
           pos,
           playhead_w,
           playhead_h,
-          reverse,
-          random,
+          *movement,
           &mut actived_pos,
         );
+        drop(movement);
       }
     } else {
       let movement = self.movement.lock().unwrap();
@@ -484,8 +485,7 @@ impl PlayheadArea {
         pos,
         playhead_w,
         playhead_h,
-        *movement == Movement::Reverse,
-        *movement == Movement::Random,
+        *movement,
         &mut actived_pos,
       );
       drop(movement);
@@ -1573,6 +1573,9 @@ impl PlayheadArea {
           }
           Message::ToggleRandomMode(cb_sink) => {
             self.switch_movement(Movement::Random, cb_sink);
+          }
+          Message::TogglePendulumMode(cb_sink) => {
+            self.switch_movement(Movement::Pendulum, cb_sink);
           }
           Message::ToggleEventOperatorMode(cb_sink) => {
             self.toggle_event_operator_mode(cb_sink);

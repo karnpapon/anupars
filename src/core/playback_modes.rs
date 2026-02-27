@@ -6,6 +6,7 @@
 //! - Random: Deterministic pseudo-random positioning
 //! - Arpeggiator: Pattern-based movement through regex matches
 
+use crate::app::Movement;
 use cursive::Vec2;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::Hash;
@@ -61,6 +62,29 @@ pub fn calculate_reverse_position(
   } else {
     0
   };
+}
+
+pub fn calculate_pendulum_position(
+  adjusted_pos: usize,
+  playhead_w: usize,
+  playhead_h: usize,
+  actived_pos: &mut Vec2,
+) {
+  let total_positions = playhead_w * playhead_h;
+  if total_positions == 0 {
+    actived_pos.x = 0;
+    actived_pos.y = 0;
+    return;
+  }
+  let cycle_length = total_positions * 2 - 2;
+  let cycle_pos = adjusted_pos % cycle_length;
+
+  if cycle_pos < total_positions {
+    calculate_normal_position(cycle_pos, playhead_w, playhead_h, actived_pos);
+  } else {
+    let reverse_pos = cycle_pos - total_positions + 1;
+    calculate_reverse_position(reverse_pos, playhead_w, playhead_h, actived_pos);
+  }
 }
 
 /// Calculate random position within playhead area using deterministic hashing
@@ -123,16 +147,22 @@ pub fn calculate_position_fallback(
   adjusted_pos: usize,
   playhead_w: usize,
   playhead_h: usize,
-  reverse: bool,
-  random: bool,
+  movement: Movement,
   actived_pos: &mut Vec2,
 ) {
-  if random {
-    calculate_random_position(adjusted_pos, playhead_w, playhead_h, actived_pos);
-  } else if reverse {
-    calculate_reverse_position(adjusted_pos, playhead_w, playhead_h, actived_pos);
-  } else {
-    calculate_normal_position(adjusted_pos, playhead_w, playhead_h, actived_pos);
+  match movement {
+    Movement::Random => {
+      calculate_random_position(adjusted_pos, playhead_w, playhead_h, actived_pos);
+    }
+    Movement::Reverse => {
+      calculate_reverse_position(adjusted_pos, playhead_w, playhead_h, actived_pos);
+    }
+    Movement::Pendulum => {
+      calculate_pendulum_position(adjusted_pos, playhead_w, playhead_h, actived_pos);
+    }
+    _ => {
+      calculate_normal_position(adjusted_pos, playhead_w, playhead_h, actived_pos);
+    }
   }
 }
 

@@ -231,6 +231,13 @@ impl CommandManager {
           .unwrap();
         Ok(None)
       }
+      Command::TogglePendulum => {
+        self
+          .playhead_tx_cloned
+          .send(playhead_controller::Message::TogglePendulumMode())
+          .unwrap();
+        Ok(None)
+      }
       Command::ToggleEventOperator => {
         self
           .playhead_tx_cloned
@@ -351,6 +358,7 @@ impl CommandManager {
     kb.insert("Ctrl+f".into(), vec![Command::ToggleForward]);
     kb.insert("Ctrl+r".into(), vec![Command::ToggleReverse]);
     kb.insert("Ctrl+d".into(), vec![Command::ToggleRandom]);
+    kb.insert("Ctrl+p".into(), vec![Command::TogglePendulum]);
     kb.insert("Ctrl+a".into(), vec![Command::ToggleArpeggiator]);
     kb.insert("Ctrl+u".into(), vec![Command::ToggleAccumulation]);
     kb.insert("Ctrl+e".into(), vec![Command::ToggleEventOperator]);

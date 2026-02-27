@@ -29,6 +29,7 @@ pub enum Command {
   ToggleArpeggiator,
   ToggleAccumulation,
   ToggleRandom,
+  TogglePendulum,
   ToggleEventOperator,
   ToggleDrainQueue,
   ToggleSweep,
@@ -49,6 +50,7 @@ impl fmt::Display for Command {
       | Self::AdjustPlayhead(_)
       | Self::ToggleForward
       | Self::ToggleReverse
+      | Self::TogglePendulum
       | Self::ToggleArpeggiator
       | Self::ToggleAccumulation
       | Self::ToggleEventOperator
@@ -75,6 +77,7 @@ impl Command {
       Self::AdjustRatio(_) => "adjustratio",
       Self::ToggleForward => "toggleforward",
       Self::ToggleReverse => "togglereverse",
+      Self::TogglePendulum => "togglependulum",
       Self::ToggleArpeggiator => "togglearpeggiator",
       Self::ToggleAccumulation => "toggleaccumulation",
       Self::ToggleRandom => "togglerandom",
