@@ -344,19 +344,8 @@ impl PlayheadArea {
   }
 
   fn build_movement_status_string(&self) -> String {
-    let movements = [Movement::Forward, Movement::Reverse, Movement::Random];
-    movements
-      .iter()
-      .map(|mv| {
-        let movement = self.movement.lock().unwrap();
-        if *mv == *movement {
-          format!("[{}]", mv.to_string().to_uppercase())
-        } else {
-          format!("{}", mv)
-        }
-      })
-      .collect::<Vec<_>>()
-      .join("")
+    let movement = self.movement.lock().unwrap();
+    movement.print_movements()
   }
 
   pub fn switch_movement(&self, new_movement: Movement, cb_sink: cursive::CbSink) {

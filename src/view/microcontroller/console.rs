@@ -154,7 +154,7 @@ impl Console {
         TextView::new(app.mode.print_modes()).with_name(consts::mode_unit_view),
       )
       .child(
-        "MVT:",
+        "MVE:",
         TextView::new(app.movement.print_movements()).with_name(consts::movement_unit_view),
       )
       .child("STE: ", input_status_unit_view)

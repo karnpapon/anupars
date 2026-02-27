@@ -64,7 +64,18 @@ impl fmt::Display for Movement {
 impl Movement {
   pub fn print_movements(&self) -> String {
     let movements = [Movement::Forward, Movement::Reverse, Movement::Random];
-    movements.iter().map(|mv| mv.to_string()).collect()
+    movements
+      .iter()
+      .map(|mv| {
+        let movement = self;
+        if *mv == *movement {
+          format!("[{}]", mv.to_string().to_uppercase())
+        } else {
+          format!("{}", mv)
+        }
+      })
+      .collect::<Vec<_>>()
+      .join("")
   }
 }
 
