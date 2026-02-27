@@ -200,7 +200,7 @@ impl GridEditor {
     let half_height = total_height / 2;
 
     let style = Style::from(ColorStyle::front(ColorType::rgb(100, 100, 100)));
-    let label_style = Style::from(ColorStyle::front(ColorType::rgb(150, 150, 150)));
+    // let dimmed_style = Style::from(ColorStyle::front(ColorType::rgb(50, 50, 50)));
 
     // Top half: EVQ (Event Queue)
     // Read and display event queue items (bottom-aligned)
@@ -241,16 +241,22 @@ impl GridEditor {
     }
 
     // EVQ label at bottom of top half
-    printer.with_style(label_style, |printer| {
-      printer.print((4, half_height - 1), "EVQ");
+    printer.with_style(style, |printer| {
+      printer.print((3, half_height - 1), "EVNTQ");
     });
 
-    // // Draw separator line between EVQ and OPQ
-    // printer.with_style(style, |printer| {
-    //   for x in 0..QUEUE_MARGIN_RIGHT {
-    //     printer.print((x, half_height), ".");
-    //   }
-    // });
+    // Draw separator line between EVQ and OPQ
+    let center_offset = 1;
+    printer.with_style(style, |printer| {
+      let center_x = (QUEUE_MARGIN_RIGHT / 2) + center_offset;
+      for x in 0..QUEUE_MARGIN_RIGHT {
+        if x == center_x {
+          printer.print((x, half_height), "v");
+        } else {
+          printer.print((x, half_height), " ");
+        }
+      }
+    });
 
     // Bottom half: OPQ (Operator Queue)
     let opq_start_y = half_height;
@@ -309,8 +315,8 @@ impl GridEditor {
     }
 
     // OPQ label at bottom of bottom half
-    printer.with_style(label_style, |printer| {
-      printer.print((4, total_height - 1), "OPQ");
+    printer.with_style(style, |printer| {
+      printer.print((3, total_height - 1), "OPRTQ");
     });
   }
 
