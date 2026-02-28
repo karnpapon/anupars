@@ -323,8 +323,7 @@ impl Console {
                         let len = length[i % length.len()];
                         let vel = velocity[i % velocity.len()];
 
-                        let midi_msg =
-                          MidiMsg::from(note_idx as f32, *octave, len, vel, channel, false);
+                        let midi_msg = MidiMsg::from(note_idx as f32, *octave, len, vel, channel);
 
                         midi_msg_list.push(midi_msg);
                       }

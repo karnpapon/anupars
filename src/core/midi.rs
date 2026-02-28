@@ -9,6 +9,31 @@ use std::thread;
 use super::stack::{self, Stack};
 use crate::core::consts;
 
+// Constants for note length calculation
+const BASE_LENGTH_FIXED: usize = 12; // 96ms at 120 BPM - for DynLength OFF
+const BASE_LENGTH_DYNAMIC: usize = 32; // 256ms at 120 BPM - for DynLength ON
+const MIN_AUDIBLE_LENGTH: u8 = 10; // 80ms minimum
+const DYNLENGTH_DEFAULT_DISTANCE: usize = 4;
+
+// Constants for velocity calculation
+const MAX_VELOCITY: f32 = 100.0;
+const MIN_VELOCITY: f32 = 10.0;
+
+/// Parameters for MIDI trigger with position information
+#[derive(Clone, Copy, Debug)]
+pub struct TriggerParams {
+  pub y_position: usize,
+  pub grid_height: usize,
+  pub scale_mode: crate::core::scale::ScaleMode,
+  pub scale_root_offset: u8,
+  pub bpm: usize,
+  pub trigger_pos_y: usize,
+  pub active_pos_y: usize,
+  pub distance_to_next: usize,
+  pub hold: bool,
+  pub is_sweep: bool,
+}
+
 #[derive(Clone, Debug)]
 pub enum Message {
   Push(MidiMsg),
@@ -17,22 +42,7 @@ pub enum Message {
   Trigger(MidiMsg, bool), // (msg, is_pressed)
   SetMsgConfig(MidiMsg),  // ? maybe obsolete, TBD
   ClearMsgConfig(),
-  TriggerWithPosition(
-    (
-      usize,
-      usize,
-      usize,
-      usize,
-      crate::core::scale::ScaleMode,
-      usize,
-      usize,
-      bool,
-      bool,
-      usize,
-      u8,
-      usize,
-    ),
-  ), // (grid_index((curr*h)+w), y_position, grid_width, grid_height, scale_mode, bpm, trigger_pos_y, hold, is_sweep, active_pos_y, scale_root_offset, distance_to_next)
+  TriggerWithPosition(TriggerParams),
   SwitchDevice(usize),
   Panic(),
   SetTempo(usize),
@@ -53,25 +63,16 @@ pub struct MidiMsg {
   pub octave: u8,
   pub channel: u8,
   pub length: u8,
-  pub is_played: bool,
 }
 
 impl MidiMsg {
-  pub fn from(
-    note: f32,
-    octave: u8,
-    length: u8,
-    velocity: u8,
-    channel: u8,
-    is_played: bool,
-  ) -> MidiMsg {
+  pub fn from(note: f32, octave: u8, length: u8, velocity: u8, channel: u8) -> MidiMsg {
     Self {
       note,
       octave,
       length,
       velocity,
       channel,
-      is_played,
     }
   }
 }
@@ -185,34 +186,8 @@ impl Midi {
           Message::ClearMsgConfig() => {
             self.clear_msg_config_list();
           }
-          Message::TriggerWithPosition((
-            grid_index,
-            y_position,
-            grid_width,
-            grid_height,
-            scale_mode,
-            bpm,
-            active_pos,
-            hold,
-            is_sweep,
-            active_pos_y,
-            scale_root_offset,
-            distance_to_next,
-          )) => {
-            self.trigger_w_position(
-              grid_index,
-              y_position,
-              grid_width,
-              grid_height,
-              scale_mode,
-              bpm,
-              active_pos,
-              hold,
-              is_sweep,
-              active_pos_y,
-              scale_root_offset,
-              distance_to_next,
-            );
+          Message::TriggerWithPosition(params) => {
+            self.trigger_w_position(params);
           }
           Message::SetTempo(bpm) => {
             let mut tempo = self.tempo.lock().unwrap();
@@ -303,97 +278,74 @@ impl Midi {
     midi_msg_config_list.push(midi);
   }
 
-  // TODO: refac this
-  #[allow(clippy::too_many_arguments)]
-  fn trigger_w_position(
-    &self,
-    _grid_index: usize,
-    y_position: usize,
-    _grid_width: usize,
-    grid_height: usize,
-    scale_mode: crate::core::scale::ScaleMode,
-    bpm: usize,
-    trigger_pos_y: usize,
-    hold: bool,
-    is_sweep: bool,
-    active_pos_y: usize,
-    scale_root_offset: u8,
-    distance_to_next: usize,
-  ) {
-    // Use the actual grid height passed as parameter
-    if grid_height == 0 {
-      return; // Avoid division by zero
-    }
+  /// Calculate velocity based on position and mode
+  fn calculate_velocity(params: &TriggerParams) -> u8 {
+    let ref_velocity = MAX_VELOCITY
+      - (params.active_pos_y as f32 / params.grid_height as f32) * (MAX_VELOCITY - MIN_VELOCITY);
 
-    // Use scale mode to map position to note
-    let (note_index, octave) = scale_mode.pos_to_scale_note(
-      y_position,
-      grid_height,
-      consts::BASE_OCTAVE,
-      scale_root_offset,
-    );
-
-    let max_vel = 100.0;
-    let min_vel = 10.0;
-
-    // Calculate reference velocity at active_pos_y (higher Y = lower velocity)
-    let ref_velocity = max_vel - (active_pos_y as f32 / grid_height as f32) * (max_vel - min_vel);
-
-    let mut vel = if is_sweep {
-      // For sweep mode, scale velocity based on distance from active_pos_y
-      // Closer to active_pos_y = higher velocity (max at active_pos_y)
-      let distance = (trigger_pos_y as i32 - active_pos_y as i32).abs() as f32;
-      let max_distance = grid_height as f32;
+    let vel = if params.is_sweep {
+      // Sweep mode: scale velocity by distance from active position
+      let distance = (params.trigger_pos_y as i32 - params.active_pos_y as i32).abs() as f32;
+      let max_distance = params.grid_height as f32;
       let proximity_ratio = (1.0 - (distance / max_distance)).max(0.0);
       (ref_velocity * proximity_ratio).round() as u8 / 2
     } else {
       ref_velocity.round() as u8
     };
 
-    vel = vel.max(min_vel as u8);
+    vel.max(MIN_VELOCITY as u8)
+  }
 
-    // Calculate note length:
-    // - When distance_to_next == 4: DynLength is OFF, use shorter fixed duration
-    // - When distance_to_next != 4: DynLength is ON, calculate based on distance
-    // Each length unit = 8ms (Stack refresh rate)
+  /// Calculate note length based on BPM, distance, and DynLength mode
+  fn calculate_note_length(bpm: usize, distance_to_next: usize) -> u8 {
     let base_bpm = consts::DEFAULT_TEMPO;
 
-    let note_length = if distance_to_next == 4 {
-      // DynLength disabled: use shorter duration to prevent overlap in fast arpeggiator mode
-      // base_length=12 → 96ms at 120 BPM (safe for fast triggering)
-      let base_length = 12;
+    if distance_to_next == DYNLENGTH_DEFAULT_DISTANCE {
+      // DynLength OFF: fixed shorter duration to prevent overlap in fast playback
       let calculated_length = if bpm > 0 {
-        ((base_length * base_bpm) / bpm).max(1)
+        ((BASE_LENGTH_FIXED * base_bpm) / bpm).max(1)
       } else {
-        base_length
+        BASE_LENGTH_FIXED
       };
       (calculated_length as u8).min(127)
     } else {
-      // DynLength enabled: use longer base and apply dynamic distance factor
-      // base_length=32 → 256ms at 120 BPM with distance=4
-      let base_length = 32;
+      // DynLength ON: dynamic duration based on distance to next trigger
       let calculated_length = if bpm > 0 {
-        ((base_length * base_bpm) / bpm).max(1)
+        ((BASE_LENGTH_DYNAMIC * base_bpm) / bpm).max(1)
       } else {
-        base_length
+        BASE_LENGTH_DYNAMIC
       };
-      // Distance 1 → 0.25x (very short/staccato)
-      // Distance 4 → 1.0x (neutral)
-      // Distance 16 → 4.0x (very long/sustained)
+
+      // Distance factor: 1→0.25x (staccato), 4→1.0x (neutral), 16→4.0x (sustained)
       let distance_factor = (distance_to_next.min(16) as f32 / 4.0).clamp(0.25, 4.0);
       let length_with_distance = (calculated_length as f32 * distance_factor).round() as usize;
-      // Minimum 10 units (80ms) ensures notes are audible even with distance=1
-      (length_with_distance as u8).clamp(10, 127)
-    };
-    let midi_msg = MidiMsg::from(note_index, octave, note_length, vel, 0, false);
+
+      (length_with_distance as u8).clamp(MIN_AUDIBLE_LENGTH, 127)
+    }
+  }
+
+  /// Trigger MIDI note with position and scale information
+  fn trigger_w_position(&self, params: TriggerParams) {
+    if params.grid_height == 0 {
+      return;
+    }
+
+    let (note_index, octave) = params.scale_mode.pos_to_scale_note(
+      params.y_position,
+      params.grid_height,
+      consts::BASE_OCTAVE,
+      params.scale_root_offset,
+    );
+
+    let velocity = Self::calculate_velocity(&params);
+    let note_length = Self::calculate_note_length(params.bpm, params.distance_to_next);
+    let midi_msg = MidiMsg::from(note_index, octave, note_length, velocity, 0);
 
     let _ = self.trigger(&midi_msg, true);
 
-    if hold {
+    if params.hold {
       self.tx.send(Message::Hold(midi_msg)).unwrap();
     } else {
-      // Release only the specific note we're about to trigger (prevents stuck notes)
-      // This allows other notes to continue playing (e.g., chords)
       self.tx.send(Message::Release(midi_msg.clone())).unwrap();
       self.tx.send(Message::Push(midi_msg)).unwrap();
     }

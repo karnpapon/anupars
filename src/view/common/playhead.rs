@@ -643,7 +643,6 @@ impl PlayheadArea {
     note_position: usize,
     scale_mode: crate::core::scale::ScaleMode,
   ) {
-    let grid_width = self.grid_width.load(Ordering::Relaxed);
     let grid_height = self.grid_height.load(Ordering::Relaxed);
     let current_tempo = self.tempo.load(Ordering::Relaxed);
     let pos = self.pos.lock().unwrap();
@@ -659,20 +658,20 @@ impl PlayheadArea {
     };
 
     let hold_next = self.hold_next_note.load(Ordering::Relaxed);
-    let _ = self.midi_tx.send(midi::Message::TriggerWithPosition((
-      curr_running_playhead,
-      note_position,
-      grid_width,
-      grid_height,
-      scale_mode,
-      current_tempo,
-      pos.y,
-      hold_next,
-      false, // no sweep mode for normal triggers
-      pos.y, // active_pos_y (same as trigger_pos_y for normal triggers)
-      self.scale_root_top.lock().unwrap().to_root_offset(),
-      distance_to_next,
-    )));
+    let _ = self
+      .midi_tx
+      .send(midi::Message::TriggerWithPosition(midi::TriggerParams {
+        y_position: note_position,
+        grid_height,
+        scale_mode,
+        scale_root_offset: self.scale_root_top.lock().unwrap().to_root_offset(),
+        bpm: current_tempo,
+        trigger_pos_y: pos.y,
+        active_pos_y: pos.y,
+        distance_to_next,
+        hold: hold_next,
+        is_sweep: false,
+      }));
   }
 
   fn trigger_midi_if_matched_sweep(&self, curr_running_playhead: usize, abs_x: usize) {
@@ -712,26 +711,22 @@ impl PlayheadArea {
           avg_y
         };
 
-        // Use the first matched index for reference (they all share the same x)
-        let first_y = matched_y_positions[0];
-        let reference_index = first_y * grid_width + abs_x;
-
         let default_length = 4;
 
-        let _ = self.midi_tx.send(midi::Message::TriggerWithPosition((
-          reference_index,
-          x_note_position,
-          grid_width,
-          grid_height,
-          x_scale_mode,
-          current_tempo,
-          avg_y,        // Use average y position for velocity calculation
-          false,        // sweep mode notes don't use hold
-          true,         // is_sweep
-          active_pos_y, // reference Y position for velocity calculation
-          self.scale_root_top.lock().unwrap().to_root_offset(),
-          default_length,
-        )));
+        let _ = self
+          .midi_tx
+          .send(midi::Message::TriggerWithPosition(midi::TriggerParams {
+            y_position: x_note_position,
+            grid_height,
+            scale_mode: x_scale_mode,
+            scale_root_offset: self.scale_root_top.lock().unwrap().to_root_offset(),
+            bpm: current_tempo,
+            trigger_pos_y: avg_y,
+            active_pos_y,
+            distance_to_next: default_length,
+            hold: false,
+            is_sweep: true,
+          }));
       }
     }
   }
@@ -1420,14 +1415,7 @@ impl PlayheadArea {
       let extra_octave = (raw_pitch / 12.0).floor() as u8;
       let final_octave = base_octave + octave_jump as u8 + extra_octave;
 
-      let midi_msg = midi::MidiMsg::from(
-        note_index,
-        final_octave,
-        note_length,
-        velocity,
-        channel,
-        false,
-      );
+      let midi_msg = midi::MidiMsg::from(note_index, final_octave, note_length, velocity, channel);
 
       chord_notes.push(midi_msg);
     }
