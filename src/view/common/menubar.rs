@@ -124,7 +124,7 @@ impl Menubar {
         s.reset_default_callbacks();
         // Clear MIDI config and stop all notes
         let _ = midi_tx_reset.send(crate::core::midi::Message::ClearMsgConfig());
-        let _ = midi_tx_reset.send(crate::core::midi::Message::ReleaseAll());
+        let _ = midi_tx_reset.send(crate::core::midi::Message::Panic());
       })
       .delimiter()
       .leaf("About", build_about_view)

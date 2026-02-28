@@ -12,10 +12,10 @@ use crate::core::consts;
 #[derive(Clone, Debug)]
 pub enum Message {
   Push(MidiMsg),
-  Hold(MidiMsg),    // Hold a note indefinitely
-  Release(MidiMsg), // Release a held note
-  Trigger(MidiMsg, bool),
-  SetMsgConfig(MidiMsg), // ? maybe obsolete, TBD
+  Hold(MidiMsg),          // Hold a note indefinitely
+  Release(MidiMsg),       // Release a held note
+  Trigger(MidiMsg, bool), // (msg, is_pressed)
+  SetMsgConfig(MidiMsg),  // ? maybe obsolete, TBD
   ClearMsgConfig(),
   TriggerWithPosition(
     (

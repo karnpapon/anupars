@@ -1276,9 +1276,22 @@ impl PlayheadArea {
     let ref_velocity = max_vel - (abs_y as f32 / grid_height as f32) * (max_vel - min_vel);
     let velocity = ref_velocity.round().max(min_vel) as u8;
 
+    // Calculate dynamic note length based on BPM
+    let current_tempo = self.tempo.load(Ordering::Relaxed);
+    let base_bpm = consts::DEFAULT_TEMPO;
+    let base_length = 4; // Base length for chords
+    let calculated_length = if current_tempo > 0 {
+      ((base_length * base_bpm) / current_tempo).max(1)
+    } else {
+      base_length
+    };
+    let note_length = (calculated_length as u8).min(127);
+
     // Chord notes: root, third, fifth
     let chord_degrees = [0, 2, 4];
     let channel = 0;
+
+    let mut chord_notes = Vec::new();
 
     for &degree_offset in &chord_degrees {
       let target_scale_degree = (base_scale_degree + degree_offset) % scale_length;
@@ -1290,19 +1303,34 @@ impl PlayheadArea {
       let extra_octave = (raw_pitch / 12.0).floor() as u8;
       let final_octave = base_octave + octave_jump as u8 + extra_octave;
 
-      let midi_msg = midi::MidiMsg::from(note_index, final_octave, 0, velocity, channel, false);
+      let midi_msg = midi::MidiMsg::from(
+        note_index,
+        final_octave,
+        note_length,
+        velocity,
+        channel,
+        false,
+      );
 
+      chord_notes.push(midi_msg);
+    }
+
+    for midi_msg in &chord_notes {
       let _ = self
         .midi_tx
         .send(midi::Message::Trigger(midi_msg.clone(), true));
-
-      // Schedule note off
-      let midi_tx_clone = self.midi_tx.clone();
-      thread::spawn(move || {
-        thread::sleep(Duration::from_millis(400));
-        let _ = midi_tx_clone.send(midi::Message::Trigger(midi_msg, false));
-      });
     }
+
+    // Use BPM-aware timing for chord duration (matches Stack behavior)
+    let chord_duration_ms = (note_length as u64 * 8).max(50);
+
+    let midi_tx_clone = self.midi_tx.clone();
+    thread::spawn(move || {
+      thread::sleep(Duration::from_millis(chord_duration_ms));
+      for midi_msg in chord_notes {
+        let _ = midi_tx_clone.send(midi::Message::Trigger(midi_msg, false));
+      }
+    });
   }
 
   fn handle_x(&self) {
