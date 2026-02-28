@@ -1509,15 +1509,22 @@ impl PlayheadArea {
 
               // ? should sweep mode effect accumulation value
               // Handle accumulation mode (for position operators)
+              let mut did_jump = false;
               if let Some(matcher) = self.text_matcher.lock().unwrap().as_ref() {
                 if matcher.get(&curr_running_playhead).is_some() {
                   if self.accumulation_mode.load(Ordering::Relaxed) {
+                    // accum heppens before MIDI trigger
+                    // since accu should execute any ops first (if needed)
                     if let Some(new_active_pos) = self.handle_accumulation_mode(abs_x, &cb_sink) {
                       active_pos = new_active_pos;
+                      did_jump = true; // Mark that a jump occurred
                     }
                     self.execute_front_event_op_in_queue();
                   }
-                  self.trigger_midi_if_matched(curr_running_playhead, note_position, scale_mode);
+                  // Only trigger MIDI if we didn't jump (prevents extra note before jump)
+                  if !did_jump {
+                    self.trigger_midi_if_matched(curr_running_playhead, note_position, scale_mode);
+                  }
                   if self.hold_next_note.load(Ordering::Relaxed) {
                     self.hold_next_note.store(false, Ordering::Relaxed);
                     self.operator_queue.lock().unwrap().remove(0);
@@ -1526,7 +1533,9 @@ impl PlayheadArea {
                 }
                 self.handle_silent_step(matcher, &cb_sink);
               }
-              self.trigger_midi_if_matched_sweep(curr_running_playhead, abs_x);
+              if !did_jump {
+                self.trigger_midi_if_matched_sweep(curr_running_playhead, abs_x);
+              }
               self.update_active_pos_ui(active_pos, &cb_sink);
             }
 
