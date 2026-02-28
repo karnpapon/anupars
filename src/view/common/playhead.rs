@@ -235,8 +235,6 @@ impl PlayheadArea {
       scale_root_top: Arc::new(Mutex::new(crate::core::scale::ScaleRoot::default())),
       accumulation_counter: Arc::new(Mutex::new(0)),
       movement: Arc::new(Mutex::new(Movement::Forward)),
-      // reverse_mode: AtomicBool::new(false),
-      // random_mode: AtomicBool::new(false),
       accumulation_mode: AtomicBool::new(false),
       arpeggiator_mode: AtomicBool::new(false),
       event_operator_mode: AtomicBool::new(false),
@@ -293,22 +291,6 @@ impl PlayheadArea {
                     },
                   );
                 }
-                // UIUpdate::OpQueueDisplay(queue_str) => {
-                //   siv.call_on_name(
-                //     consts::op_queue_status_unit_view,
-                //     move |view: &mut TextView| {
-                //       view.set_content(queue_str);
-                //     },
-                //   );
-                // }
-                // UIUpdate::EvQueueDisplay(queue_str) => {
-                //   siv.call_on_name(
-                //     consts::ev_queue_status_unit_view,
-                //     move |view: &mut TextView| {
-                //       view.set_content(queue_str);
-                //     },
-                //   );
-                // }
                 UIUpdate::PlayheadPosAndArea(pos, area) => {
                   siv.call_on_name(
                     consts::canvas_editor_section_view,

@@ -384,7 +384,7 @@ fn read_file(path: &Path) -> Result<String, Box<dyn Error>> {
   Ok(file_contents)
 }
 
-/// Return the path to the default location (~/.anu_rs/contents)
+/// Return the path to the default location (~/.anupars/contents)
 fn get_default_database_path() -> Result<PathBuf, Box<dyn Error>> {
   let mut path = match dirs::home_dir().map(|p| p.join(consts::DEFAULT_APP_DIRECTORY)) {
     Some(d) => d,

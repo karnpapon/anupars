@@ -7,10 +7,10 @@ use crate::app::UserData;
 use crate::view::common::playhead_controller;
 
 #[cfg(feature = "desktop")]
-use crate::view::desktop::app::Anu;
+use crate::view::desktop::program::Program;
 
 #[cfg(feature = "microcontroller")]
-use crate::view::microcontroller::app::Anu;
+use crate::view::microcontroller::program::Program;
 
 use super::command::{Adjustment, Command, MoveDirection};
 use super::timing::metronome;
@@ -25,7 +25,7 @@ use std::cell::RefCell;
 pub struct CommandManager {
   aliases: HashMap<String, String>,
   bindings: RefCell<HashMap<String, Vec<Command>>>,
-  pub anu: Arc<Anu>,
+  pub program: Arc<Program>,
   metronome_sender: Sender<metronome::Message>,
   cb_sink: cursive::CbSink,
   temp_tempo: Arc<Mutex<usize>>,
@@ -36,7 +36,7 @@ pub struct CommandManager {
 
 impl CommandManager {
   pub fn new(
-    anu: Anu,
+    prog: Program,
     m_tx: Sender<metronome::Message>,
     cb_sink: cursive::CbSink,
     temp_tempo: Arc<Mutex<usize>>,
@@ -47,7 +47,7 @@ impl CommandManager {
     Self {
       aliases: HashMap::new(),
       bindings,
-      anu: Arc::new(anu),
+      program: Arc::new(prog),
       metronome_sender: m_tx,
       cb_sink,
       temp_tempo,
@@ -90,9 +90,9 @@ impl CommandManager {
         Ok(None)
       }
       Command::ToggleInputRegexAndCanvas => {
-        self.anu.set_toggle_regex_input();
+        self.program.set_toggle_regex_input();
 
-        if !self.anu.toggle_regex_input() {
+        if !self.program.toggle_regex_input() {
           let mut display_view = s.find_name::<TextView>(consts::display_view).unwrap();
           display_view.set_content(utils::build_doc_string(&consts::APP_WELCOME_MSG));
 

@@ -21,7 +21,7 @@ use super::console::TopSection;
 use super::display::MiddleSection;
 
 #[derive(Clone)]
-pub struct Anu {
+pub struct Program {
   pub mode: AppMode,
   pub movement: Movement,
   pub regex_mode_state: RadioGroup<RegexMode>,
@@ -31,9 +31,9 @@ pub struct Anu {
   pub top_section: TopSection,
 }
 
-impl Anu {
+impl Program {
   pub fn new() -> Self {
-    Anu {
+    Program {
       regex_mode_state: RadioGroup::new(),
       regex_flag_state: RadioGroup::new(),
       input_regex: String::new(),

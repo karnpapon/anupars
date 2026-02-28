@@ -18,7 +18,7 @@ use crate::view::common::playhead_controller;
 use super::console::{Console, RegexFlag, RegexMode};
 
 #[derive(Clone)]
-pub struct Anu {
+pub struct Program {
   pub mode: AppMode,
   pub movement: Movement,
   pub regex_mode_state: RadioGroup<RegexMode>,
@@ -28,9 +28,9 @@ pub struct Anu {
   pub top_section: Console,
 }
 
-impl Anu {
+impl Program {
   pub fn new() -> Self {
-    Anu {
+    Program {
       mode: AppMode::None,
       movement: Movement::Forward,
       regex_mode_state: RadioGroup::new(),

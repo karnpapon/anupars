@@ -21,7 +21,7 @@ use cursive::Vec2;
 use crate::app::UserData;
 use crate::core::regex;
 
-use super::app::Anu;
+use super::program::Program;
 use crate::core::consts;
 use crate::core::midi::{self, MidiMsg};
 use crate::core::parser::{self};
@@ -70,7 +70,10 @@ impl Console {
     }
   }
 
-  pub fn build_main(app: &mut Anu, regex_tx: Sender<regex::Message>) -> NamedView<LinearLayout> {
+  pub fn build_main(
+    app: &mut Program,
+    regex_tx: Sender<regex::Message>,
+  ) -> NamedView<LinearLayout> {
     let regex_tx_on_edit = regex_tx.clone();
     let regex_tx_on_submit = regex_tx.clone();
     let regex_input_unit_view = EditView::new()
@@ -348,7 +351,7 @@ impl Console {
     .with_name("midi_input")
   }
 
-  pub fn build_tab(app: &mut Anu, regex_tx: Sender<regex::Message>) -> NamedView<TabPanel> {
+  pub fn build_tab(app: &mut Program, regex_tx: Sender<regex::Message>) -> NamedView<TabPanel> {
     let mut tab = TabPanel::new()
       // .with_tab(Self::build_midi_input())
       .with_tab(Self::build_main(app, regex_tx))
@@ -365,7 +368,7 @@ impl Console {
   }
 
   pub fn build(
-    app: &mut Anu,
+    app: &mut Program,
     regex_tx: Sender<regex::Message>,
   ) -> ResizedView<FocusTracker<NamedView<TabPanel>>> {
     let tab = Self::build_tab(app, regex_tx);
@@ -397,7 +400,7 @@ fn solve_regex(siv: &mut Cursive, texts: &str, regex_tx: Sender<regex::Message>)
 
   let flag = siv
     .user_data::<UserData>()
-    .map(|user_data| *user_data.cmd.anu.regex_flag_state.selection())
+    .map(|user_data| *user_data.cmd.program.regex_flag_state.selection())
     .unwrap_or(RegexFlag::CaseSensitive);
 
   let flag_str = match flag {

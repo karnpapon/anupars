@@ -2,7 +2,7 @@ use std::sync::mpsc::Sender;
 
 use cfonts::{render, Fonts, Options};
 
-use super::app::Anu;
+use super::program::Program;
 use crate::app::UserData;
 use crate::core::consts;
 use crate::core::regex;
@@ -53,11 +53,14 @@ impl TopSection {
     }
   }
 
-  pub fn build(app: &mut Anu, regex_tx: Sender<regex::Message>) -> FocusTracker<NamedView<Dialog>> {
+  pub fn build(
+    prog: &mut Program,
+    regex_tx: Sender<regex::Message>,
+  ) -> FocusTracker<NamedView<Dialog>> {
     let regex_tx_on_edit = regex_tx.clone();
     let regex_tx_on_submit = regex_tx.clone();
     let regex_input_unit_view = EditView::new()
-      .content(app.input_regex.clone())
+      .content(prog.input_regex.clone())
       .style(Style::highlight_inactive())
       .on_edit(move |siv: &mut Cursive, texts: &str, pos: usize| {
         input_edit(siv, texts, pos, regex_tx_on_edit.clone())
@@ -73,19 +76,19 @@ impl TopSection {
 
     let flag_view = LinearLayout::horizontal()
       .child(
-        app
+        prog
           .regex_flag_state
           .button(RegexFlag::CaseSensitive, "i ")
           .selected(),
       )
-      .child(app.regex_flag_state.button(RegexFlag::Multiline, "m "))
-      .child(app.regex_flag_state.button(RegexFlag::Newline, "s "))
+      .child(prog.regex_flag_state.button(RegexFlag::Multiline, "m "))
+      .child(prog.regex_flag_state.button(RegexFlag::Newline, "s "))
       .child(
-        app
+        prog
           .regex_flag_state
           .button(RegexFlag::IgnoreWhiteSpace, "x "),
       )
-      .child(app.regex_flag_state.button(RegexFlag::Lazy, "U "));
+      .child(prog.regex_flag_state.button(RegexFlag::Lazy, "U "));
     // .with(|layout| {
     //   if app.boolean {
     //     layout.set_focus_index(1).unwrap();
@@ -94,12 +97,12 @@ impl TopSection {
 
     let _mode_view = LinearLayout::horizontal()
       .child(
-        app
+        prog
           .regex_mode_state
           .button(RegexMode::Realtime, "Realtime ")
           .selected(),
       )
-      .child(app.regex_mode_state.button(RegexMode::OnEval, "On-Eval "));
+      .child(prog.regex_mode_state.button(RegexMode::OnEval, "On-Eval "));
 
     let input_status_unit_view = TextView::new("-")
       .with_name(consts::input_status_unit_view)
@@ -123,22 +126,22 @@ impl TopSection {
     let status_controller_section_view = ListView::new()
       .child(
         "BPM: ",
-        TextView::new(utils::build_bpm_status_str(app.top_section.bpm))
+        TextView::new(utils::build_bpm_status_str(prog.top_section.bpm))
           .with_name(consts::bpm_status_unit_view),
       )
       .child(
         "RTO: ",
-        TextView::new(utils::build_ratio_status_str(app.top_section.ratio))
+        TextView::new(utils::build_ratio_status_str(prog.top_section.ratio))
           .with_name(consts::ratio_status_unit_view),
       )
       .child(
         "LEN: ",
-        TextView::new(utils::build_len_status_str(app.top_section.len))
+        TextView::new(utils::build_len_status_str(prog.top_section.len))
           .with_name(consts::len_status_unit_view),
       )
       .child(
         "POS: ",
-        TextView::new(utils::build_pos_status_str(app.top_section.pos))
+        TextView::new(utils::build_pos_status_str(prog.top_section.pos))
           .with_name(consts::pos_status_unit_view),
       )
       .child("LCK:", TextView::new("-").with_name(consts::luck_unit_view))
@@ -147,11 +150,11 @@ impl TopSection {
     let protocol_controller_section_view = ListView::new()
       .child(
         "MDE:",
-        TextView::new(app.mode.print_modes()).with_name(consts::mode_unit_view),
+        TextView::new(prog.mode.print_modes()).with_name(consts::mode_unit_view),
       )
       .child(
         "MVE:",
-        TextView::new(app.movement.print_movements()).with_name(consts::movement_unit_view),
+        TextView::new(prog.movement.print_movements()).with_name(consts::movement_unit_view),
       )
       .child("STE: ", input_status_unit_view)
       // .child(
@@ -200,7 +203,7 @@ fn solve_regex(siv: &mut Cursive, texts: &str, regex_tx: Sender<regex::Message>)
 
   let flag = siv
     .user_data::<UserData>()
-    .map(|user_data| *user_data.cmd.anu.regex_flag_state.selection())
+    .map(|user_data| *user_data.cmd.program.regex_flag_state.selection())
     .unwrap_or(RegexFlag::CaseSensitive);
 
   let flag_str = match flag {

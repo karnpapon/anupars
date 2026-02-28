@@ -23,10 +23,10 @@ use std::time::{Duration, Instant};
 use consts::{DEFAULT_TEMPO, TEMPO_CHECK_INTERVAL_MS, TEMPO_RESET_DELAY_MS};
 
 #[cfg(feature = "desktop")]
-use crate::view::desktop::app::Anu;
+use crate::view::desktop::program::Program;
 
 #[cfg(feature = "microcontroller")]
-use crate::view::microcontroller::app::Anu;
+use crate::view::microcontroller::program::Program;
 
 pub type UserData = Rc<UserDataInner>;
 pub struct UserDataInner {
@@ -132,13 +132,14 @@ impl AppMode {
 }
 
 /// Application components bundle
-pub struct AppComponents {
+pub struct Application {
   pub cursive: Cursive,
   pub midi: midi::Midi,
   pub regex_handler: RegExpHandler,
-  pub anu: Anu,
+  pub program: Program,
   pub playhead: Playhead,
   pub metronome: Metronome,
+  /// for tracking holding keypress
   pub last_key_time: Arc<Mutex<Option<Instant>>>,
   pub current_tempo: Arc<Mutex<usize>>,
 }
@@ -154,7 +155,7 @@ fn init_cursive_theme(cursive: &mut Cursive) {
 }
 
 /// Initialize all application components
-pub fn initialize_components() -> AppComponents {
+pub fn initialize_components() -> Application {
   let mut cursive = Cursive::new();
   init_cursive_theme(&mut cursive);
 
@@ -164,7 +165,7 @@ pub fn initialize_components() -> AppComponents {
   let regex_handler = RegExpHandler::new(cursive.cb_sink().clone());
   let last_key_time = Arc::new(Mutex::new(None));
   let current_tempo = Arc::new(Mutex::new(DEFAULT_TEMPO));
-  let anu = Anu::new();
+  let prog = Program::new();
 
   let playhead = Playhead::new(cursive.cb_sink().clone(), midi.tx.clone());
   let metronome = Metronome::new(cursive.cb_sink().clone(), playhead.tx.clone());
@@ -177,11 +178,11 @@ pub fn initialize_components() -> AppComponents {
     None
   });
 
-  AppComponents {
+  Application {
     cursive,
     midi,
     regex_handler,
-    anu,
+    program: prog,
     playhead,
     metronome,
     last_key_time,
@@ -190,13 +191,13 @@ pub fn initialize_components() -> AppComponents {
 }
 
 /// Setup the user interface, menus, and views
-pub fn setup_ui(components: &mut AppComponents) {
+pub fn setup_ui(components: &mut Application) {
   let midi_tx = components.midi.tx.clone();
   let playhead_tx = components.playhead.tx.clone();
   let metronome_tx = components.metronome.tx.clone();
 
   let mut command_manager = CommandManager::new(
-    components.anu.clone(),
+    components.program.clone(),
     metronome_tx.clone(),
     components.cursive.cb_sink().clone(),
     Arc::clone(&components.current_tempo),
@@ -216,7 +217,7 @@ pub fn setup_ui(components: &mut AppComponents) {
   }));
 
   let main_view = components
-    .anu
+    .program
     .build(components.regex_handler.tx.clone(), playhead_tx);
 
   let devices = components.midi.get_available_devices();
@@ -226,10 +227,10 @@ pub fn setup_ui(components: &mut AppComponents) {
   components
     .cursive
     .menubar()
-    .add_subtree("Anu", menu_app)
-    .add_subtree("Help", menu_help)
+    .add_subtree("anupars", menu_app)
+    .add_subtree("help", menu_help)
     .add_delimiter()
-    .add_leaf("Quit", |s| s.quit());
+    .add_leaf("quit", |s| s.quit());
 
   components.cursive.add_layer(main_view);
 
