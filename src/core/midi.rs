@@ -353,25 +353,32 @@ impl Midi {
     vel = vel.max(min_vel as u8);
 
     // Calculate note length:
-    // - When distance_to_next == 4: DynLength is OFF, use fixed safe duration
+    // - When distance_to_next == 4: DynLength is OFF, use shorter fixed duration
     // - When distance_to_next != 4: DynLength is ON, calculate based on distance
-    // Each length unit = 8ms (Stack refresh rate), so base_length=32 → 256ms base duration
+    // Each length unit = 8ms (Stack refresh rate)
     let base_bpm = consts::DEFAULT_TEMPO;
-    let base_length = 32;
-    let calculated_length = if bpm > 0 {
-      ((base_length * base_bpm) / bpm).max(1)
-    } else {
-      base_length
-    };
 
     let note_length = if distance_to_next == 4 {
-      // DynLength disabled: use 80% of calculated length for safe overlap prevention
-      // This ensures note-offs happen before the next note-on at all ratios
+      // DynLength disabled: use shorter duration to prevent overlap in fast arpeggiator mode
+      // base_length=12 → 96ms at 120 BPM (safe for fast triggering)
+      let base_length = 12;
+      let calculated_length = if bpm > 0 {
+        ((base_length * base_bpm) / bpm).max(1)
+      } else {
+        base_length
+      };
       (calculated_length as u8).min(127)
     } else {
-      // DynLength enabled: apply dynamic distance factor
+      // DynLength enabled: use longer base and apply dynamic distance factor
+      // base_length=32 → 256ms at 120 BPM with distance=4
+      let base_length = 32;
+      let calculated_length = if bpm > 0 {
+        ((base_length * base_bpm) / bpm).max(1)
+      } else {
+        base_length
+      };
       // Distance 1 → 0.25x (very short/staccato)
-      // Distance 4 → 1.0x (neutral, but won't reach here since it's handled above)
+      // Distance 4 → 1.0x (neutral)
       // Distance 16 → 4.0x (very long/sustained)
       let distance_factor = (distance_to_next.min(16) as f32 / 4.0).clamp(0.25, 4.0);
       let length_with_distance = (calculated_length as f32 * distance_factor).round() as usize;
