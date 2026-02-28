@@ -12,6 +12,14 @@ anupars (อนุภา(ส), meaning "tiny following light" in Thai), a Rust-b
 - **MIDI Out Selector**
   - Choose from available MIDI output devices for flexible routing to synths, DAWs, or hardware.
 
+- **MIDI Out Clock Features**
+  - Implements standard MIDI clock transport messages for external device:
+    - `Start` — Sends MIDI Start (`0xFA`) to begin playback from the start.
+    - `Stop` — Sends MIDI Stop (`0xFC`) to halt playback.
+    - `Tick` — Sends MIDI Clock (`0xF8`) for timing synchronization (24 per quarter note ([PPQN](https://en.wikipedia.org/wiki/MIDI_beat_clock))).
+    - `Continue` — Sends MIDI Continue (`0xFB`) to resume playback from the current position.
+    - `Song Position Pointer` (SPP) — Sends MIDI Song Position Pointer (`0xF2`) to set the playback position in beats.
+
 - **Keyboard MIDI Layout**
   - The on-screen keyboard uses a spatial layout similar to Laurie Spiegel's [Music Mouse](https://en.wikipedia.org/wiki/Music_Mouse), enabling expressive, algorithmic play.
 
