@@ -21,8 +21,8 @@ use super::console::{Console, RegexFlag, RegexMode};
 pub struct Anu {
   pub mode: AppMode,
   pub movement: Movement,
-  pub mode_state: RadioGroup<RegexMode>,
-  pub flag_state: RadioGroup<RegexFlag>,
+  pub regex_mode_state: RadioGroup<RegexMode>,
+  pub regex_flag_state: RadioGroup<RegexFlag>,
   pub input_regex: String,
   pub toggle_regex_input: Arc<RwLock<bool>>,
   pub top_section: Console,
@@ -33,8 +33,8 @@ impl Anu {
     Anu {
       mode: AppMode::None,
       movement: Movement::Forward,
-      mode_state: RadioGroup::new(),
-      flag_state: RadioGroup::new(),
+      regex_mode_state: RadioGroup::new(),
+      regex_flag_state: RadioGroup::new(),
       input_regex: String::new(),
       toggle_regex_input: Arc::new(RwLock::new(false)),
       top_section: Console::new(),

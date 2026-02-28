@@ -74,14 +74,18 @@ impl TopSection {
     let flag_view = LinearLayout::horizontal()
       .child(
         app
-          .flag_state
+          .regex_flag_state
           .button(RegexFlag::CaseSensitive, "i ")
           .selected(),
       )
-      .child(app.flag_state.button(RegexFlag::Multiline, "m "))
-      .child(app.flag_state.button(RegexFlag::Newline, "s "))
-      .child(app.flag_state.button(RegexFlag::IgnoreWhiteSpace, "x "))
-      .child(app.flag_state.button(RegexFlag::Lazy, "U "));
+      .child(app.regex_flag_state.button(RegexFlag::Multiline, "m "))
+      .child(app.regex_flag_state.button(RegexFlag::Newline, "s "))
+      .child(
+        app
+          .regex_flag_state
+          .button(RegexFlag::IgnoreWhiteSpace, "x "),
+      )
+      .child(app.regex_flag_state.button(RegexFlag::Lazy, "U "));
     // .with(|layout| {
     //   if app.boolean {
     //     layout.set_focus_index(1).unwrap();
@@ -91,11 +95,11 @@ impl TopSection {
     let _mode_view = LinearLayout::horizontal()
       .child(
         app
-          .mode_state
+          .regex_mode_state
           .button(RegexMode::Realtime, "Realtime ")
           .selected(),
       )
-      .child(app.mode_state.button(RegexMode::OnEval, "On-Eval "));
+      .child(app.regex_mode_state.button(RegexMode::OnEval, "On-Eval "));
 
     let input_status_unit_view = TextView::new("-")
       .with_name(consts::input_status_unit_view)
@@ -196,7 +200,7 @@ fn solve_regex(siv: &mut Cursive, texts: &str, regex_tx: Sender<regex::Message>)
 
   let flag = siv
     .user_data::<UserData>()
-    .map(|user_data| *user_data.cmd.anu.flag_state.selection())
+    .map(|user_data| *user_data.cmd.anu.regex_flag_state.selection())
     .unwrap_or(RegexFlag::CaseSensitive);
 
   let flag_str = match flag {

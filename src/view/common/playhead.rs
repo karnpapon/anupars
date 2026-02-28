@@ -342,22 +342,27 @@ impl PlayheadArea {
     let sweep = self.sweep_mode.load(Ordering::Relaxed);
     let dyn_length = self.dyn_length_mode.load(Ordering::Relaxed);
 
-    let a = format!("{}", AppMode::Arpeggiator);
-    let u = format!("{}", AppMode::Accumulation);
-    let e = format!("{}", AppMode::EventOperator);
-    let n = format!("{}", AppMode::DrainQueue);
-    let s = format!("{}", AppMode::Sweep);
-    let l = format!("{}", AppMode::DynLength);
+    let mut active_modes = Vec::new();
+    if arpeggiator {
+      active_modes.push(AppMode::Arpeggiator);
+    }
+    if drain_queue {
+      active_modes.push(AppMode::DrainQueue);
+    }
+    if accumulation {
+      active_modes.push(AppMode::Accumulation);
+    }
+    if dyn_length {
+      active_modes.push(AppMode::DynLength);
+    }
+    if event_op {
+      active_modes.push(AppMode::EventOperator);
+    }
+    if sweep {
+      active_modes.push(AppMode::Sweep);
+    }
 
-    format!(
-      "{}{}{}{}{}{}",
-      if arpeggiator { "A" } else { &a },
-      if drain_queue { "N" } else { &n },
-      if accumulation { "U" } else { &u },
-      if dyn_length { "L" } else { &l },
-      if event_op { "E" } else { &e },
-      if sweep { "S" } else { &s },
-    )
+    AppMode::print_activated_modes_from_vec(&active_modes)
   }
 
   fn build_movement_status_string(&self) -> String {

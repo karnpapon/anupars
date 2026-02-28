@@ -34,7 +34,7 @@ pub struct UserDataInner {
   pub midi_tx: Sender<midi::Message>,
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq)]
 pub enum AppMode {
   Arpeggiator,   // a
   DrainQueue,    // n
@@ -101,32 +101,34 @@ impl fmt::Display for AppMode {
   }
 }
 
+const APP_MODE_ORDER: [AppMode; 6] = [
+  AppMode::Arpeggiator,
+  AppMode::DrainQueue,
+  AppMode::Accumulation,
+  AppMode::DynLength,
+  AppMode::EventOperator,
+  AppMode::Sweep,
+];
+
 impl AppMode {
   pub fn print_modes(&self) -> String {
-    let modes = [
-      AppMode::Arpeggiator,
-      AppMode::DrainQueue,
-      AppMode::Accumulation,
-      AppMode::DynLength,
-      AppMode::EventOperator,
-      AppMode::Sweep,
-    ];
-    modes.iter().map(|mode| mode.to_string()).collect()
+    APP_MODE_ORDER.iter().map(|mode| mode.to_string()).collect()
   }
 
-  // pub fn print_activated_modes(&self) -> String {
-  //   let modes = self.print_modes();
-  //   modes
-  //     .chars()
-  //     .map(|c| {
-  //       if c == self.to_string().chars().next().unwrap() {
-  //         format!("{}", c.to_ascii_uppercase())
-  //       } else {
-  //         format!("{}", c)
-  //       }
-  //     })
-  //     .collect()
-  // }
+  /// Print a string representing the activated modes, with active modes in uppercase.
+  pub fn print_activated_modes_from_vec(active_modes: &[AppMode]) -> String {
+    APP_MODE_ORDER
+      .iter()
+      .map(|mode| {
+        if active_modes.contains(mode) {
+          mode.to_string().to_ascii_uppercase()
+        } else {
+          mode.to_string()
+        }
+      })
+      .collect::<Vec<_>>()
+      .join("")
+  }
 }
 
 /// Application components bundle
