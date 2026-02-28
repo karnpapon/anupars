@@ -37,6 +37,12 @@ pub enum Message {
   Panic(),
   SetTempo(usize),
   ReleaseAll(),
+  // MIDI Clock messages
+  ClockStart(),             // 0xFA - Start playback
+  ClockStop(),              // 0xFC - Stop playback
+  ClockTick(),              // 0xF8 - Timing clock (24 PPQN)
+  ClockContinue(),          // 0xFB - Continue from pause
+  ClockSongPosition(usize), // 0xF2 - Song Position Pointer (in 16th notes)
 }
 
 #[derive(Clone, Debug)]
@@ -79,6 +85,7 @@ pub struct Midi {
   pub rx: Receiver<Message>,
   // throttler: Arc<Mutex<Throttler>>,
   tempo: Arc<Mutex<usize>>,
+  clock_enabled: Arc<Mutex<bool>>,
 }
 
 impl Midi {
@@ -95,6 +102,7 @@ impl Midi {
         rx,
         msg_config_list: Arc::new(Mutex::new(Vec::new())),
         tempo,
+        clock_enabled: Arc::new(Mutex::new(false)),
       };
     };
     Midi {
@@ -106,6 +114,7 @@ impl Midi {
       rx,
       msg_config_list: Arc::new(Mutex::new(Vec::new())),
       tempo,
+      clock_enabled: Arc::new(Mutex::new(false)),
     }
   }
 }
@@ -216,6 +225,21 @@ impl Midi {
           Message::Panic() => {
             self.send_all_notes_off();
           }
+          Message::ClockStart() => {
+            self.send_clock_start();
+          }
+          Message::ClockStop() => {
+            self.send_clock_stop();
+          }
+          Message::ClockTick() => {
+            self.send_clock_tick();
+          }
+          Message::ClockContinue() => {
+            self.send_clock_continue();
+          }
+          Message::ClockSongPosition(position) => {
+            self.send_song_position_pointer(position);
+          }
         }
       }
     });
@@ -324,9 +348,9 @@ impl Midi {
 
     vel = vel.max(min_vel as u8);
 
-    // Calculate dynamic note length based on BPM and distance to next trigger
-    // Higher BPM = shorter notes, minimum length is 1
-    // Formula: length = max(1, base_length * (base_bpm / current_bpm)) * distance_factor
+    // Calculate note length:
+    // - When distance_to_next == 4: DynLength is OFF, use fixed safe duration
+    // - When distance_to_next != 4: DynLength is ON, calculate based on distance
     // Each length unit = 8ms (Stack refresh rate), so base_length=32 → 256ms base duration
     let base_bpm = consts::DEFAULT_TEMPO;
     let base_length = 32;
@@ -336,14 +360,20 @@ impl Midi {
       base_length
     };
 
-    // Apply distance factor: closer notes = shorter length, further notes = longer length
-    // Distance 1 → 0.25x (very short/staccato)
-    // Distance 4 → 1.0x (neutral)
-    // Distance 16 → 4.0x (very long/sustained)
-    let distance_factor = (distance_to_next.min(16) as f32 / 4.0).clamp(0.25, 4.0);
-    let length_with_distance = (calculated_length as f32 * distance_factor).round() as usize;
-
-    let note_length = (length_with_distance as u8).clamp(1, 127);
+    let note_length = if distance_to_next == 4 {
+      // DynLength disabled: use 80% of calculated length for safe overlap prevention
+      // This ensures note-offs happen before the next note-on at all ratios
+      (calculated_length as u8).min(127)
+    } else {
+      // DynLength enabled: apply dynamic distance factor
+      // Distance 1 → 0.25x (very short/staccato)
+      // Distance 4 → 1.0x (neutral, but won't reach here since it's handled above)
+      // Distance 16 → 4.0x (very long/sustained)
+      let distance_factor = (distance_to_next.min(16) as f32 / 4.0).clamp(0.25, 4.0);
+      let length_with_distance = (calculated_length as f32 * distance_factor).round() as usize;
+      // Minimum 10 units (80ms) ensures notes are audible even with distance=1
+      (length_with_distance as u8).clamp(10, 127)
+    };
     let midi_msg = MidiMsg::from(note_index, octave, note_length, vel, 0, false);
 
     let _ = self.trigger(&midi_msg, true);
@@ -425,6 +455,62 @@ impl Midi {
         }
       }
     }
+  }
+  fn send_clock_start(&self) {
+    if let Ok(mut conn_out) = self.out_device.lock() {
+      if let Some(connection_out) = conn_out.as_mut() {
+        let _ = connection_out.send(&[0xFA]); // 0xFA = Start
+      }
+    }
+  }
+
+  fn send_clock_stop(&self) {
+    if let Ok(mut conn_out) = self.out_device.lock() {
+      if let Some(connection_out) = conn_out.as_mut() {
+        let _ = connection_out.send(&[0xFC]); // 0xFC = Stop
+      }
+    }
+  }
+
+  fn send_clock_tick(&self) {
+    if *self.clock_enabled.lock().unwrap() {
+      if let Ok(mut conn_out) = self.out_device.lock() {
+        if let Some(connection_out) = conn_out.as_mut() {
+          let _ = connection_out.send(&[0xF8]); // 0xF8 = Timing Clock (x24 per quarter note (PPQN))
+        }
+      }
+    }
+  }
+
+  fn send_clock_continue(&self) {
+    if let Ok(mut conn_out) = self.out_device.lock() {
+      if let Some(connection_out) = conn_out.as_mut() {
+        let _ = connection_out.send(&[0xFB]); // 0xFB = Continue
+      }
+    }
+  }
+
+  fn send_song_position_pointer(&self, position_in_ticks: usize) {
+    if let Ok(mut conn_out) = self.out_device.lock() {
+      if let Some(connection_out) = conn_out.as_mut() {
+        // MIDI SPP uses "beats" where 1 MIDI beat = 6 MIDI clocks
+        // Internal: 4 ticks = 1 quarter note = 24 clocks = 4 MIDI beats
+        // So: 1 tick = 1 MIDI beat (1:1 ratio)
+        let spp_beats = position_in_ticks;
+
+        // SPP is 14-bit value sent as two 7-bit bytes
+        let lsb = (spp_beats & 0x7F) as u8;
+        let msb = ((spp_beats >> 7) & 0x7F) as u8;
+
+        // 0xF2 = Song Position Pointer
+        let _ = connection_out.send(&[0xF2, lsb, msb]);
+      }
+    }
+  }
+
+  pub fn enable_clock(&self, enabled: bool) {
+    let mut clock_enabled = self.clock_enabled.lock().unwrap();
+    *clock_enabled = enabled;
   }
 }
 

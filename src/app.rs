@@ -168,7 +168,10 @@ pub fn initialize_components() -> Application {
   let prog = Program::new();
 
   let playhead = Playhead::new(cursive.cb_sink().clone(), midi.tx.clone());
-  let metronome = Metronome::new(cursive.cb_sink().clone(), playhead.tx.clone());
+  let mut metronome = Metronome::new(cursive.cb_sink().clone(), playhead.tx.clone());
+
+  metronome.set_midi_tx(midi.tx.clone());
+  midi.enable_clock(true);
 
   let midi_tx = midi.tx.clone();
 
