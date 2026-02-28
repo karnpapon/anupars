@@ -758,18 +758,26 @@ impl PlayheadArea {
       return;
     };
 
+    // When clock out is enabled, use fixed length to keep external devices in sync
+    let clock_enabled = consts::CLOCK_ENABLED.load(Ordering::Relaxed);
+    let counter_limit = if clock_enabled {
+      32
+    } else {
+      playhead_area_size
+    };
+
     let mut counter = self.accumulation_counter.lock().unwrap();
     *counter += 1;
     let current_count = *counter;
-    self.update_accumulation_ui(current_count, playhead_area_size, cb_sink);
-    if *counter >= playhead_area_size {
+    self.update_accumulation_ui(current_count, counter_limit, cb_sink);
+    if *counter >= counter_limit {
       *counter = 0;
       drop(counter);
-      self.update_accumulation_ui(0, playhead_area_size, cb_sink);
+      self.update_accumulation_ui(0, counter_limit, cb_sink);
       self.perform_accumulation_jump();
     } else {
       drop(counter);
-      self.update_accumulation_ui(current_count, playhead_area_size, cb_sink);
+      self.update_accumulation_ui(current_count, counter_limit, cb_sink);
     }
   }
 
@@ -780,19 +788,27 @@ impl PlayheadArea {
     let playhead_area_size = area.width() * area.height();
     drop(area);
 
+    // When clock out is enabled, use fixed length to keep external devices in sync
+    let clock_enabled = consts::CLOCK_ENABLED.load(Ordering::Relaxed);
+    let counter_limit = if clock_enabled {
+      32
+    } else {
+      playhead_area_size
+    };
+
     let mut counter = self.accumulation_counter.lock().unwrap();
     *counter += 1;
     let current_count = *counter;
 
-    if *counter >= playhead_area_size {
+    if *counter >= counter_limit {
       *counter = 0;
       drop(counter);
 
-      self.update_accumulation_ui(0, playhead_area_size, cb_sink);
+      self.update_accumulation_ui(0, counter_limit, cb_sink);
       Some(self.perform_accumulation_jump())
     } else {
       drop(counter);
-      self.update_accumulation_ui(current_count, playhead_area_size, cb_sink);
+      self.update_accumulation_ui(current_count, counter_limit, cb_sink);
       None
     }
   }
