@@ -259,6 +259,13 @@ impl CommandManager {
           .unwrap();
         Ok(None)
       }
+      Command::ToggleDynLength => {
+        self
+          .playhead_tx_cloned
+          .send(playhead_controller::Message::ToggleDynLengthMode())
+          .unwrap();
+        Ok(None)
+      }
       Command::ChangeRootNote(dir) => {
         self
           .playhead_tx_cloned
@@ -364,6 +371,7 @@ impl CommandManager {
     kb.insert("Ctrl+e".into(), vec![Command::ToggleEventOperator]);
     kb.insert("Ctrl+n".into(), vec![Command::ToggleDrainQueue]);
     kb.insert("Ctrl+s".into(), vec![Command::ToggleSweep]);
+    kb.insert("Ctrl+l".into(), vec![Command::ToggleDynLength]);
     kb.insert(
       "Shift+Plus".into(),
       vec![Command::ChangeScaleMode(Adjustment::Increase)],

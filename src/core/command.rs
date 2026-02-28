@@ -33,6 +33,7 @@ pub enum Command {
   ToggleEventOperator,
   ToggleDrainQueue,
   ToggleSweep,
+  ToggleDynLength,
   ChangeRootNote(Adjustment),
   ChangeScaleMode(Adjustment),
 }
@@ -56,6 +57,7 @@ impl fmt::Display for Command {
       | Self::ToggleEventOperator
       | Self::ToggleDrainQueue
       | Self::ToggleSweep
+      | Self::ToggleDynLength
       | Self::ChangeRootNote(_)
       | Self::ChangeScaleMode(_)
       | Self::ToggleRandom => vec![],
@@ -84,6 +86,7 @@ impl Command {
       Self::ToggleEventOperator => "toggleeventoperator",
       Self::ToggleDrainQueue => "toggledrainqueue",
       Self::ToggleSweep => "togglesweep",
+      Self::ToggleDynLength => "toggledynlength",
       Self::ChangeRootNote(_) => "changerootnote",
       Self::ChangeScaleMode(_) => "changescale",
     }

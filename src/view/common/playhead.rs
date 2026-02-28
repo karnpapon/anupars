@@ -65,9 +65,9 @@ pub enum EventOperator {
 impl fmt::Display for EventOperator {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     match self {
-      EventOperator::R => write!(f, "r"),
+      EventOperator::R => write!(f, "-"),
       EventOperator::C => write!(f, "c"),
-      EventOperator::X => write!(f, "x"),
+      EventOperator::X => write!(f, "-"),
     }
   }
 }
@@ -75,9 +75,9 @@ impl fmt::Display for EventOperator {
 impl EventOperator {
   pub fn get_event_name(&self) -> &'static str {
     match self {
-      EventOperator::R => ">rrrrr",
-      EventOperator::C => ">chord",
-      EventOperator::X => ">hold",
+      EventOperator::R => ">----",
+      EventOperator::C => ">CHORD",
+      EventOperator::X => ">----", // NO OP fornow
     }
   }
 }
@@ -170,6 +170,7 @@ pub enum Message {
   ToggleEventOperatorMode(cursive::CbSink),
   ToggleDrainQueueMode(cursive::CbSink),
   ToggleSweepMode(cursive::CbSink),
+  ToggleDynLengthMode(cursive::CbSink),
   CycleScaleRootTop(cursive::CbSink, crate::core::command::Adjustment),
   CycleScaleMode(cursive::CbSink, crate::core::command::Adjustment),
   SetTempo(usize),
@@ -202,6 +203,7 @@ pub struct PlayheadArea {
   event_operator_mode: AtomicBool,
   drain_queue_mode: AtomicBool,
   sweep_mode: AtomicBool,
+  dyn_length_mode: AtomicBool,
   ratio: Arc<Mutex<(usize, usize)>>,
   operator_queue: Arc<Mutex<ArrayVec<QueueItem, { consts::OP_QUEUE_CAPACITY }>>>,
   event_queue: Arc<Mutex<ConstGenericRingBuffer<EventOperator, { consts::EVENT_QUEUE_CAPACITY }>>>,
@@ -240,6 +242,7 @@ impl PlayheadArea {
       event_operator_mode: AtomicBool::new(false),
       drain_queue_mode: AtomicBool::new(false),
       sweep_mode: AtomicBool::new(false),
+      dyn_length_mode: AtomicBool::new(false),
       ratio: Arc::new(Mutex::new(consts::DEFAULT_RATIO)),
       operator_queue: Arc::new(Mutex::new(ArrayVec::new())),
       event_queue: Arc::new(Mutex::new(ConstGenericRingBuffer::new())),
@@ -337,20 +340,23 @@ impl PlayheadArea {
     let event_op = self.event_operator_mode.load(Ordering::Relaxed);
     let drain_queue = self.drain_queue_mode.load(Ordering::Relaxed);
     let sweep = self.sweep_mode.load(Ordering::Relaxed);
+    let dyn_length = self.dyn_length_mode.load(Ordering::Relaxed);
 
     let a = format!("{}", AppMode::Arpeggiator);
     let u = format!("{}", AppMode::Accumulation);
     let e = format!("{}", AppMode::EventOperator);
     let n = format!("{}", AppMode::DrainQueue);
     let s = format!("{}", AppMode::Sweep);
+    let l = format!("{}", AppMode::DynLength);
 
     format!(
-      "{}{}{}{}{}",
+      "{}{}{}{}{}{}",
       if arpeggiator { "A" } else { &a },
-      if accumulation { "U" } else { &u },
-      if event_op { "E" } else { &e },
       if drain_queue { "N" } else { &n },
-      if sweep { "S" } else { &s }
+      if accumulation { "U" } else { &u },
+      if dyn_length { "L" } else { &l },
+      if event_op { "E" } else { &e },
+      if sweep { "S" } else { &s },
     )
   }
 
@@ -555,6 +561,93 @@ impl PlayheadArea {
     (pos, scale)
   }
 
+  /// Find distance to the next closest trigger position within the playhead area
+  fn find_distance_to_next_trigger(&self, curr_pos: usize) -> usize {
+    let grid_width = self.grid_width.load(Ordering::Relaxed);
+    let default_distance = 4;
+
+    let movement = *self.movement.lock().unwrap();
+    if matches!(movement, Movement::Random) {
+      return default_distance;
+    }
+
+    // Get playhead area bounds and extract triggers in one lock
+    let (playhead_x, playhead_width, trigger_positions) = {
+      let area = self.area.lock().unwrap();
+      let px = area.left();
+      let py = area.top();
+      let pw = area.width();
+      let ph = area.height();
+
+      if pw == 0 || ph == 0 {
+        return default_distance;
+      }
+
+      // Extract and sort trigger positions in playhead area
+      let matcher = self.text_matcher.lock().unwrap();
+      let positions: Vec<usize> = if let Some(ref map) = *matcher {
+        let mut pos_vec: Vec<usize> = map
+          .keys()
+          .filter(|&&p| {
+            let x = p % grid_width;
+            let y = p / grid_width;
+            x >= px && x < px + pw && y >= py && y < py + ph
+          })
+          .copied()
+          .collect();
+        pos_vec.sort_unstable();
+        pos_vec
+      } else {
+        return default_distance;
+      };
+
+      (px, pw, positions)
+    };
+
+    if trigger_positions.is_empty() {
+      return default_distance;
+    }
+
+    match movement {
+      Movement::Reverse => {
+        let idx = trigger_positions.binary_search(&curr_pos);
+        let prev_idx = match idx {
+          Ok(i) if i > 0 => i - 1,
+          Err(i) if i > 0 => i - 1,
+          _ => {
+            // No previous trigger, we're at the first trigger
+            // calculate distance to playhead start (where reverse wraps)
+            let curr_x = curr_pos % grid_width;
+            let distance_to_start = curr_x.saturating_sub(playhead_x);
+            return distance_to_start.clamp(1, 16);
+          }
+        };
+
+        let prev_pos = trigger_positions[prev_idx];
+        let distance = curr_pos.saturating_sub(prev_pos);
+        distance.clamp(1, 16)
+      }
+      Movement::Forward | Movement::Pendulum => {
+        let idx = trigger_positions.binary_search(&curr_pos);
+        let next_idx = match idx {
+          Ok(i) => i + 1,
+          Err(i) => i,
+        };
+
+        if next_idx < trigger_positions.len() {
+          let next_pos = trigger_positions[next_idx];
+          let distance = next_pos.saturating_sub(curr_pos);
+          return distance.clamp(1, 16);
+        }
+
+        let curr_x = curr_pos % grid_width;
+        let distance_to_edge = (playhead_x + playhead_width).saturating_sub(curr_x);
+        distance_to_edge.clamp(1, 16)
+      }
+      Movement::Random => unreachable!(),
+    }
+  }
+
   fn trigger_midi_if_matched(
     &self,
     curr_running_playhead: usize,
@@ -565,6 +658,16 @@ impl PlayheadArea {
     let grid_height = self.grid_height.load(Ordering::Relaxed);
     let current_tempo = self.tempo.load(Ordering::Relaxed);
     let pos = self.pos.lock().unwrap();
+
+    // Determine distance based on mode settings
+    // Priority: DynLength disabled > Arpeggiator mode > Normal mode
+    let distance_to_next = if !self.dyn_length_mode.load(Ordering::Relaxed)
+      || self.arpeggiator_mode.load(Ordering::Relaxed)
+    {
+      4
+    } else {
+      self.find_distance_to_next_trigger(curr_running_playhead)
+    };
 
     let hold_next = self.hold_next_note.load(Ordering::Relaxed);
     let _ = self.midi_tx.send(midi::Message::TriggerWithPosition((
@@ -579,6 +682,7 @@ impl PlayheadArea {
       false, // no sweep mode for normal triggers
       pos.y, // active_pos_y (same as trigger_pos_y for normal triggers)
       self.scale_root_top.lock().unwrap().to_root_offset(),
+      distance_to_next,
     )));
   }
 
@@ -593,24 +697,20 @@ impl PlayheadArea {
       let x_scale_mode = *self.scale_mode_top.lock().unwrap();
 
       // Collect all matched y positions for the current x
-      let mut matched_y_positions: Vec<usize> = Vec::new();
-
-      // Iterate through all y positions for the current x (vertical crosshair)
-      for y in 0..grid_height {
-        let crosshair_index = y * grid_width + abs_x;
-
-        // Skip current playhead position to avoid duplicate MIDI trigger
-        if crosshair_index == curr_running_playhead {
-          continue;
+      let matched_y_positions: Vec<usize> = {
+        let matcher = self.text_matcher.lock().unwrap();
+        if let Some(ref m) = *matcher {
+          (0..grid_height)
+            .filter(|&y| {
+              let crosshair_index = y * grid_width + abs_x;
+              // Skip current playhead position to avoid duplicate MIDI trigger
+              crosshair_index != curr_running_playhead && m.contains_key(&crosshair_index)
+            })
+            .collect()
+        } else {
+          Vec::new()
         }
-
-        // Check if this position matches
-        if let Some(matcher) = self.text_matcher.lock().unwrap().as_ref() {
-          if matcher.contains_key(&crosshair_index) {
-            matched_y_positions.push(y);
-          }
-        }
-      }
+      };
 
       // If we have matched positions, send a single MIDI trigger with average velocity
       if !matched_y_positions.is_empty() {
@@ -627,6 +727,8 @@ impl PlayheadArea {
         let first_y = matched_y_positions[0];
         let reference_index = first_y * grid_width + abs_x;
 
+        let default_length = 4;
+
         let _ = self.midi_tx.send(midi::Message::TriggerWithPosition((
           reference_index,
           x_note_position,
@@ -639,6 +741,7 @@ impl PlayheadArea {
           true,         // is_sweep
           active_pos_y, // reference Y position for velocity calculation
           self.scale_root_top.lock().unwrap().to_root_offset(),
+          default_length,
         )));
       }
     }
@@ -982,6 +1085,21 @@ impl PlayheadArea {
       .unwrap();
   }
 
+  pub fn toggle_dyn_length_mode(&self, cb_sink: cursive::CbSink) {
+    let is_dyn_length = !self.dyn_length_mode.load(Ordering::Relaxed);
+    self.dyn_length_mode.store(is_dyn_length, Ordering::Relaxed);
+
+    let mode_status = self.build_mode_status_string();
+
+    cb_sink
+      .send(Box::new(move |siv| {
+        siv.call_on_name(consts::mode_unit_view, |view: &mut TextView| {
+          view.set_content(mode_status);
+        });
+      }))
+      .unwrap();
+  }
+
   pub fn cycle_scale_root(&self, cb_sink: cursive::CbSink, dir: crate::core::command::Adjustment) {
     let mut root = self.scale_root_top.lock().unwrap();
     *root = root.cycle(dir);
@@ -1060,10 +1178,11 @@ impl PlayheadArea {
     if let Some(QueueItem::Event(ev_op)) = op_front {
       match ev_op {
         EventOperator::X => {
-          self.hold_next_note.store(
-            !self.hold_next_note.load(Ordering::Relaxed),
-            Ordering::Relaxed,
-          );
+          // NO OP for now.
+          // self.hold_next_note.store(
+          //   !self.hold_next_note.load(Ordering::Relaxed),
+          //   Ordering::Relaxed,
+          // );
         }
         EventOperator::R | EventOperator::C => {
           // NO OP for now.
@@ -1510,29 +1629,41 @@ impl PlayheadArea {
               // ? should sweep mode effect accumulation value
               // Handle accumulation mode (for position operators)
               let mut did_jump = false;
-              if let Some(matcher) = self.text_matcher.lock().unwrap().as_ref() {
-                if matcher.get(&curr_running_playhead).is_some() {
-                  if self.accumulation_mode.load(Ordering::Relaxed) {
-                    // accum heppens before MIDI trigger
-                    // since accu should execute any ops first (if needed)
-                    if let Some(new_active_pos) = self.handle_accumulation_mode(abs_x, &cb_sink) {
-                      active_pos = new_active_pos;
-                      did_jump = true; // Mark that a jump occurred
-                    }
-                    self.execute_front_event_op_in_queue();
+
+              let matcher_guard = self.text_matcher.lock().unwrap();
+              let has_match = matcher_guard
+                .as_ref()
+                .is_some_and(|m| m.contains_key(&curr_running_playhead));
+              drop(matcher_guard); // Explicitly release lock before calling functions that need it
+
+              if has_match {
+                if self.accumulation_mode.load(Ordering::Relaxed) {
+                  // accum heppens before MIDI trigger
+                  // since accu should execute any ops first (if needed)
+                  if let Some(new_active_pos) = self.handle_accumulation_mode(abs_x, &cb_sink) {
+                    active_pos = new_active_pos;
+                    did_jump = true; // Mark that a jump occurred
                   }
-                  // Only trigger MIDI if we didn't jump (prevents extra note before jump)
-                  if !did_jump {
-                    self.trigger_midi_if_matched(curr_running_playhead, note_position, scale_mode);
-                  }
-                  if self.hold_next_note.load(Ordering::Relaxed) {
-                    self.hold_next_note.store(false, Ordering::Relaxed);
-                    self.operator_queue.lock().unwrap().remove(0);
-                    self.update_queue_display();
-                  }
+                  self.execute_front_event_op_in_queue();
                 }
-                self.handle_silent_step(matcher, &cb_sink);
+                // Only trigger MIDI if we didn't jump (prevents extra note before jump)
+                if !did_jump {
+                  self.trigger_midi_if_matched(curr_running_playhead, note_position, scale_mode);
+                }
+                if self.hold_next_note.load(Ordering::Relaxed) {
+                  self.hold_next_note.store(false, Ordering::Relaxed);
+                  self.operator_queue.lock().unwrap().remove(0);
+                  self.update_queue_display();
+                }
               }
+
+              // Handle silent step - needs to lock matcher again
+              let matcher_guard = self.text_matcher.lock().unwrap();
+              if let Some(ref m) = *matcher_guard {
+                self.handle_silent_step(m, &cb_sink);
+              }
+              drop(matcher_guard);
+
               if !did_jump {
                 self.trigger_midi_if_matched_sweep(curr_running_playhead, abs_x);
               }
@@ -1720,6 +1851,9 @@ impl PlayheadArea {
           }
           Message::ToggleSweepMode(cb_sink) => {
             self.toggle_sweep_mode(cb_sink);
+          }
+          Message::ToggleDynLengthMode(cb_sink) => {
+            self.toggle_dyn_length_mode(cb_sink);
           }
           Message::CycleScaleRootTop(cb_sink, dir) => {
             self.cycle_scale_root(cb_sink, dir);

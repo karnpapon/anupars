@@ -37,9 +37,10 @@ pub struct UserDataInner {
 #[derive(Clone)]
 pub enum AppMode {
   Arpeggiator,   // a
-  Accumulation,  // u
-  EventOperator, // e
   DrainQueue,    // n
+  Accumulation,  // u
+  DynLength,     // l
+  EventOperator, // e
   Sweep,         // s
   None,
 }
@@ -94,6 +95,7 @@ impl fmt::Display for AppMode {
       AppMode::EventOperator => write!(f, "e"),
       AppMode::DrainQueue => write!(f, "n"),
       AppMode::Sweep => write!(f, "s"),
+      AppMode::DynLength => write!(f, "l"),
       AppMode::None => write!(f, "-"),
     }
   }
@@ -103,13 +105,28 @@ impl AppMode {
   pub fn print_modes(&self) -> String {
     let modes = [
       AppMode::Arpeggiator,
-      AppMode::Accumulation,
-      AppMode::EventOperator,
       AppMode::DrainQueue,
+      AppMode::Accumulation,
+      AppMode::DynLength,
+      AppMode::EventOperator,
       AppMode::Sweep,
     ];
     modes.iter().map(|mode| mode.to_string()).collect()
   }
+
+  // pub fn print_activated_modes(&self) -> String {
+  //   let modes = self.print_modes();
+  //   modes
+  //     .chars()
+  //     .map(|c| {
+  //       if c == self.to_string().chars().next().unwrap() {
+  //         format!("{}", c.to_ascii_uppercase())
+  //       } else {
+  //         format!("{}", c)
+  //       }
+  //     })
+  //     .collect()
+  // }
 }
 
 /// Application components bundle

@@ -152,22 +152,28 @@ impl Stack {
       midi_msg.octave,
       midi_msg.channel,
     );
+
+    // Remove from held notes if present
     let mut held = self.held_notes.lock().unwrap();
+    let was_held = held.remove(&note_key).is_some();
+    drop(held);
 
-    // Remove from held notes and send note-off
-    if let Some(held_msg) = held.remove(&note_key) {
-      drop(held);
+    // Always remove from stack (whether held or not)
+    let mut stack = self.stack.lock().unwrap();
+    let had_in_stack = stack.iter().any(|item| {
+      let item_key = (item.note.round() as u8, item.octave, item.channel);
+      item_key == note_key
+    });
 
-      // Remove from stack
-      let mut stack = self.stack.lock().unwrap();
-      stack.retain(|item| {
-        let item_key = (item.note.round() as u8, item.octave, item.channel);
-        item_key != note_key
-      });
-      drop(stack);
+    stack.retain(|item| {
+      let item_key = (item.note.round() as u8, item.octave, item.channel);
+      item_key != note_key
+    });
+    drop(stack);
 
-      // Send note-off immediately
-      let _ = midi_tx.send(midi::Message::Trigger(held_msg, false));
+    // Send note-off if the note was active (either held or in stack)
+    if was_held || had_in_stack {
+      let _ = midi_tx.send(midi::Message::Trigger(midi_msg, false));
     }
   }
 }

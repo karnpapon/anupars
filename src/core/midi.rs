@@ -30,8 +30,9 @@ pub enum Message {
       bool,
       usize,
       u8,
+      usize,
     ),
-  ), // (grid_index((curr*h)+w), y_position, grid_width, grid_height, scale_mode, bpm, trigger_pos_y, hold, is_sweep, active_pos_y)
+  ), // (grid_index((curr*h)+w), y_position, grid_width, grid_height, scale_mode, bpm, trigger_pos_y, hold, is_sweep, active_pos_y, scale_root_offset, distance_to_next)
   SwitchDevice(usize),
   Panic(),
   SetTempo(usize),
@@ -186,6 +187,7 @@ impl Midi {
             is_sweep,
             active_pos_y,
             scale_root_offset,
+            distance_to_next,
           )) => {
             self.trigger_w_position(
               grid_index,
@@ -199,6 +201,7 @@ impl Midi {
               is_sweep,
               active_pos_y,
               scale_root_offset,
+              distance_to_next,
             );
           }
           Message::SetTempo(bpm) => {
@@ -287,6 +290,7 @@ impl Midi {
     is_sweep: bool,
     active_pos_y: usize,
     scale_root_offset: u8,
+    distance_to_next: usize,
   ) {
     // Use the actual grid height passed as parameter
     if grid_height == 0 {
@@ -320,18 +324,26 @@ impl Midi {
 
     vel = vel.max(min_vel as u8);
 
-    // Calculate dynamic note length based on BPM
+    // Calculate dynamic note length based on BPM and distance to next trigger
     // Higher BPM = shorter notes, minimum length is 1
-    // Formula: length = max(1, base_length * (base_bpm / current_bpm))
+    // Formula: length = max(1, base_length * (base_bpm / current_bpm)) * distance_factor
+    // Each length unit = 8ms (Stack refresh rate), so base_length=32 → 256ms base duration
     let base_bpm = consts::DEFAULT_TEMPO;
-    let base_length = 4;
+    let base_length = 32;
     let calculated_length = if bpm > 0 {
       ((base_length * base_bpm) / bpm).max(1)
     } else {
       base_length
     };
 
-    let note_length = (calculated_length as u8).min(127);
+    // Apply distance factor: closer notes = shorter length, further notes = longer length
+    // Distance 1 → 0.25x (very short/staccato)
+    // Distance 4 → 1.0x (neutral)
+    // Distance 16 → 4.0x (very long/sustained)
+    let distance_factor = (distance_to_next.min(16) as f32 / 4.0).clamp(0.25, 4.0);
+    let length_with_distance = (calculated_length as f32 * distance_factor).round() as usize;
+
+    let note_length = (length_with_distance as u8).clamp(1, 127);
     let midi_msg = MidiMsg::from(note_index, octave, note_length, vel, 0, false);
 
     let _ = self.trigger(&midi_msg, true);
@@ -339,7 +351,9 @@ impl Midi {
     if hold {
       self.tx.send(Message::Hold(midi_msg)).unwrap();
     } else {
-      self.tx.send(Message::ReleaseAll()).unwrap();
+      // Release only the specific note we're about to trigger (prevents stuck notes)
+      // This allows other notes to continue playing (e.g., chords)
+      self.tx.send(Message::Release(midi_msg.clone())).unwrap();
       self.tx.send(Message::Push(midi_msg)).unwrap();
     }
   }

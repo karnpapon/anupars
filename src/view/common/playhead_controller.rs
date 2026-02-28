@@ -44,6 +44,7 @@ pub enum Message {
   ToggleEventOperatorMode(),
   ToggleDrainQueueMode(),
   ToggleSweepMode(),
+  ToggleDynLengthMode(),
   SetTempo(usize),
   SetRatio((usize, usize)),
 }
@@ -272,6 +273,12 @@ impl Playhead {
             let cb_sink = self.cb_sink.clone();
             playhead_area_tx
               .send(playhead::Message::ToggleSweepMode(cb_sink))
+              .unwrap();
+          }
+          Message::ToggleDynLengthMode() => {
+            let cb_sink = self.cb_sink.clone();
+            playhead_area_tx
+              .send(playhead::Message::ToggleDynLengthMode(cb_sink))
               .unwrap();
           }
           Message::CycleScaleRootTop(dir) => {
