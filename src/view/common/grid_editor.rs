@@ -43,9 +43,8 @@ pub struct GridEditor {
   pub scale_mode_left: crate::core::scale::ScaleMode,
   pub scale_mode_top: crate::core::scale::ScaleMode,
   pub scale_root_top: crate::core::scale::ScaleRoot,
-  pub reverse_mode: bool,
   pub arpeggiator_mode: bool,
-  pub random_mode: bool,
+  pub accumulation_mode: bool,
   pub event_operator_mode: bool,
   pub drain_queue_mode: bool,
   pub sweep_mode: bool,
@@ -63,9 +62,8 @@ impl GridEditor {
       scale_mode_left: crate::core::scale::ScaleMode::default(),
       scale_mode_top: crate::core::scale::ScaleMode::default(),
       scale_root_top: crate::core::scale::ScaleRoot::default(),
-      reverse_mode: false,
       arpeggiator_mode: false,
-      random_mode: false,
+      accumulation_mode: false,
       event_operator_mode: false,
       drain_queue_mode: false,
       sweep_mode: false,
@@ -358,6 +356,8 @@ impl GridEditor {
       let is_event_position = x % consts::EVENT_OP_SPACING == 0;
       let display_char = if is_event_position {
         "-".to_string()
+      } else if !self.accumulation_mode {
+        " ".to_string()
       } else {
         let op = QUEUE_OPERATORS[queue_index % QUEUE_OPERATORS.len()];
         op.to_string()
@@ -541,6 +541,15 @@ fn draw(canvas: &GridEditor, printer: &Printer) {
     let bottom_y = KEYBOARD_MARGIN_TOP + canvas.grid.height;
     let bottom_operators_printer = printer.offset((KEYBOARD_MARGIN_LEFT, bottom_y));
     canvas.draw_queue_operators_bottom(&bottom_operators_printer);
+
+    // draw bottom corners
+    let style = Style::from(ColorStyle::front(ColorType::rgb(100, 100, 100)));
+    printer.with_style(style, |printer| {
+      printer.print((KEYBOARD_MARGIN_LEFT - 2, bottom_y), "┗");
+    });
+    printer.with_style(style, |printer| {
+      printer.print((canvas.grid.width + QUEUE_MARGIN_RIGHT + 1, bottom_y), "┛");
+    });
 
     // Draw right queue display
     let right_x = KEYBOARD_MARGIN_LEFT + canvas.grid.width;

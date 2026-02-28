@@ -126,6 +126,7 @@ pub struct PlayheadUI {
   pub text_matcher: Option<HashMap<usize, Match>>,
   pub regex_indexes: Arc<Mutex<BTreeSet<usize>>>,
   pub arpeggiator_mode: bool,
+  pub accumulation_mode: bool,
   pub sweep_mode: bool,
   pub operator_queue: Arc<Mutex<ArrayVec<QueueItem, { consts::OP_QUEUE_CAPACITY }>>>,
   pub event_queue:
@@ -141,6 +142,7 @@ impl PlayheadUI {
       text_matcher: None,
       regex_indexes: Arc::new(Mutex::new(BTreeSet::new())),
       arpeggiator_mode: false,
+      accumulation_mode: false,
       sweep_mode: false,
       operator_queue: Arc::new(Mutex::new(ArrayVec::new())),
       event_queue: Arc::new(Mutex::new(ConstGenericRingBuffer::new())),
@@ -1382,14 +1384,23 @@ impl PlayheadArea {
     let ref_velocity = max_vel - (abs_y as f32 / grid_height as f32) * (max_vel - min_vel);
     let velocity = ref_velocity.round().max(min_vel) as u8;
 
-    // Calculate dynamic note length based on BPM
     let current_tempo = self.tempo.load(Ordering::Relaxed);
     let base_bpm = consts::DEFAULT_TEMPO;
-    let base_length = 4; // Base length for chords
-    let calculated_length = if current_tempo > 0 {
-      ((base_length * base_bpm) / current_tempo).max(1)
+
+    // Determine distance
+    let (_abs_x, _abs_y, curr_running_playhead) = self.calculate_absolute_position(actived_pos);
+    let distance_to_next = if !self.dyn_length_mode.load(Ordering::Relaxed)
+      || self.arpeggiator_mode.load(Ordering::Relaxed)
+    {
+      4
     } else {
-      base_length
+      self.find_distance_to_next_trigger(curr_running_playhead)
+    };
+
+    let calculated_length = if current_tempo > 0 {
+      ((distance_to_next * base_bpm) / current_tempo).max(1)
+    } else {
+      distance_to_next
     };
     let note_length = (calculated_length as u8).min(127);
 
@@ -1621,7 +1632,7 @@ impl PlayheadArea {
               let has_match = matcher_guard
                 .as_ref()
                 .is_some_and(|m| m.contains_key(&curr_running_playhead));
-              drop(matcher_guard); // Explicitly release lock before calling functions that need it
+              drop(matcher_guard);
 
               if has_match {
                 if self.accumulation_mode.load(Ordering::Relaxed) {
@@ -1783,6 +1794,15 @@ impl PlayheadArea {
             // Update UI to clear accumulation display and queue display
             cb_sink
               .send(Box::new(move |siv| {
+                siv.call_on_name(
+                  consts::canvas_editor_section_view,
+                  |canvas: &mut Canvas<GridEditor>| {
+                    let editor = canvas.state_mut();
+                    editor.accumulation_mode = is_enabled;
+                    editor.playhead_ui.accumulation_mode = is_enabled;
+                  },
+                );
+
                 siv.call_on_name(consts::input_status_unit_view, |view: &mut TextView| {
                   view.set_content("-");
                 });
