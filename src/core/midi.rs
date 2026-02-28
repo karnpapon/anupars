@@ -43,6 +43,7 @@ pub enum Message {
   ClockTick(),              // 0xF8 - Timing clock (24 PPQN)
   ClockContinue(),          // 0xFB - Continue from pause
   ClockSongPosition(usize), // 0xF2 - Song Position Pointer (in 16th notes)
+  EnableClock(bool),        // Enable/disable MIDI clock output
 }
 
 #[derive(Clone, Debug)]
@@ -239,6 +240,9 @@ impl Midi {
           }
           Message::ClockSongPosition(position) => {
             self.send_song_position_pointer(position);
+          }
+          Message::EnableClock(enabled) => {
+            self.enable_clock(enabled);
           }
         }
       }

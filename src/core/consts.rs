@@ -1,5 +1,7 @@
 #![allow(non_upper_case_globals)]
 
+use std::sync::atomic::AtomicBool;
+
 use lazy_static::lazy_static;
 
 pub type StaticStrInt = Vec<(&'static str, i32)>;
@@ -139,3 +141,5 @@ pub const EVENT_QUEUE_CAPACITY: usize = 12;
 pub const OP_QUEUE_CAPACITY: usize = 12;
 
 pub const QUEUE_PLACEHOLDER_SYMBOL: &str = ":";
+
+pub static CLOCK_ENABLED: AtomicBool = AtomicBool::new(false);

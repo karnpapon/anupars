@@ -6,6 +6,7 @@ use std::io;
 use std::io::Read;
 use std::path::Path;
 use std::path::PathBuf;
+use std::sync::atomic::Ordering;
 use std::sync::mpsc::Sender;
 
 use cursive::align::HAlign;
@@ -106,6 +107,18 @@ impl Menubar {
     midi_tx: Sender<crate::core::midi::Message>,
   ) -> Tree {
     let midi_tx_reset = midi_tx.clone();
+    let midi_tx_clock = midi_tx.clone();
+
+    let clock_status = if consts::CLOCK_ENABLED.load(Ordering::Relaxed) {
+      "ON"
+    } else {
+      "OFF"
+    };
+    let clock_label = format!("Clock Out [{}]", clock_status);
+
+    let devices_clone = midi_devices.to_vec();
+    let midi_tx_menu = midi_tx.clone();
+
     menu::Tree::new()
       .leaf("Generate Text", generate_contents)
       .leaf("Insert File", build_file_explorer_view)
@@ -114,6 +127,9 @@ impl Menubar {
         "MIDI",
         build_midi_menu(midi_devices.to_vec(), midi_tx.clone()),
       )
+      .leaf(clock_label, move |s| {
+        toggle_clock_out(s, &midi_tx_clock, &devices_clone, &midi_tx_menu);
+      })
       // .subtree("OSC", build_osc_menu())
       .delimiter()
       .subtree("Scale (Left)", build_scale_menu_left())
@@ -170,6 +186,34 @@ fn build_osc_menu() -> cursive::menu::Tree {
       tree.add_item(menu::Item::leaf(format!("{osc}: {port}"), |_| ()))
     }
   })
+}
+
+fn toggle_clock_out(
+  siv: &mut Cursive,
+  midi_tx: &Sender<crate::core::midi::Message>,
+  devices: &[(String, usize)],
+  menu_midi_tx: &Sender<crate::core::midi::Message>,
+) {
+  let current = consts::CLOCK_ENABLED.load(Ordering::Relaxed);
+  let new_state = !current;
+  consts::CLOCK_ENABLED.store(new_state, Ordering::Relaxed);
+
+  let _ = midi_tx.send(crate::core::midi::Message::EnableClock(new_state));
+
+  // Rebuild menubar with updated status
+  let menu_app = Menubar::build_menu_app(devices, menu_midi_tx.clone());
+  let menu_help = Menubar::build_menu_help();
+
+  siv.menubar().clear();
+  siv
+    .menubar()
+    .add_subtree("anupars", menu_app)
+    .add_subtree("help", menu_help)
+    .add_delimiter()
+    .add_leaf("quit", |s| s.quit());
+
+  let state_text = if new_state { "ON" } else { "OFF" };
+  siv.add_layer(Dialog::info(format!("MIDI Clock Output: {}", state_text)));
 }
 
 // ------------------------------------------------------------
