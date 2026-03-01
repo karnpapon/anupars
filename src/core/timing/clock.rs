@@ -268,26 +268,6 @@ impl Clock {
     self.playing.load(Ordering::SeqCst)
   }
 
-  pub fn run_tick(self: Arc<Self>, metronome_tx: Sender<metronome::Message>) {
-    metronome_tx
-      .send(metronome::Message::Signature(Signature::default()))
-      .unwrap();
-    metronome_tx
-      .send(metronome::Message::Tempo(*self.get_tempo().deref()))
-      .unwrap();
-
-    thread::spawn(move || loop {
-      if self.is_playing() {
-        self.tick();
-        metronome_tx
-          .send(metronome::Message::Time(self.time()))
-          .unwrap();
-      } else {
-        thread::sleep(Duration::from_millis(100));
-      }
-    });
-  }
-
   fn get_tempo(&self) -> MutexGuard<'_, Ratio<i64>> {
     let tempo = self.tempo.lock().unwrap();
     tempo
@@ -304,34 +284,47 @@ impl Clock {
       .unwrap();
 
     thread::spawn(move || {
-      for control_message in &rx {
-        match control_message {
-          Message::Reset => self.reset(),
-          Message::StartStop => {
-            self.playing.fetch_xor(true, Ordering::SeqCst);
-          }
-          Message::Signature(signature) => {
-            self.set_signature(signature);
-          }
-          Message::Tap => {
-            if let Some(new_tempo) = self.tap() {
+      loop {
+        // process all pending control messages (non-blocking)
+        while let Ok(control_message) = rx.try_recv() {
+          match control_message {
+            Message::Reset => self.reset(),
+            Message::StartStop => {
+              self.playing.fetch_xor(true, Ordering::SeqCst);
+            }
+            Message::Signature(signature) => {
+              self.set_signature(signature);
+            }
+            Message::Tap => {
+              if let Some(new_tempo) = self.tap() {
+                metronome_tx
+                  .send(metronome::Message::Tempo(new_tempo))
+                  .unwrap();
+              }
+            }
+            Message::NudgeTempo(nudge) => {
+              let mut _tempo = self.get_tempo();
+              let old_tempo = _tempo;
+              let new_tempo = *old_tempo + nudge;
               metronome_tx
                 .send(metronome::Message::Tempo(new_tempo))
                 .unwrap();
             }
+            Message::Tempo(tempo) => {
+              let mut _tempo = self.get_tempo();
+              *_tempo = tempo;
+            }
           }
-          Message::NudgeTempo(nudge) => {
-            let mut _tempo = self.get_tempo();
-            let old_tempo = _tempo;
-            let new_tempo = *old_tempo + nudge;
-            metronome_tx
-              .send(metronome::Message::Tempo(new_tempo))
-              .unwrap();
-          }
-          Message::Tempo(tempo) => {
-            let mut _tempo = self.get_tempo();
-            *_tempo = tempo;
-          }
+        }
+
+        if self.is_playing() {
+          self.tick();
+          metronome_tx
+            .send(metronome::Message::Time(self.time()))
+            .unwrap();
+        } else {
+          // Sleep briefly to avoid busy-waiting when stopped
+          thread::sleep(Duration::from_millis(10));
         }
       }
     });

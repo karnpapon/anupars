@@ -37,8 +37,8 @@ pub struct TriggerParams {
 #[derive(Clone, Debug)]
 pub enum Message {
   Push(MidiMsg),
-  Hold(MidiMsg),          // Hold a note indefinitely
-  Release(MidiMsg),       // Release a held note
+  Hold(MidiMsg),
+  Release(MidiMsg),
   Trigger(MidiMsg, bool), // (msg, is_pressed)
   SetMsgConfig(MidiMsg),  // ? maybe obsolete, TBD
   ClearMsgConfig(),
@@ -482,11 +482,7 @@ impl Midi {
 pub fn convert_to_midi_note_num(octave: u8, note: f32) -> (u8, f32) {
   let base_note = 24 + (octave * 12);
   let total_note = base_note as f32 + note;
-
-  // Round to nearest MIDI note
   let midi_note = total_note.round() as u8;
-
-  // Calculate pitch bend in cents (difference from rounded note)
   let pitch_bend_cents = (total_note - midi_note as f32) * 100.0;
 
   (midi_note, pitch_bend_cents)

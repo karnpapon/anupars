@@ -56,10 +56,7 @@ impl Metronome {
   pub fn run(self) {
     let clock = Arc::new(clock::Clock::new());
     let metronome_tx_cloned = self.tx.clone();
-    let metronome_tx_cloned_2 = self.tx.clone();
-    let clock_cloned = Arc::clone(&clock);
     let clock_tx = clock.run(metronome_tx_cloned);
-    clock_cloned.run_tick(metronome_tx_cloned_2);
 
     for control_message in self.rx {
       match control_message {
