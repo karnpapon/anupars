@@ -90,7 +90,7 @@ pub const EVENT_OPERATORS: [EventOperator; 3] =
 ///   and it will be promoted to `Armed` afterwards.
 /// - `Armed`   — the *next* jump will land here.
 #[derive(Clone, Debug)]
-enum PendingJumpPosition {
+pub enum PendingJumpPosition {
   Empty,
   Waiting(usize, usize),
   Armed(usize, usize),
@@ -142,6 +142,7 @@ pub struct PlayheadUI {
   pub operator_queue: Arc<Mutex<ArrayVec<QueueItem, { consts::OP_QUEUE_CAPACITY }>>>,
   pub event_queue:
     Arc<Mutex<ConstGenericRingBuffer<EventOperator, { consts::EVENT_QUEUE_CAPACITY }>>>,
+  pub pending_jump_position: Arc<Mutex<PendingJumpPosition>>,
 }
 
 impl PlayheadUI {
@@ -157,6 +158,7 @@ impl PlayheadUI {
       sweep_mode: false,
       operator_queue: Arc::new(Mutex::new(ArrayVec::new())),
       event_queue: Arc::new(Mutex::new(ConstGenericRingBuffer::new())),
+      pending_jump_position: Arc::new(Mutex::new(PendingJumpPosition::Empty)),
     }
   }
 }
@@ -772,8 +774,10 @@ impl PlayheadArea {
 
     // When clock out is enabled, use fixed length to keep external devices in sync
     let clock_enabled = consts::CLOCK_ENABLED.load(Ordering::Relaxed);
+    #[allow(clippy::if_same_then_else)]
     let counter_limit = if clock_enabled {
-      32
+      playhead_area_size
+      // 32
     } else {
       playhead_area_size
     };
@@ -802,8 +806,11 @@ impl PlayheadArea {
 
     // When clock out is enabled, use fixed length to keep external devices in sync
     let clock_enabled = consts::CLOCK_ENABLED.load(Ordering::Relaxed);
+    // just fine-tuning which one to use
+    #[allow(clippy::if_same_then_else)]
     let counter_limit = if clock_enabled {
-      32
+      playhead_area_size
+      // 32
     } else {
       playhead_area_size
     };
@@ -1333,10 +1340,7 @@ impl PlayheadArea {
   }
 
   fn h_op(&self) {
-    self.hold_next_note.store(
-      !self.hold_next_note.load(Ordering::Relaxed),
-      Ordering::Relaxed,
-    );
+    self.hold_next_note.store(true, Ordering::Relaxed);
   }
 
   fn r_op(&self) {
@@ -1718,6 +1722,7 @@ impl PlayheadArea {
             // Clone queue references to share with PlayheadUI
             let operator_queue_cloned = self.operator_queue.clone();
             let event_queue_cloned = self.event_queue.clone();
+            let pending_jump_position_cloned = self.pending_jump_position.clone();
 
             cb_sink
               .send(Box::new(move |siv| {
@@ -1727,6 +1732,7 @@ impl PlayheadArea {
                     let editor = canvas.state_mut();
                     editor.playhead_ui.operator_queue = operator_queue_cloned;
                     editor.playhead_ui.event_queue = event_queue_cloned;
+                    editor.playhead_ui.pending_jump_position = pending_jump_position_cloned;
                   },
                 );
               }))

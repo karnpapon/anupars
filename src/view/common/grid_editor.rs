@@ -20,6 +20,7 @@ use cursive::Vec2;
 use ringbuffer::RingBuffer;
 
 use crate::core::{consts, traits::Matrix};
+use crate::view::common::playhead::PendingJumpPosition;
 use crate::view::common::playhead::PlayheadUI;
 use crate::view::common::playhead::EVENT_OPERATORS;
 use crate::view::common::playhead::QUEUE_OPERATORS;
@@ -322,6 +323,25 @@ impl GridEditor {
     printer.with_style(style, |printer| {
       printer.print((3, total_height - 1), "OPRTQ");
     });
+
+    // Pending jump position indicator
+    let pending = self.playhead_ui.pending_jump_position.lock().unwrap();
+    let (pending_str, pending_color) = match *pending {
+      PendingJumpPosition::Empty => (None, ColorType::rgb(60, 60, 60)),
+      PendingJumpPosition::Waiting(x, y) => {
+        (Some(format!("{},{}", x, y)), ColorType::rgb(100, 100, 100))
+      }
+      PendingJumpPosition::Armed(x, y) => {
+        (Some(format!("{},{}", x, y)), ColorType::rgb(255, 255, 255))
+      }
+    };
+    drop(pending);
+    if let Some(s) = pending_str {
+      let pending_style = Style::from(ColorStyle::front(pending_color));
+      printer.with_style(pending_style, |printer| {
+        printer.print((3, total_height), &s);
+      });
+    }
   }
 
   fn draw_queue_operators_bottom(&self, printer: &Printer) {
