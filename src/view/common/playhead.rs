@@ -912,14 +912,14 @@ impl PlayheadArea {
             // drop(queue);
 
             if let QueueItem::Position(x, y) = item {
+              drop(queue); // release lock before executing front event op
+
               let mut pushed = self.pushed_positions.lock().unwrap();
               pushed.remove(&(x, y));
               drop(pushed);
 
-              // Queue UI update (batched processing)
-              // let mut ui_queue = self.ui_update_queue.lock().unwrap();
-              // ui_queue.push_back(UIUpdate::OpQueueDisplay(queue_display));
-              // drop(ui_queue);
+              // Execute front event op now that queue lock is released
+              self.execute_front_event_op_in_queue();
 
               (x, y)
             } else {
@@ -1205,6 +1205,7 @@ impl PlayheadArea {
       }
       QueueOperator::Pop => {
         // Pop is always allowed, even when drain mode is active
+        self.execute_front_event_op_in_queue();
         self.handle_pop();
       }
       QueueOperator::Duplicate => {
@@ -1289,8 +1290,6 @@ impl PlayheadArea {
         pushed.remove(&(x, y));
         drop(pushed);
       }
-
-      // self.update_queue_display();
     }
   }
 
@@ -1302,8 +1301,6 @@ impl PlayheadArea {
       }
     }
     drop(queue);
-
-    // self.update_queue_display();
   }
 
   // TODO: ? maybe obsolete
@@ -1360,7 +1357,7 @@ impl PlayheadArea {
   }
 
   fn r_op(&self) {
-    unimplemented!("R operator logic not implemented yet");
+    // TODO: implement R operator logic
   }
 
   fn c_op(&self) {
@@ -1511,9 +1508,11 @@ impl PlayheadArea {
 
             let pos_mutex = self.pos.lock().unwrap();
             let pos = *pos_mutex;
+            drop(pos_mutex);
 
             let area_mutex = self.area.lock().unwrap();
             let area = *area_mutex;
+            drop(area_mutex);
 
             cb_sink
               .send(Box::new(move |siv| {
@@ -1546,6 +1545,7 @@ impl PlayheadArea {
 
             let mutex_pos = self.pos.lock().unwrap();
             let pos = *mutex_pos;
+            drop(mutex_pos);
             cb_sink
               .send(Box::new(move |siv| {
                 siv.call_on_name(consts::input_status_unit_view, |view: &mut TextView| {
@@ -1569,6 +1569,8 @@ impl PlayheadArea {
             let pos_y = pos.y;
             let w = area.width();
             let h = area.height();
+            drop(pos);
+            drop(area);
 
             cb_sink
               .send(Box::new(move |siv| {
@@ -1657,7 +1659,6 @@ impl PlayheadArea {
                     active_pos = new_active_pos;
                     did_jump = true;
                   }
-                  self.execute_front_event_op_in_queue();
                 }
                 // prevents extra note before jump
                 if !did_jump {
