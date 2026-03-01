@@ -85,6 +85,17 @@ impl EventOperator {
 pub const EVENT_OPERATORS: [EventOperator; 3] =
   [EventOperator::R, EventOperator::C, EventOperator::H];
 
+/// Two-stage pending jump position:
+/// - `Waiting` — position was just popped; the *current* jump will still be random,
+///   and it will be promoted to `Armed` afterwards.
+/// - `Armed`   — the *next* jump will land here.
+#[derive(Clone, Debug)]
+enum PendingJumpPosition {
+  Empty,
+  Waiting(usize, usize),
+  Armed(usize, usize),
+}
+
 // Queue item that can be either a position or an event
 #[derive(Clone, Debug, PartialEq)]
 pub enum QueueItem {
@@ -207,12 +218,14 @@ pub struct PlayheadArea {
   sweep_mode: AtomicBool,
   dyn_length_mode: AtomicBool,
   ratio: Arc<Mutex<(usize, usize)>>,
-  operator_queue: Arc<Mutex<ArrayVec<QueueItem, { consts::OP_QUEUE_CAPACITY }>>>,
-  event_queue: Arc<Mutex<ConstGenericRingBuffer<EventOperator, { consts::EVENT_QUEUE_CAPACITY }>>>,
+  operator_queue: Arc<Mutex<ArrayVec<QueueItem, { consts::OP_QUEUE_CAPACITY }>>>, // ? how can we define the capacity depends on grid height
+  event_queue: Arc<Mutex<ConstGenericRingBuffer<EventOperator, { consts::EVENT_QUEUE_CAPACITY }>>>, // ?
   pushed_positions: Arc<Mutex<HashMap<(usize, usize), bool>>>,
   pub ui_update_queue: Arc<Mutex<VecDeque<UIUpdate>>>,
   step_index: Arc<Mutex<usize>>,
   hold_next_note: AtomicBool,
+  /// a position to jump to for the next, since accumulation jump didnt happen immediately
+  pending_jump_position: Arc<Mutex<PendingJumpPosition>>,
   // #[cfg(debug_assertions)]
   // timing_stats: Arc<TimingStats>,
 }
@@ -250,6 +263,7 @@ impl PlayheadArea {
       ui_update_queue: Arc::new(Mutex::new(VecDeque::new())),
       step_index: Arc::new(Mutex::new(0)),
       hold_next_note: AtomicBool::new(false),
+      pending_jump_position: Arc::new(Mutex::new(PendingJumpPosition::Empty)),
       // #[cfg(debug_assertions)]
       // timing_stats: Arc::new(TimingStats::new()),
     }
@@ -267,11 +281,9 @@ impl PlayheadArea {
           continue;
         }
 
-        // Drain all pending updates
         let updates: Vec<UIUpdate> = queue.drain(..).collect();
         drop(queue);
 
-        // Process batched updates
         cb_sink
           .send(Box::new(move |siv| {
             for update in updates {
@@ -835,15 +847,44 @@ impl PlayheadArea {
       (pos.x, pos.y)
     };
 
-    // Determine jump position from stack or random
-    let params = GridParams {
-      playhead_width,
-      playhead_height,
-      grid_width,
-      grid_height,
-      rng: &mut rng,
+    // Two-stage pending jump:
+    //  Waiting → this jump is random, promote to Armed for the next one.
+    //  Armed   → use the stored position, then clear.
+    //  Empty   → normal random / queue-front logic.
+    let (new_x, new_y) = {
+      let mut pending = self.pending_jump_position.lock().unwrap();
+      match *pending {
+        PendingJumpPosition::Armed(x, y) => {
+          *pending = PendingJumpPosition::Empty;
+          drop(pending);
+          (x, y)
+        }
+        PendingJumpPosition::Waiting(x, y) => {
+          *pending = PendingJumpPosition::Armed(x, y);
+          drop(pending);
+          // This jump falls through to the normal (random) logic.
+          let params = GridParams {
+            playhead_width,
+            playhead_height,
+            grid_width,
+            grid_height,
+            rng: &mut rng,
+          };
+          self.get_jump_position(current_playhead_pos, params)
+        }
+        PendingJumpPosition::Empty => {
+          drop(pending);
+          let params = GridParams {
+            playhead_width,
+            playhead_height,
+            grid_width,
+            grid_height,
+            rng: &mut rng,
+          };
+          self.get_jump_position(current_playhead_pos, params)
+        }
+      }
     };
-    let (new_x, new_y) = self.get_jump_position(current_playhead_pos, params);
 
     // Update playhead position and area
     let mut pos = self.pos.lock().unwrap();
@@ -868,6 +909,7 @@ impl PlayheadArea {
     Vec2::zero()
   }
 
+  /// determine jump position from queue or generate random position if queue is empty
   fn get_jump_position<R: rand::Rng>(
     &self,
     current_playhead_pos: (usize, usize),
@@ -880,7 +922,6 @@ impl PlayheadArea {
         QueueItem::Position(x, y) => {
           let first_pos = (*x, *y);
           if first_pos == current_playhead_pos {
-            // Same position, jump randomly
             drop(queue);
             self.generate_random_position(
               params.playhead_width,
@@ -890,46 +931,22 @@ impl PlayheadArea {
               params.rng,
             )
           } else {
-            // Use position from queue (pop from front - FIFO)
             let item = queue.remove(0);
-            // let is_drain = self.drain_queue_mode.load(Ordering::Relaxed);
-
-            // Format queue using Display trait for consistency
-            // let queue_display = if queue.is_empty() {
-            //   if is_drain {
-            //     format!("{}[]", consts::SYMBOL_DRAIN)
-            //   } else {
-            //     "[]".to_string()
-            //   }
-            // } else {
-            //   let items: Vec<String> = queue.iter().map(|item| format!("{}", item)).collect();
-            //   if is_drain {
-            //     format!("{}[{}]", consts::SYMBOL_DRAIN, items.join(", "))
-            //   } else {
-            //     format!("[{}]", items.join(", "))
-            //   }
-            // };
-            // drop(queue);
-
             if let QueueItem::Position(x, y) = item {
-              drop(queue); // release lock before executing front event op
+              drop(queue);
 
               let mut pushed = self.pushed_positions.lock().unwrap();
               pushed.remove(&(x, y));
               drop(pushed);
 
-              // Execute front event op now that queue lock is released
-              self.execute_front_event_op_in_queue();
-
+              self.execute_front_op_in_queue();
               (x, y)
             } else {
-              // This shouldn't happen as we checked first_item was Position
               (0, 0)
             }
           }
         }
         QueueItem::Event(_) => {
-          // Event at front of queue, can't jump to it, generate random position
           drop(queue);
           self.generate_random_position(
             params.playhead_width,
@@ -1169,10 +1186,12 @@ impl PlayheadArea {
     }
   }
 
-  fn execute_front_event_op_in_queue(&self) {
+  fn execute_front_op_in_queue(&self) {
     let op_front = self.operator_queue.lock().unwrap().first().cloned();
-    if let Some(QueueItem::Event(ev_op)) = op_front {
-      match ev_op {
+    match op_front {
+      None => (),
+      Some(QueueItem::Position(_, _)) => (),
+      Some(QueueItem::Event(ev_op)) => match ev_op {
         EventOperator::H => {
           self.h_op();
         }
@@ -1182,7 +1201,7 @@ impl PlayheadArea {
         EventOperator::R => {
           self.r_op();
         }
-      }
+      },
     }
   }
 
@@ -1205,8 +1224,18 @@ impl PlayheadArea {
       }
       QueueOperator::Pop => {
         // Pop is always allowed, even when drain mode is active
-        self.execute_front_event_op_in_queue();
-        self.handle_pop();
+        let front = self.operator_queue.lock().unwrap().first().cloned();
+        match front {
+          Some(QueueItem::Event(_)) => {
+            self.execute_front_op_in_queue();
+            self.handle_pop();
+          }
+          Some(QueueItem::Position(x, y)) => {
+            self.handle_pop();
+            *self.pending_jump_position.lock().unwrap() = PendingJumpPosition::Waiting(x, y);
+          }
+          None => {}
+        }
       }
       QueueOperator::Duplicate => {
         if !is_drain {
@@ -1241,8 +1270,6 @@ impl PlayheadArea {
         queue.push(QueueItem::Event(event_op));
       }
       drop(queue);
-
-      self.update_queue_display();
     } else {
       drop(event_queue);
 
@@ -1261,8 +1288,6 @@ impl PlayheadArea {
           queue.push(QueueItem::Position(push_pos.0, push_pos.1));
         }
         drop(queue);
-
-        self.update_queue_display();
       }
     }
   }
@@ -1274,8 +1299,6 @@ impl PlayheadArea {
       queue.swap(len - 1, len - 2);
     }
     drop(queue);
-
-    self.update_queue_display();
   }
 
   fn handle_pop(&self) {
@@ -1303,50 +1326,10 @@ impl PlayheadArea {
     drop(queue);
   }
 
-  // TODO: ? maybe obsolete
-  fn update_queue_display(&self) {
-    let queue = self.operator_queue.lock().unwrap();
-    let event_queue = self.event_queue.lock().unwrap();
-    // let drain_queue = self.drain_queue_mode.load(Ordering::Relaxed);
-
-    // Format operator queue with Display trait for clean output
-    // let queue_display = if queue.is_empty() {
-    //   if drain_queue {
-    //     format!("{}[]", consts::SYMBOL_DRAIN)
-    //   } else {
-    //     "[]".to_string()
-    //   }
-    // } else {
-    //   let items: Vec<String> = queue.iter().map(|item| format!("{}", item)).collect();
-    //   if drain_queue {
-    //     format!("{}[{}]", consts::SYMBOL_DRAIN, items.join(", "))
-    //   } else {
-    //     format!("[{}]", items.join(", "))
-    //   }
-    // };
-
-    // Format event queue with Display trait
-    // let event_queue_display = if event_queue.is_empty() {
-    //   "[]".to_string()
-    // } else {
-    //   let items: Vec<String> = event_queue.iter().map(|op| format!("{}", op)).collect();
-    //   format!("[{}]", items.join(", "))
-    // };
-
-    drop(queue);
-    drop(event_queue);
-
-    // let mut ui_queue = self.ui_update_queue.lock().unwrap();
-    // ui_queue.push_back(UIUpdate::OpQueueDisplay(queue_display));
-    // ui_queue.push_back(UIUpdate::EvQueueDisplay(event_queue_display));
-  }
-
   fn handle_r(&self) {
     let mut event_queue = self.event_queue.lock().unwrap();
     event_queue.enqueue(EventOperator::R);
     drop(event_queue);
-
-    self.update_queue_display();
   }
 
   fn h_op(&self) {
@@ -1461,23 +1444,13 @@ impl PlayheadArea {
     let mut event_queue = self.event_queue.lock().unwrap();
     event_queue.enqueue(EventOperator::H);
     drop(event_queue);
-
-    self.update_queue_display();
   }
 
   fn handle_c(&self) {
     let mut event_queue = self.event_queue.lock().unwrap();
     event_queue.enqueue(EventOperator::C);
     drop(event_queue);
-
-    self.update_queue_display();
   }
-
-  // fn is_actived_position(&self, curr_pos: Vec2) -> bool {
-  //   let pos = self.pos.lock().unwrap();
-  //   let actived_pos = self.actived_pos.lock().unwrap();
-  //   pos.saturating_add(*actived_pos).eq(&curr_pos)
-  // }
 
   // #[cfg(debug_assertions)]
   // pub fn spawn_stats_printer(self: &Arc<Self>) {
@@ -1488,6 +1461,11 @@ impl PlayheadArea {
   //     stats.reset();
   //   });
   // }
+
+  pub fn reset_accumulation_counter(&self) {
+    let mut counter = self.accumulation_counter.lock().unwrap();
+    *counter = 0;
+  }
 
   pub fn run(self: Arc<Self>) -> Sender<Message> {
     let (tx, rx) = channel();
@@ -1500,11 +1478,7 @@ impl PlayheadArea {
         match control_message {
           Message::Move(direction, canvas_size, cb_sink) => {
             self.set_move(direction.clone(), canvas_size);
-
-            // Reset accumulation counter on user interaction
-            let mut counter = self.accumulation_counter.lock().unwrap();
-            *counter = 0;
-            drop(counter);
+            self.reset_accumulation_counter();
 
             let pos_mutex = self.pos.lock().unwrap();
             let pos = *pos_mutex;
@@ -1537,11 +1511,7 @@ impl PlayheadArea {
           }
           Message::SetCurrentPos(position, offset, cb_sink) => {
             self.set_current_pos(position, offset);
-
-            // Reset accumulation counter on user interaction
-            let mut counter = self.accumulation_counter.lock().unwrap();
-            *counter = 0;
-            drop(counter);
+            self.reset_accumulation_counter();
 
             let mutex_pos = self.pos.lock().unwrap();
             let pos = *mutex_pos;
@@ -1586,11 +1556,7 @@ impl PlayheadArea {
           }
           Message::SetGridArea(current_pos, cb_sink) => {
             self.set_grid_area(current_pos);
-
-            // Reset accumulation counter on user interaction
-            let mut counter = self.accumulation_counter.lock().unwrap();
-            *counter = 0;
-            drop(counter);
+            self.reset_accumulation_counter();
 
             let area = self.area.lock().unwrap();
             let w = area.width();
@@ -1666,8 +1632,6 @@ impl PlayheadArea {
                 }
                 if self.hold_next_note.load(Ordering::Relaxed) {
                   self.hold_next_note.store(false, Ordering::Relaxed);
-                  self.operator_queue.lock().unwrap().remove(0);
-                  self.update_queue_display();
                 }
               }
 
@@ -1700,11 +1664,7 @@ impl PlayheadArea {
           }
           Message::Scale(size, cb_sink) => {
             self.scale(size);
-
-            // Reset accumulation counter on user interaction
-            let mut counter = self.accumulation_counter.lock().unwrap();
-            *counter = 0;
-            drop(counter);
+            self.reset_accumulation_counter();
 
             let area = self.area.lock().unwrap();
             let playhead_area = *area;
@@ -1787,13 +1747,8 @@ impl PlayheadArea {
           Message::ToggleAccumulationMode(cb_sink) => {
             let is_enabled = !self.accumulation_mode.load(Ordering::Relaxed);
             self.accumulation_mode.store(is_enabled, Ordering::Relaxed);
+            self.reset_accumulation_counter();
 
-            // Reset counter when toggling mode
-            let mut counter = self.accumulation_counter.lock().unwrap();
-            *counter = 0;
-            drop(counter);
-
-            // Clear queue when disabling accumulation mode
             if !is_enabled {
               let mut queue = self.operator_queue.lock().unwrap();
               queue.clear();
@@ -1802,6 +1757,8 @@ impl PlayheadArea {
               let mut pushed = self.pushed_positions.lock().unwrap();
               pushed.clear();
               drop(pushed);
+
+              *self.pending_jump_position.lock().unwrap() = PendingJumpPosition::Empty;
             }
 
             let mode_status = self.build_mode_status_string();
