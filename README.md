@@ -14,11 +14,11 @@ anupars (อนุภา(ส), meaning "tiny following light" in Thai), a Rust-b
 
 - **MIDI Out Clock Features**
   - Implements standard MIDI clock transport messages for external device:
-    - `Start` — Sends MIDI Start (`0xFA`) to begin playback from the start.
-    - `Stop` — Sends MIDI Stop (`0xFC`) to halt playback.
-    - `Tick` — Sends MIDI Clock (`0xF8`) for timing synchronization (24 per quarter note ([PPQN](https://en.wikipedia.org/wiki/MIDI_beat_clock))).
-    - `Continue` — Sends MIDI Continue (`0xFB`) to resume playback from the current position.
-    - `Song Position Pointer` (SPP) — Sends MIDI Song Position Pointer (`0xF2`) to set the playback position in beats.
+    - `Start` Sends MIDI Start (`0xFA`) to begin playback from the start.
+    - `Stop` Sends MIDI Stop (`0xFC`) to halt playback.
+    - `Tick` Sends MIDI Clock (`0xF8`) for timing synchronization (24 per quarter note ([PPQN](https://en.wikipedia.org/wiki/MIDI_beat_clock))).
+    - `Continue` Sends MIDI Continue (`0xFB`) to resume playback from the current position.
+    - `Song Position Pointer` (SPP) Sends MIDI Song Position Pointer (`0xF2`) to set the playback position in beats.
 
 - **Keyboard MIDI Layout**
   - The on-screen keyboard uses a spatial layout similar to Laurie Spiegel's [Music Mouse](https://en.wikipedia.org/wiki/Music_Mouse), enabling expressive, algorithmic play.
@@ -26,8 +26,12 @@ anupars (อนุภา(ส), meaning "tiny following light" in Thai), a Rust-b
 - **Separated Scale Change for Vertical/Horizontal Steps**
   - Independently assign musical scales for vertical (Y-axis) and horizontal (X-axis) movement, allowing complex modal and harmonic explorations.
 
-- **Reverse/Random Step Mode**
-  - Instantly reverse/randomize the running direction of the sequencer, creating evolving or retrograde patterns at the touch of a button.
+- **Movement**
+  - Instantly change running direction of the sequencer, creating evolving or retrograde patterns at the touch.
+    - Forward
+    - Reverse
+    - Pendulum
+    - Random
 
 - **Arpeggiator Mode**
   - When enabled, the sequencer steps only through positions matching the current regex, producing arpeggiator-like melodic patterns from your rules.
@@ -37,13 +41,35 @@ anupars (อนุภา(ส), meaning "tiny following light" in Thai), a Rust-b
   - Manaul file loader TBD
 
 - **Accumulation Mode (Semi Self-Configuration)**
-  - Activate accumulation mode to let the system semi-autonomously reconfigure itself, stacking and evolving patterns for emergent musical results.
+  - Activate accumulation mode to let the system semi-autonomously reconfigure itself via [Queue System](#queue-system), stacking and evolving patterns for emergent musical results.
 
-- **OSC**
-  - Soon
 
-- **Multi-step**
-  - TBD
+- **Modes** (shown in status bar; uppercase = active)
+  - `a`: Arpeggiator (see above)
+  - `n`: Drain Queue
+  - `u`: Accumulation (see above)
+  - `l`: Dynamic Length, playhead length adjusts dynamically.
+  - `e`: Event Operator, enables event operator triggering from keyboard.
+  - `s`: Sweep, sweeps through positions across the playhead range.
+
+- **Scale Selection**
+  - 16 scales available: `Chromatic`, `Major`, `Minor`, `Harmonic Minor`, `Melodic Minor`, `Dorian`, `Phrygian`, `Lydian`, `Mixolydian`, `Locrian`, `Major Pentatonic`, `Minor Pentatonic`, `Blues`, `Whole Tone`, `Diminished`, and **Thai 7-TET** (microtonal).
+  - Scale root selectable across all 12 chromatic pitches (C–B).
+
+
+# Queue System
+
+Inpspired by [Event Loop](https://medium.com/@ignatovich.dm/the-javascript-event-loop-explained-with-examples-d8f7ddf0861d), the queue is a first-in-first-out (`FIFO`) dispatch mechanism, events accumulate, wait, and are consumed one at a time, each driving a state transition in the sequencer. every jump or timbral gesture is the result of something that was previously enqueued.
+
+it comprised of 
+- **Event Queue (EVQ)** holds pending event operators to be fused into the next push, current available ops are
+  - `c` / `>CHORD` chord event triggers a triad on the next matched position.
+  - `h` / `>HOLDN` hold event sustains the note on the next matched position.
+- **Queue Operators** spatially mapped on keyboard, current available ops are
+  - `P` Push, push current playhead position (or front event) onto OPQ.
+  - `S` Swap, swap the top two items in OPQ.
+  - `O` Pop, execute and remove the front item from OPQ.
+  - `D` Duplicate, duplicate the top item in OPQ.
 
 # Building
 - Docker must be installed before proceeding
