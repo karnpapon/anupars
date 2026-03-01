@@ -130,7 +130,7 @@ impl TopSection {
           .with_name(consts::bpm_status_unit_view),
       )
       .child(
-        "RTO: ",
+        "DIV: ",
         TextView::new(utils::build_ratio_status_str(prog.top_section.ratio))
           .with_name(consts::ratio_status_unit_view),
       )
@@ -156,7 +156,7 @@ impl TopSection {
         "MVE:",
         TextView::new(prog.movement.print_movements()).with_name(consts::movement_unit_view),
       )
-      .child("STE: ", input_status_unit_view)
+      .child("ACM: ", input_status_unit_view)
       // .child(
       //   "OPQ:",
       //   TextView::new("[]").with_name(consts::op_queue_status_unit_view),
