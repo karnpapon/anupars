@@ -1154,18 +1154,15 @@ impl PlayheadArea {
   }
 
   // Queue operators: P (Push), S (Swap), O (pOp), D (Duplicate) with narrow spacing
-  // Event operators: r, c, x with wider spacing
+  // Event operators: r, c, h with wider spacing
   fn check_n_execute_operators(&self, abs_x: usize) {
-    // Check if this is a "space" position (where event operators are defined)
     let is_space = abs_x.is_multiple_of(consts::EVENT_OP_SPACING);
 
-    // Only execute queue operators if NOT on a space position
     if abs_x.is_multiple_of(consts::QUEUE_OP_SPACING) && !is_space {
       let position_index = abs_x / consts::QUEUE_OP_SPACING;
       self.execute_queue_operator(position_index);
     }
 
-    // Event operators only execute on space positions when event_operator_mode is enabled
     if is_space && self.event_operator_mode.load(Ordering::Relaxed) {
       let position_index = abs_x / consts::EVENT_OP_SPACING;
       self.execute_event_operator(position_index);
@@ -1173,18 +1170,17 @@ impl PlayheadArea {
   }
 
   fn execute_front_event_op_in_queue(&self) {
-    // if front of queue is an event, we execute it immediately
     let op_front = self.operator_queue.lock().unwrap().first().cloned();
     if let Some(QueueItem::Event(ev_op)) = op_front {
       match ev_op {
         EventOperator::H => {
-          self.hold_next_note.store(
-            !self.hold_next_note.load(Ordering::Relaxed),
-            Ordering::Relaxed,
-          );
+          self.h_op();
         }
-        EventOperator::R | EventOperator::C => {
-          // NO OP for now.
+        EventOperator::C => {
+          self.c_op();
+        }
+        EventOperator::R => {
+          self.r_op();
         }
       }
     }
@@ -1356,7 +1352,18 @@ impl PlayheadArea {
     self.update_queue_display();
   }
 
-  fn handle_c(&self) {
+  fn h_op(&self) {
+    self.hold_next_note.store(
+      !self.hold_next_note.load(Ordering::Relaxed),
+      Ordering::Relaxed,
+    );
+  }
+
+  fn r_op(&self) {
+    unimplemented!("R operator logic not implemented yet");
+  }
+
+  fn c_op(&self) {
     let actived_pos = *self.actived_pos.lock().unwrap();
     let playhead_pos = *self.pos.lock().unwrap();
     let abs_x = playhead_pos.x + actived_pos.x;
@@ -1456,6 +1463,14 @@ impl PlayheadArea {
   fn handle_h(&self) {
     let mut event_queue = self.event_queue.lock().unwrap();
     event_queue.enqueue(EventOperator::H);
+    drop(event_queue);
+
+    self.update_queue_display();
+  }
+
+  fn handle_c(&self) {
+    let mut event_queue = self.event_queue.lock().unwrap();
+    event_queue.enqueue(EventOperator::C);
     drop(event_queue);
 
     self.update_queue_display();

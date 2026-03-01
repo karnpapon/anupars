@@ -230,12 +230,12 @@ impl GridEditor {
       });
     }
 
-    // Draw EVQ items
+    // Draw EVQ items bottom-up: item[0] (oldest) at bottom, newest stacks upward
     for (idx, item) in evq_items.iter().enumerate() {
-      let y = evq_start_y + idx;
-      if y >= half_height - 1 {
+      if idx + 2 >= half_height {
         break;
       }
+      let y = half_height - 2 - idx;
       printer.with_style(style, |printer| {
         printer.print((3, y), item);
       });
@@ -291,10 +291,13 @@ impl GridEditor {
       });
     }
 
-    // Draw OPQ items
+    // Draw OPQ items bottom-up: item[0] (oldest) at bottom, newest stacks upward
     for (idx, item) in opq_items.iter().enumerate() {
-      let y = opq_display_start_y + idx;
-      if y >= total_height - 1 {
+      if idx + 2 >= total_height {
+        break;
+      }
+      let y = total_height - 2 - idx;
+      if y < opq_start_y + 1 {
         break;
       }
       printer.with_style(style, |printer| {
