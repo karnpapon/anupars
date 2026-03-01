@@ -350,25 +350,44 @@ impl Midi {
     let note_length = Self::calculate_note_length(params.bpm, params.distance_to_next);
     let midi_msg = MidiMsg::from(note_index, octave, note_length, velocity, 0);
 
-    // if there's a previously held note, release it before triggering the new note
-    // this clears stuck notes when transitioning between held notes
-    // eg. "h" op got executed then following by normal trigger
+    let note_key = (
+      midi_msg.note.round() as u8,
+      midi_msg.octave,
+      midi_msg.channel,
+    );
     let mut last_held = self.last_held_note.lock().unwrap();
-    if let Some(previous_held) = last_held.take() {
-      drop(last_held); // Release lock before sending message
-      self.tx.send(Message::Release(previous_held)).unwrap();
-      last_held = self.last_held_note.lock().unwrap();
-    }
-
-    let _ = self.trigger(&midi_msg, true);
 
     if params.hold {
+      let prev_key = last_held
+        .as_ref()
+        .map(|p| (p.note.round() as u8, p.octave, p.channel));
+
+      match prev_key {
+        Some(k) if k == note_key => {
+          return;
+        }
+        Some(_) => {
+          let prev = last_held.take().unwrap();
+          drop(last_held);
+          self.tx.send(Message::Release(prev)).unwrap();
+          last_held = self.last_held_note.lock().unwrap();
+        }
+        None => {}
+      }
+
+      let _ = self.trigger(&midi_msg, true);
       *last_held = Some(midi_msg.clone());
       drop(last_held);
       self.tx.send(Message::Hold(midi_msg)).unwrap();
     } else {
+      if let Some(prev) = last_held.take() {
+        drop(last_held);
+        self.tx.send(Message::Release(prev)).unwrap();
+        last_held = self.last_held_note.lock().unwrap();
+      }
       *last_held = None;
       drop(last_held);
+      let _ = self.trigger(&midi_msg, true);
       self.tx.send(Message::Release(midi_msg.clone())).unwrap();
       self.tx.send(Message::Push(midi_msg)).unwrap();
     }
