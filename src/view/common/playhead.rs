@@ -59,7 +59,7 @@ pub const QUEUE_OPERATORS: [QueueOperator; 4] = [
 pub enum EventOperator {
   R,
   C,
-  X,
+  H,
 }
 
 impl fmt::Display for EventOperator {
@@ -67,7 +67,7 @@ impl fmt::Display for EventOperator {
     match self {
       EventOperator::R => write!(f, "-"),
       EventOperator::C => write!(f, "c"),
-      EventOperator::X => write!(f, "-"),
+      EventOperator::H => write!(f, "h"),
     }
   }
 }
@@ -77,13 +77,13 @@ impl EventOperator {
     match self {
       EventOperator::R => ">----",
       EventOperator::C => ">CHORD",
-      EventOperator::X => ">----", // NO OP fornow
+      EventOperator::H => ">HOLDN",
     }
   }
 }
 
 pub const EVENT_OPERATORS: [EventOperator; 3] =
-  [EventOperator::R, EventOperator::C, EventOperator::X];
+  [EventOperator::R, EventOperator::C, EventOperator::H];
 
 // Queue item that can be either a position or an event
 #[derive(Clone, Debug, PartialEq)]
@@ -1177,12 +1177,11 @@ impl PlayheadArea {
     let op_front = self.operator_queue.lock().unwrap().first().cloned();
     if let Some(QueueItem::Event(ev_op)) = op_front {
       match ev_op {
-        EventOperator::X => {
-          // NO OP for now.
-          // self.hold_next_note.store(
-          //   !self.hold_next_note.load(Ordering::Relaxed),
-          //   Ordering::Relaxed,
-          // );
+        EventOperator::H => {
+          self.hold_next_note.store(
+            !self.hold_next_note.load(Ordering::Relaxed),
+            Ordering::Relaxed,
+          );
         }
         EventOperator::R | EventOperator::C => {
           // NO OP for now.
@@ -1227,7 +1226,7 @@ impl PlayheadArea {
     match operator {
       EventOperator::R => self.handle_r(),
       EventOperator::C => self.handle_c(),
-      EventOperator::X => self.handle_x(),
+      EventOperator::H => self.handle_h(),
     }
   }
 
@@ -1454,9 +1453,9 @@ impl PlayheadArea {
     });
   }
 
-  fn handle_x(&self) {
+  fn handle_h(&self) {
     let mut event_queue = self.event_queue.lock().unwrap();
-    event_queue.enqueue(EventOperator::X);
+    event_queue.enqueue(EventOperator::H);
     drop(event_queue);
 
     self.update_queue_display();
@@ -1610,7 +1609,6 @@ impl PlayheadArea {
             let divider = 16 / ratio.1;
             drop(ratio);
 
-            // Only advance step_index when ratio triggers
             let should_advance = tick % divider == 0;
             if should_advance {
               let mut step_idx = self.step_index.lock().unwrap();
@@ -1628,8 +1626,6 @@ impl PlayheadArea {
               let (note_position, scale_mode) =
                 self.determine_note_position_and_scale(active_pos, abs_x, abs_y);
 
-              // ? should sweep mode effect accumulation value
-              // Handle accumulation mode (for position operators)
               let mut did_jump = false;
 
               let matcher_guard = self.text_matcher.lock().unwrap();
@@ -1644,11 +1640,11 @@ impl PlayheadArea {
                   // since accu should execute any ops first (if needed)
                   if let Some(new_active_pos) = self.handle_accumulation_mode(abs_x, &cb_sink) {
                     active_pos = new_active_pos;
-                    did_jump = true; // Mark that a jump occurred
+                    did_jump = true;
                   }
                   self.execute_front_event_op_in_queue();
                 }
-                // Only trigger MIDI if we didn't jump (prevents extra note before jump)
+                // prevents extra note before jump
                 if !did_jump {
                   self.trigger_midi_if_matched(curr_running_playhead, note_position, scale_mode);
                 }
@@ -1659,7 +1655,6 @@ impl PlayheadArea {
                 }
               }
 
-              // Handle silent step - needs to lock matcher again
               let matcher_guard = self.text_matcher.lock().unwrap();
               if let Some(ref m) = *matcher_guard {
                 self.handle_silent_step(m, &cb_sink);
