@@ -48,6 +48,7 @@ pub enum Message {
   SetTempo(usize),
   SetRatio((usize, usize)),
   ClearQueue(),
+  SetGridSplits(usize, usize),
 }
 
 pub struct Playhead {
@@ -298,6 +299,11 @@ impl Playhead {
             let cb_sink = self.cb_sink.clone();
             playhead_area_tx
               .send(playhead::Message::ClearQueue(cb_sink))
+              .unwrap();
+          }
+          Message::SetGridSplits(v, h) => {
+            playhead_area_tx
+              .send(playhead::Message::SetGridSplits(v, h))
               .unwrap();
           }
         }

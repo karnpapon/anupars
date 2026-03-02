@@ -79,6 +79,7 @@ pub fn app_empty_dir() -> &'static str {
 pub static regex_input_unit_view: &str = "regex_input_unit_view";
 pub static regex_matches_amount_unit_view: &str = "regex_matches_amount_unit_view";
 pub static input_status_unit_view: &str = "input_status_unit_view";
+pub static chn_status_unit_view: &str = "chn_status_unit_view";
 pub static bpm_status_unit_view: &str = "bpm_status_unit_view";
 pub static ratio_status_unit_view: &str = "ratio_status_unit_view";
 pub static len_status_unit_view: &str = "len_status_unit_view";

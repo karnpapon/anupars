@@ -191,6 +191,7 @@ pub enum Message {
   SetTempo(usize),
   SetRatio((usize, usize), cursive::CbSink),
   ClearQueue(cursive::CbSink),
+  SetGridSplits(usize, usize),
 }
 
 pub struct PlayheadArea {
@@ -220,6 +221,8 @@ pub struct PlayheadArea {
   drain_queue_mode: AtomicBool,
   sweep_mode: AtomicBool,
   dyn_length_mode: AtomicBool,
+  grid_v_splits: AtomicUsize,
+  grid_h_splits: AtomicUsize,
   ratio: Arc<Mutex<(usize, usize)>>,
   operator_queue: Arc<Mutex<ArrayVec<QueueItem, { consts::OP_QUEUE_CAPACITY }>>>, // ? how can we define the capacity depends on grid height
   event_queue: Arc<Mutex<ConstGenericRingBuffer<EventOperator, { consts::EVENT_QUEUE_CAPACITY }>>>, // ?
@@ -259,6 +262,8 @@ impl PlayheadArea {
       drain_queue_mode: AtomicBool::new(false),
       sweep_mode: AtomicBool::new(false),
       dyn_length_mode: AtomicBool::new(false),
+      grid_v_splits: AtomicUsize::new(1),
+      grid_h_splits: AtomicUsize::new(1),
       ratio: Arc::new(Mutex::new(consts::DEFAULT_RATIO)),
       operator_queue: Arc::new(Mutex::new(ArrayVec::new())),
       event_queue: Arc::new(Mutex::new(ConstGenericRingBuffer::new())),
@@ -659,6 +664,7 @@ impl PlayheadArea {
     scale_mode: crate::core::scale::ScaleMode,
   ) {
     let grid_height = self.grid_height.load(Ordering::Relaxed);
+    let grid_width = self.grid_width.load(Ordering::Relaxed);
     let current_tempo = self.tempo.load(Ordering::Relaxed);
     let pos = self.pos.lock().unwrap();
 
@@ -678,6 +684,10 @@ impl PlayheadArea {
       .send(midi::Message::TriggerWithPosition(midi::TriggerParams {
         y_position: note_position,
         grid_height,
+        x_position: pos.x,
+        grid_width,
+        grid_v_splits: self.grid_v_splits.load(Ordering::Relaxed),
+        grid_h_splits: self.grid_h_splits.load(Ordering::Relaxed),
         scale_mode,
         scale_root_offset: self.scale_root_top.lock().unwrap().to_root_offset(),
         bpm: current_tempo,
@@ -733,6 +743,10 @@ impl PlayheadArea {
           .send(midi::Message::TriggerWithPosition(midi::TriggerParams {
             y_position: x_note_position,
             grid_height,
+            x_position: abs_x,
+            grid_width,
+            grid_v_splits: self.grid_v_splits.load(Ordering::Relaxed),
+            grid_h_splits: self.grid_h_splits.load(Ordering::Relaxed),
             scale_mode: x_scale_mode,
             scale_root_offset: self.scale_root_top.lock().unwrap().to_root_offset(),
             bpm: current_tempo,
@@ -1858,6 +1872,10 @@ impl PlayheadArea {
                 view.set_content("-");
               });
             }));
+          }
+          Message::SetGridSplits(v, h) => {
+            self.grid_v_splits.store(v, Ordering::Relaxed);
+            self.grid_h_splits.store(h, Ordering::Relaxed);
           }
         }
       }

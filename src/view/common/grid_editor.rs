@@ -1,5 +1,6 @@
 use std::sync::mpsc::Sender;
 
+use cursive::event::Callback;
 use cursive::event::Event;
 use cursive::event::EventResult;
 use cursive::event::Key;
@@ -14,6 +15,8 @@ use cursive::view::Resizable;
 use cursive::views::Canvas;
 use cursive::views::NamedView;
 use cursive::views::ResizedView;
+use cursive::views::TextView;
+use cursive::Cursive;
 use cursive::Printer;
 use cursive::Vec2;
 
@@ -49,6 +52,8 @@ pub struct GridEditor {
   pub event_operator_mode: bool,
   pub drain_queue_mode: bool,
   pub sweep_mode: bool,
+  pub grid_v_splits: usize,
+  pub grid_h_splits: usize,
 }
 
 impl GridEditor {
@@ -68,6 +73,8 @@ impl GridEditor {
       event_operator_mode: false,
       drain_queue_mode: false,
       sweep_mode: false,
+      grid_v_splits: 1,
+      grid_h_splits: 1,
     }
   }
 
@@ -593,6 +600,55 @@ fn draw(canvas: &GridEditor, printer: &Printer) {
   let grid_printer = printer.offset((x_offset, y_offset));
 
   canvas.grid.print(&grid_printer, &canvas.playhead_ui);
+
+  let sep_style = Style::from(ColorStyle::front(ColorType::rgb(100, 100, 100)));
+
+  let col_w = if canvas.grid_v_splits >= 2 {
+    canvas.grid.width / canvas.grid_v_splits
+  } else {
+    0
+  };
+  let row_h = if canvas.grid_h_splits >= 2 {
+    canvas.grid.height / canvas.grid_h_splits
+  } else {
+    0
+  };
+
+  let sep_xs: Vec<usize> = if canvas.grid_v_splits >= 2 {
+    (1..canvas.grid_v_splits)
+      .map(|i| col_w * i)
+      .filter(|&x| x < canvas.grid.width)
+      .collect()
+  } else {
+    vec![]
+  };
+
+  let sep_ys: Vec<usize> = if canvas.grid_h_splits >= 2 {
+    (1..canvas.grid_h_splits)
+      .map(|i| row_h * i)
+      .filter(|&y| y < canvas.grid.height)
+      .collect()
+  } else {
+    vec![]
+  };
+
+  for &sep_x in &sep_xs {
+    for y in 0..canvas.grid.height {
+      let ch = if sep_ys.contains(&y) { "┼" } else { "│" };
+      grid_printer.with_style(sep_style, |printer| {
+        printer.print((sep_x, y), ch);
+      });
+    }
+  }
+
+  for &sep_y in &sep_ys {
+    for x in 0..canvas.grid.width {
+      let ch = if sep_xs.contains(&x) { "┼" } else { "─" };
+      grid_printer.with_style(sep_style, |printer| {
+        printer.print((x, sep_y), ch);
+      });
+    }
+  }
 }
 
 fn layout(canvas: &mut GridEditor, size: Vec2) {
@@ -713,6 +769,28 @@ fn on_event(canvas: &mut GridEditor, event: Event) -> EventResult {
         .unwrap();
 
       EventResult::Ignored
+    }
+    Event::Char(c) if ('0'..='7').contains(&c) => {
+      let (v, h): (usize, usize) = match c {
+        '0' => (1, 1),
+        '1' => (1, 1),
+        '2' => (2, 1),
+        '3' => (3, 1),
+        '4' => (4, 1),
+        '5' => (4, 2),
+        '6' => (4, 3),
+        '7' => (4, 4),
+        _ => (1, 1),
+      };
+      canvas.grid_v_splits = v;
+      canvas.grid_h_splits = h;
+      let _ = canvas.playhead_tx.send(Message::SetGridSplits(v, h));
+      let label = format!("{}", c);
+      EventResult::Consumed(Some(Callback::from_fn(move |s: &mut Cursive| {
+        s.call_on_name(consts::chn_status_unit_view, |view: &mut TextView| {
+          view.set_content(label.clone());
+        });
+      })))
     }
     _ => EventResult::Ignored,
   }

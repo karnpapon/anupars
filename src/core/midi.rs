@@ -24,6 +24,10 @@ const MIN_VELOCITY: f32 = 10.0;
 pub struct TriggerParams {
   pub y_position: usize,
   pub grid_height: usize,
+  pub x_position: usize,
+  pub grid_width: usize,
+  pub grid_v_splits: usize,
+  pub grid_h_splits: usize,
   pub scale_mode: crate::core::scale::ScaleMode,
   pub scale_root_offset: u8,
   pub bpm: usize,
@@ -348,7 +352,27 @@ impl Midi {
 
     let velocity = Self::calculate_velocity(&params);
     let note_length = Self::calculate_note_length(params.bpm, params.distance_to_next);
-    let midi_msg = MidiMsg::from(note_index, octave, note_length, velocity, 0);
+
+    // Derive MIDI channel from grid position when splits are active
+    let channel: u8 = {
+      let v = params.grid_v_splits.max(1);
+      let h = params.grid_h_splits.max(1);
+      let col_w = if v > 1 && params.grid_width > 0 {
+        (params.grid_width / v).max(1)
+      } else {
+        params.grid_width.max(1)
+      };
+      let row_h = if h > 1 && params.grid_height > 0 {
+        (params.grid_height / h).max(1)
+      } else {
+        params.grid_height.max(1)
+      };
+      let col_idx = (params.x_position / col_w).min(v.saturating_sub(1));
+      let row_idx = (params.trigger_pos_y / row_h).min(h.saturating_sub(1));
+      (row_idx * v + col_idx) as u8
+    };
+
+    let midi_msg = MidiMsg::from(note_index, octave, note_length, velocity, channel);
 
     let note_key = (
       midi_msg.note.round() as u8,

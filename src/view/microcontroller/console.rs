@@ -166,6 +166,10 @@ impl Console {
         TextView::new(app.movement.print_movements()).with_name(consts::movement_unit_view),
       )
       .child("ACM: ", input_status_unit_view)
+      .child(
+        "CHN:",
+        TextView::new("0").with_name(consts::chn_status_unit_view),
+      )
       // .child(
       //   "MIDI:",
       //   TextView::new("-").with_name(consts::midi_status_unit_view),
