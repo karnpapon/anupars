@@ -142,6 +142,17 @@ impl Menubar {
         let _ = midi_tx_reset.send(crate::core::midi::Message::ClearMsgConfig());
         let _ = midi_tx_reset.send(crate::core::midi::Message::Panic());
       })
+      .leaf("Clear Queue", |s| {
+        s.call_on_name(
+          consts::canvas_editor_section_view,
+          |canvas: &mut Canvas<GridEditor>| {
+            let _ = canvas
+              .state_mut()
+              .playhead_tx
+              .send(super::playhead_controller::Message::ClearQueue());
+          },
+        );
+      })
       .delimiter()
       .leaf("About", build_about_view)
   }

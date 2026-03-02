@@ -190,6 +190,7 @@ pub enum Message {
   CycleScaleMode(cursive::CbSink, crate::core::command::Adjustment),
   SetTempo(usize),
   SetRatio((usize, usize), cursive::CbSink),
+  ClearQueue(cursive::CbSink),
 }
 
 pub struct PlayheadArea {
@@ -1845,6 +1846,18 @@ impl PlayheadArea {
           }
           Message::CycleScaleMode(cb_sink, dir) => {
             self.cycle_scale_mode(cb_sink, dir);
+          }
+          Message::ClearQueue(cb_sink) => {
+            self.operator_queue.lock().unwrap().clear();
+            self.event_queue.lock().unwrap().clear();
+            self.pushed_positions.lock().unwrap().clear();
+            *self.pending_jump_position.lock().unwrap() = PendingJumpPosition::Empty;
+            self.reset_accumulation_counter();
+            let _ = cb_sink.send(Box::new(move |siv| {
+              siv.call_on_name(consts::input_status_unit_view, |view: &mut TextView| {
+                view.set_content("-");
+              });
+            }));
           }
         }
       }

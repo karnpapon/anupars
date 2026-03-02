@@ -4,8 +4,12 @@ use std::sync::mpsc::Receiver;
 use std::sync::mpsc::Sender;
 use std::sync::Arc;
 
+// use cursive::theme::{ColorStyle, ColorType, Style};
+// use cursive::utils::markup::StyledString;
+// use cursive::views::TextView;
 use num::ToPrimitive;
 
+use crate::core::consts;
 use crate::core::midi;
 use crate::view::common::playhead_controller;
 
@@ -32,6 +36,7 @@ pub struct Metronome {
   cb_sink: cursive::CbSink,
   is_playing: Arc<AtomicBool>,
   current_position: Arc<AtomicUsize>,
+  current_bpm: Arc<AtomicUsize>,
 }
 
 impl Metronome {
@@ -46,6 +51,7 @@ impl Metronome {
       midi_tx: None,
       is_playing: Arc::new(AtomicBool::new(false)),
       current_position: Arc::new(AtomicUsize::new(0)),
+      current_bpm: Arc::new(AtomicUsize::new(consts::DEFAULT_TEMPO)),
     }
   }
 
@@ -103,6 +109,7 @@ impl Metronome {
 
           // Forward tempo to playhead as BPM (convert from Ratio to usize)
           let bpm = tempo.to_integer() as usize;
+          self.current_bpm.store(bpm, Ordering::Relaxed);
           self
             .playhead_tx
             .send(playhead_controller::Message::SetTempo(bpm))
@@ -128,6 +135,26 @@ impl Metronome {
               let _ = midi_tx.send(midi::Message::ClockTick());
             }
           }
+
+          // let bpm = self.current_bpm.load(Ordering::Relaxed);
+          // let tick_in_beat = time.ticks_since_beat().to_integer() as usize;
+          // let (symbol, color) = match tick_in_beat {
+          //   0 => ("\\", ColorType::rgb(255, 255, 255)),
+          //   1 => ("|", ColorType::rgb(100, 100, 100)),
+          //   2 => ("/", ColorType::rgb(100, 100, 100)),
+          //   _ => ("|", ColorType::rgb(100, 100, 100)),
+          // };
+          // let styled = StyledString::styled(
+          //   format!("{bpm} {symbol}"),
+          //   Style::from(ColorStyle::front(color)),
+          // );
+          // let _ = self
+          //   .cb_sink
+          //   .send(Box::new(move |siv: &mut cursive::Cursive| {
+          //     siv.call_on_name(consts::bpm_status_unit_view, |view: &mut TextView| {
+          //       view.set_content(styled);
+          //     });
+          //   }));
         }
       }
     }

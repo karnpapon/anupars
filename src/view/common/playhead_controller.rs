@@ -47,6 +47,7 @@ pub enum Message {
   ToggleDynLengthMode(),
   SetTempo(usize),
   SetRatio((usize, usize)),
+  ClearQueue(),
 }
 
 pub struct Playhead {
@@ -291,6 +292,12 @@ impl Playhead {
             let cb_sink = self.cb_sink.clone();
             playhead_area_tx
               .send(playhead::Message::CycleScaleMode(cb_sink, dir))
+              .unwrap();
+          }
+          Message::ClearQueue() => {
+            let cb_sink = self.cb_sink.clone();
+            playhead_area_tx
+              .send(playhead::Message::ClearQueue(cb_sink))
               .unwrap();
           }
         }
