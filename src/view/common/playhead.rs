@@ -1422,7 +1422,19 @@ impl PlayheadArea {
 
     // Chord notes: root, third, fifth
     let chord_degrees = [0, 2, 4];
-    let channel = 0;
+
+    // TODO: ? can be reused
+    let channel: u8 = {
+      let v = self.grid_v_splits.load(Ordering::Relaxed).max(1);
+      let h = self.grid_h_splits.load(Ordering::Relaxed).max(1);
+      let gw = self.grid_width.load(Ordering::Relaxed).max(1);
+      let gh = grid_height.max(1);
+      let col_w = if v > 1 { (gw / v).max(1) } else { gw };
+      let row_h = if h > 1 { (gh / h).max(1) } else { gh };
+      let col_idx = (abs_x / col_w).min(v.saturating_sub(1));
+      let row_idx = (abs_y / row_h).min(h.saturating_sub(1));
+      (row_idx * v + col_idx) as u8
+    };
 
     let mut chord_notes = Vec::new();
 
