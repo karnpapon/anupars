@@ -784,8 +784,20 @@ fn on_event(canvas: &mut GridEditor, event: Event) -> EventResult {
       };
       canvas.grid_v_splits = v;
       canvas.grid_h_splits = h;
+      canvas.playhead_ui.grid_v_splits = v;
+      canvas.playhead_ui.grid_h_splits = h;
       let _ = canvas.playhead_tx.send(Message::SetGridSplits(v, h));
-      let label = format!("{}", c);
+
+      let pos = canvas.playhead_ui.playhead_pos;
+      let gw = canvas.grid.width.max(1);
+      let gh = canvas.grid.height.max(1);
+      let col_w = if v > 1 { (gw / v).max(1) } else { gw };
+      let row_h = if h > 1 { (gh / h).max(1) } else { gh };
+      let col_idx = (pos.x / col_w).min(v.saturating_sub(1));
+      let row_idx = (pos.y / row_h).min(h.saturating_sub(1));
+      let ch = row_idx * v + col_idx;
+      let label = format!("{}/{}", ch + 1, v * h);
+
       EventResult::Consumed(Some(Callback::from_fn(move |s: &mut Cursive| {
         s.call_on_name(consts::chn_status_unit_view, |view: &mut TextView| {
           view.set_content(label.clone());

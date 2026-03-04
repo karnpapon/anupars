@@ -159,7 +159,7 @@ impl TopSection {
       .child("ACM: ", input_status_unit_view)
       .child(
         "CHN:",
-        TextView::new("0").with_name(consts::chn_status_unit_view),
+        TextView::new("1/1").with_name(consts::chn_status_unit_view),
       )
       // .child(
       //   "OPQ:",

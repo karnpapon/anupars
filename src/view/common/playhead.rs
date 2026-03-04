@@ -120,6 +120,8 @@ pub enum UIUpdate {
   // OpQueueDisplay(String),
   // EvQueueDisplay(String),
   PlayheadPosAndArea(Vec2, Rect),
+  ChnStatus(String),
+  GridSplits(usize, usize),
 }
 
 struct GridParams<'a, R: rand::Rng> {
@@ -143,6 +145,8 @@ pub struct PlayheadUI {
   pub event_queue:
     Arc<Mutex<ConstGenericRingBuffer<EventOperator, { consts::EVENT_QUEUE_CAPACITY }>>>,
   pub pending_jump_position: Arc<Mutex<PendingJumpPosition>>,
+  pub grid_v_splits: usize,
+  pub grid_h_splits: usize,
 }
 
 impl PlayheadUI {
@@ -159,6 +163,8 @@ impl PlayheadUI {
       operator_queue: Arc::new(Mutex::new(ArrayVec::new())),
       event_queue: Arc::new(Mutex::new(ConstGenericRingBuffer::new())),
       pending_jump_position: Arc::new(Mutex::new(PendingJumpPosition::Empty)),
+      grid_v_splits: 1,
+      grid_h_splits: 1,
     }
   }
 }
@@ -330,12 +336,40 @@ impl PlayheadArea {
                     view.set_content(utils::build_len_status_str((area_size.x, area_size.y)));
                   });
                 }
+                UIUpdate::ChnStatus(chn_str) => {
+                  siv.call_on_name(consts::chn_status_unit_view, |view: &mut TextView| {
+                    view.set_content(chn_str);
+                  });
+                }
+                UIUpdate::GridSplits(v, h) => {
+                  siv.call_on_name(
+                    consts::canvas_editor_section_view,
+                    move |canvas: &mut Canvas<GridEditor>| {
+                      let editor = canvas.state_mut();
+                      editor.playhead_ui.grid_v_splits = v;
+                      editor.playhead_ui.grid_h_splits = h;
+                    },
+                  );
+                }
               }
             }
           }))
           .unwrap();
       })
       .expect("Failed to spawn UI batch processor thread");
+  }
+
+  fn compute_chn_str(&self, pos: Vec2) -> String {
+    let v = self.grid_v_splits.load(Ordering::Relaxed).max(1);
+    let h = self.grid_h_splits.load(Ordering::Relaxed).max(1);
+    let gw = self.grid_width.load(Ordering::Relaxed).max(1);
+    let gh = self.grid_height.load(Ordering::Relaxed).max(1);
+    let col_w = if v > 1 { (gw / v).max(1) } else { gw };
+    let row_h = if h > 1 { (gh / h).max(1) } else { gh };
+    let col_idx = (pos.x / col_w).min(v.saturating_sub(1));
+    let row_idx = (pos.y / row_h).min(h.saturating_sub(1));
+    let ch = row_idx * v + col_idx;
+    format!("{}/{}", ch + 1, v * h)
   }
 
   fn build_mode_status_string(&self) -> String {
@@ -927,6 +961,7 @@ impl PlayheadArea {
 
     let mut queue = self.ui_update_queue.lock().unwrap();
     queue.push_back(UIUpdate::PlayheadPosAndArea(new_pos, new_area));
+    queue.push_back(UIUpdate::ChnStatus(self.compute_chn_str(new_pos)));
 
     Vec2::zero()
   }
@@ -1519,6 +1554,8 @@ impl PlayheadArea {
             let area = *area_mutex;
             drop(area_mutex);
 
+            let chn_str = self.compute_chn_str(pos);
+
             cb_sink
               .send(Box::new(move |siv| {
                 siv.call_on_name(consts::pos_status_unit_view, move |view: &mut TextView| {
@@ -1527,6 +1564,10 @@ impl PlayheadArea {
 
                 siv.call_on_name(consts::input_status_unit_view, |view: &mut TextView| {
                   view.set_content("-");
+                });
+
+                siv.call_on_name(consts::chn_status_unit_view, |view: &mut TextView| {
+                  view.set_content(chn_str);
                 });
 
                 siv.call_on_name(
@@ -1573,6 +1614,8 @@ impl PlayheadArea {
             drop(pos);
             drop(area);
 
+            let chn_str = self.compute_chn_str(Vec2::new(pos_x, pos_y));
+
             cb_sink
               .send(Box::new(move |siv| {
                 siv.call_on_name(consts::pos_status_unit_view, move |view: &mut TextView| {
@@ -1581,6 +1624,10 @@ impl PlayheadArea {
 
                 siv.call_on_name(consts::len_status_unit_view, move |view: &mut TextView| {
                   view.set_content(utils::build_len_status_str((w, h)));
+                });
+
+                siv.call_on_name(consts::chn_status_unit_view, |view: &mut TextView| {
+                  view.set_content(chn_str);
                 });
               }))
               .unwrap();
@@ -1888,6 +1935,11 @@ impl PlayheadArea {
           Message::SetGridSplits(v, h) => {
             self.grid_v_splits.store(v, Ordering::Relaxed);
             self.grid_h_splits.store(h, Ordering::Relaxed);
+            let pos = *self.pos.lock().unwrap();
+            let chn_str = self.compute_chn_str(pos);
+            let mut q = self.ui_update_queue.lock().unwrap();
+            q.push_back(UIUpdate::GridSplits(v, h));
+            q.push_back(UIUpdate::ChnStatus(chn_str));
           }
         }
       }

@@ -69,7 +69,6 @@ impl Metronome {
         Message::Reset => {
           clock_tx.send(clock::Message::Reset).unwrap();
 
-          // Reset position to 0 and send SPP
           self.current_position.store(0, Ordering::Relaxed);
           if let Some(ref midi_tx) = self.midi_tx {
             let _ = midi_tx.send(midi::Message::ClockSongPosition(0));
@@ -78,15 +77,11 @@ impl Metronome {
         Message::StartStop => {
           clock_tx.send(clock::Message::StartStop).unwrap();
 
-          // Toggle playing state and send MIDI clock start/stop
           let was_playing = self.is_playing.fetch_xor(true, Ordering::SeqCst);
           if let Some(ref midi_tx) = self.midi_tx {
             if was_playing {
-              // Was playing, now stopping
               let _ = midi_tx.send(midi::Message::ClockStop());
             } else {
-              // Was stopped, now starting
-              // Send Song Position Pointer first, then Start
               let position = self.current_position.load(Ordering::Relaxed);
               let _ = midi_tx.send(midi::Message::ClockSongPosition(position));
               let _ = midi_tx.send(midi::Message::ClockStart());
@@ -117,8 +112,6 @@ impl Metronome {
         }
         Message::Time(time) => {
           let tick = time.ticks().to_usize().unwrap();
-
-          // Update current position for SPP
           self.current_position.store(tick, Ordering::Relaxed);
 
           self

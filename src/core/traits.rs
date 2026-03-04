@@ -159,11 +159,31 @@ impl<T: Printable + Copy> Matrix<T> {
       playhead_area,
       actived_pos,
       sweep_mode,
+      grid_v_splits,
+      grid_h_splits,
       ..
     } = playhead_ui;
 
     // Calculate absolute active position for crosshair
     let active_absolute_pos = playhead_pos.saturating_add(actived_pos);
+
+    // Compute the active channel region for dimming
+    let v = (*grid_v_splits).max(1);
+    let h = (*grid_h_splits).max(1);
+    let channel_bounds: Option<(usize, usize, usize, usize)> = if v > 1 || h > 1 {
+      let col_w = (self.width / v).max(1);
+      let row_h = (self.height / h).max(1);
+      let curr_col = (playhead_pos.x / col_w).min(v.saturating_sub(1));
+      let curr_row = (playhead_pos.y / row_h).min(h.saturating_sub(1));
+      Some((
+        curr_col * col_w,
+        ((curr_col + 1) * col_w).min(self.width),
+        curr_row * row_h,
+        ((curr_row + 1) * row_h).min(self.height),
+      ))
+    } else {
+      None
+    };
 
     // Standard row-major order: iterate rows (y) then columns (x)
     for y in 0..self.height {
@@ -173,21 +193,39 @@ impl<T: Printable + Copy> Matrix<T> {
         let is_in_playhead_area = playhead_area.contains(pos.into());
         let is_active_pos = active_absolute_pos.eq(&pos);
         let is_on_crosshair_vertical = x == active_absolute_pos.x && !is_active_pos;
-        // let is_on_crosshair_horizontal = y == active_absolute_pos.y && !is_active_pos;
 
-        // Render default cell with style
-        let style = self.calculate_cell_style(cell_index, text_matcher);
+        let is_in_active_channel = match channel_bounds {
+          Some((x0, x1, y0, y1)) => x >= x0 && x < x1 && y >= y0 && y < y1,
+          None => true,
+        };
+
+        // Column-strip bounds (x only)
+        // shares the same vertical channels (e.g. ch2 + ch6 are same x-strip)
+        let is_in_active_col_strip = match channel_bounds {
+          Some((x0, x1, _, _)) => x >= x0 && x < x1,
+          None => true,
+        };
+
+        let is_regex_match = text_matcher
+          .as_ref()
+          .map(|m| m.contains_key(&cell_index))
+          .unwrap_or(false);
+
+        let style = if is_in_active_col_strip {
+          if *sweep_mode && is_regex_match && !is_in_playhead_area {
+            Style::highlight()
+          } else if is_in_active_channel {
+            self.calculate_cell_style(cell_index, text_matcher)
+          } else {
+            Style::from_color_style(ColorStyle::front(ColorType::rgb(50, 50, 50)))
+          }
+        } else {
+          Style::from_color_style(ColorStyle::front(ColorType::rgb(50, 50, 50)))
+        };
         let display_char = self.get_display_char(x, y);
         printer.print_styled(pos, &SpannedString::styled(display_char, style));
 
-        // Render crosshair lines at active position
         if is_on_crosshair_vertical && *sweep_mode {
-          // Check if this position matches regex and is outside playhead area
-          let is_regex_match = text_matcher
-            .as_ref()
-            .map(|m| m.contains_key(&cell_index))
-            .unwrap_or(false);
-
           let crosshair_char = if is_regex_match && !is_in_playhead_area {
             ("@", Style::highlight())
           } else {
@@ -196,14 +234,10 @@ impl<T: Printable + Copy> Matrix<T> {
               Style::from(ColorStyle::front(ColorType::rgb(80, 80, 80))),
             )
           };
-
           printer.print_styled(
             pos,
             &SpannedString::styled(crosshair_char.0, crosshair_char.1),
           );
-          // } else if is_on_crosshair_horizontal {
-          //   let crosshair_style = Style::from(ColorStyle::front(ColorType::rgb(80, 80, 80)));
-          //   printer.print_styled(pos, &SpannedString::styled("-", crosshair_style));
         }
 
         // Render playhead-specific overlays
