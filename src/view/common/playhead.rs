@@ -65,7 +65,7 @@ pub enum EventOperator {
 impl fmt::Display for EventOperator {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     match self {
-      EventOperator::R => write!(f, "-"),
+      EventOperator::R => write!(f, "r"),
       EventOperator::C => write!(f, "c"),
       EventOperator::H => write!(f, "h"),
     }
@@ -75,7 +75,7 @@ impl fmt::Display for EventOperator {
 impl EventOperator {
   pub fn get_event_name(&self) -> &'static str {
     match self {
-      EventOperator::R => ">----",
+      EventOperator::R => ">RTCHT",
       EventOperator::C => ">CHORD",
       EventOperator::H => ">HOLDN",
     }
@@ -238,6 +238,10 @@ pub struct PlayheadArea {
   hold_next_note: AtomicBool,
   /// a position to jump to for the next, since accumulation jump didnt happen immediately
   pending_jump_position: Arc<Mutex<PendingJumpPosition>>,
+  /// true while the ratchet thread is firing re-triggers; freezes step_index advancement
+  is_ratcheting: Arc<AtomicBool>,
+  /// incremented to cancel any running ratchet thread; thread checks its captured generation
+  ratchet_generation: Arc<AtomicUsize>,
   // #[cfg(debug_assertions)]
   // timing_stats: Arc<TimingStats>,
 }
@@ -278,6 +282,8 @@ impl PlayheadArea {
       step_index: Arc::new(Mutex::new(0)),
       hold_next_note: AtomicBool::new(false),
       pending_jump_position: Arc::new(Mutex::new(PendingJumpPosition::Empty)),
+      is_ratcheting: Arc::new(AtomicBool::new(false)),
+      ratchet_generation: Arc::new(AtomicUsize::new(0)),
       // #[cfg(debug_assertions)]
       // timing_stats: Arc::new(TimingStats::new()),
     }
@@ -942,6 +948,9 @@ impl PlayheadArea {
       }
     };
 
+    self.ratchet_generation.fetch_add(1, Ordering::SeqCst);
+    self.is_ratcheting.store(false, Ordering::Relaxed);
+
     // Update playhead position and area
     let mut pos = self.pos.lock().unwrap();
     pos.x = new_x;
@@ -1394,7 +1403,95 @@ impl PlayheadArea {
   }
 
   fn r_op(&self) {
-    // TODO: implement R operator logic
+    let actived_pos = *self.actived_pos.lock().unwrap();
+    let playhead_pos = *self.pos.lock().unwrap();
+    let abs_x = playhead_pos.x + actived_pos.x;
+    let abs_y = playhead_pos.y + actived_pos.y;
+
+    let scale_mode = *self.scale_mode_top.lock().unwrap();
+    let scale_root_offset = self.scale_root_top.lock().unwrap().to_root_offset();
+    let grid_height = self.grid_height.load(Ordering::Relaxed);
+    let grid_width = self.grid_width.load(Ordering::Relaxed);
+
+    if grid_height == 0 {
+      return;
+    }
+
+    let note_position = abs_x % grid_height;
+    let (note_index, octave) = scale_mode.pos_to_scale_note(
+      note_position,
+      grid_height,
+      consts::BASE_OCTAVE,
+      scale_root_offset,
+    );
+
+    let max_vel = 100.0_f32;
+    let min_vel = 10.0_f32;
+    let base_velocity =
+      (max_vel - (abs_y as f32 / grid_height as f32) * (max_vel - min_vel)).round() as u8;
+
+    let channel: u8 = {
+      let v = self.grid_v_splits.load(Ordering::Relaxed).max(1);
+      let h = self.grid_h_splits.load(Ordering::Relaxed).max(1);
+      let gw = grid_width.max(1);
+      let gh = grid_height.max(1);
+      let col_w = if v > 1 { (gw / v).max(1) } else { gw };
+      let row_h = if h > 1 { (gh / h).max(1) } else { gh };
+      let col_idx = (abs_x / col_w).min(v.saturating_sub(1));
+      let row_idx = (abs_y / row_h).min(h.saturating_sub(1));
+      (row_idx * v + col_idx) as u8
+    };
+
+    // let ratio = *self.ratio.lock().unwrap();
+    let ratchet_count = 4_u8; // (ratio.1 / 4).max(2) as u64;
+    const INTERVAL_MS: u64 = 100;
+    let note_duration_ms = ((INTERVAL_MS * 60) / 100).max(15);
+    // Keep note_length byte plausible (Stack uses length * 8 ms)
+    let note_length = ((note_duration_ms / 8) as u8).max(1);
+
+    let my_gen = self.ratchet_generation.fetch_add(1, Ordering::SeqCst) + 1;
+    self.is_ratcheting.store(true, Ordering::SeqCst);
+
+    let is_ratcheting = Arc::clone(&self.is_ratcheting);
+    let ratchet_generation = Arc::clone(&self.ratchet_generation);
+    let midi_tx = self.midi_tx.clone();
+
+    thread::Builder::new()
+      .name("ratchet".to_string())
+      .spawn(move || {
+        for i in 0..ratchet_count {
+          if ratchet_generation.load(Ordering::SeqCst) != my_gen {
+            break;
+          }
+
+          // velocity decays from base → 30 % of base over the run
+          let decay = 1.0_f32 - (i as f32 / ratchet_count as f32) * 0.70;
+          let velocity = ((base_velocity as f32 * decay).round() as u8).max(10);
+
+          let midi_msg = midi::MidiMsg::from(note_index, octave, note_length, velocity, channel);
+
+          let _ = midi_tx.send(midi::Message::Trigger(midi_msg.clone(), true));
+
+          {
+            let tx_off = midi_tx.clone();
+            let gen_off = my_gen;
+            let gen_arc = Arc::clone(&ratchet_generation);
+            thread::spawn(move || {
+              thread::sleep(Duration::from_millis(note_duration_ms));
+              if gen_arc.load(Ordering::SeqCst) == gen_off {
+                let _ = tx_off.send(midi::Message::Trigger(midi_msg, false));
+              }
+            });
+          }
+
+          thread::sleep(Duration::from_millis(INTERVAL_MS));
+        }
+
+        if ratchet_generation.load(Ordering::SeqCst) == my_gen {
+          is_ratcheting.store(false, Ordering::Relaxed);
+        }
+      })
+      .expect("failed to spawn ratchet thread");
   }
 
   fn c_op(&self) {
@@ -1543,6 +1640,8 @@ impl PlayheadArea {
       for control_message in &rx {
         match control_message {
           Message::Move(direction, canvas_size, cb_sink) => {
+            self.ratchet_generation.fetch_add(1, Ordering::SeqCst);
+            self.is_ratcheting.store(false, Ordering::Relaxed);
             self.set_move(direction.clone(), canvas_size);
             self.reset_accumulation_counter();
 
@@ -1582,6 +1681,8 @@ impl PlayheadArea {
               .unwrap();
           }
           Message::SetCurrentPos(position, offset, cb_sink) => {
+            self.ratchet_generation.fetch_add(1, Ordering::SeqCst);
+            self.is_ratcheting.store(false, Ordering::Relaxed);
             self.set_current_pos(position, offset);
             self.reset_accumulation_counter();
 
@@ -1670,7 +1771,9 @@ impl PlayheadArea {
             let divider = 16 / ratio.1;
             drop(ratio);
 
-            let should_advance = tick % divider == 0;
+            // While ratcheting, freeze the playhead position — don't advance step_index
+            // (accumulation also won't increment, satisfying the "once only" requirement)
+            let should_advance = tick % divider == 0 && !self.is_ratcheting.load(Ordering::Relaxed);
             if should_advance {
               let mut step_idx = self.step_index.lock().unwrap();
               *step_idx += 1;
@@ -1705,7 +1808,8 @@ impl PlayheadArea {
                   }
                 }
                 // prevents extra note before jump
-                if !did_jump {
+                // also skip if ratcheting: r_op owns all hits including hit 0
+                if !did_jump && !self.is_ratcheting.load(Ordering::Relaxed) {
                   self.trigger_midi_if_matched(curr_running_playhead, note_position, scale_mode);
                 }
                 if self.hold_next_note.load(Ordering::Relaxed) {
@@ -1719,7 +1823,7 @@ impl PlayheadArea {
               }
               drop(matcher_guard);
 
-              if !did_jump {
+              if !did_jump && !self.is_ratcheting.load(Ordering::Relaxed) {
                 self.trigger_midi_if_matched_sweep(curr_running_playhead, abs_x);
               }
               self.update_active_pos_ui(active_pos, &cb_sink);
