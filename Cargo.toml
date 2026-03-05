@@ -23,7 +23,9 @@ cfonts = "1.2.0"
 log = "0.4.22"
 num = "0.4.3"
 crossbeam = "0.8.4"
-midir = "0.9.1"
+# enable `coremidi_send_timestamped` otherwise Ableton wont recognize the MIDI events sent by midir
+# https://github.com/Boddlnagg/midir/issues/94
+midir = { version = "0.10.3", features = ["coremidi_send_timestamped"] }
 regex = "1.10.6"
 serde = "1.0.210"
 nom = "7.1.3"
