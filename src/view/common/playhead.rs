@@ -770,18 +770,12 @@ impl PlayheadArea {
         // Calculate average y position for velocity reference
         let avg_y = matched_y_positions.iter().sum::<usize>() / matched_y_positions.len();
 
-        let x_note_position = if grid_height > 0 {
-          abs_x % grid_height
-        } else {
-          avg_y
-        };
-
         let default_length = 4;
 
         let _ = self
           .midi_tx
           .send(midi::Message::TriggerWithPosition(midi::TriggerParams {
-            y_position: x_note_position,
+            y_position: avg_y,
             grid_height,
             x_position: abs_x,
             grid_width,
