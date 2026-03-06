@@ -4,7 +4,7 @@ use std::sync::mpsc::Receiver;
 use std::sync::mpsc::Sender;
 
 use cursive::views::{Canvas, TextView};
-use regex::Regex;
+use regex_lite::Regex;
 
 use serde::{Deserialize, Serialize};
 

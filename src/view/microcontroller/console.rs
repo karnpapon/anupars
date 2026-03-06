@@ -13,10 +13,8 @@ use cursive::views::TextView;
 use cursive_tabs::{Align, TabPanel};
 use std::sync::Arc;
 
-use std::sync::mpsc::Sender;
-
-use cfonts::{render, Fonts, Options};
 use cursive::Vec2;
+use std::sync::mpsc::Sender;
 
 use crate::app::UserData;
 use crate::core::regex;
@@ -437,13 +435,9 @@ fn input_edit(siv: &mut Cursive, texts: &str, _cursor: usize, regex_tx: Sender<r
     return;
   }
 
-  let output = render(Options {
-    text: String::from(texts),
-    font: Fonts::FontTiny,
-    ..Options::default()
-  });
+  let banner_text = texts.to_string();
 
-  display_view.set_content(output.text);
+  display_view.set_content(banner_text);
 
   solve_regex(siv, texts, regex_tx);
 }

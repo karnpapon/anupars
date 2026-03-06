@@ -1,5 +1,6 @@
 use std::sync::mpsc::Sender;
 
+#[cfg(feature = "desktop")]
 use cfonts::{render, Fonts, Options};
 
 use super::program::Program;
@@ -241,13 +242,20 @@ fn input_edit(siv: &mut Cursive, texts: &str, _cursor: usize, regex_tx: Sender<r
     return;
   }
 
-  let output = render(Options {
-    text: String::from(texts),
-    font: Fonts::FontTiny,
-    ..Options::default()
-  });
+  #[cfg(feature = "desktop")]
+  let banner_text = {
+    let output = render(Options {
+      text: String::from(texts),
+      font: Fonts::FontTiny,
+      ..Options::default()
+    });
+    output.text
+  };
 
-  display_view.set_content(output.text);
+  #[cfg(not(feature = "desktop"))]
+  let banner_text = texts.to_string();
+
+  display_view.set_content(banner_text);
 
   solve_regex(siv, texts, regex_tx);
 }
