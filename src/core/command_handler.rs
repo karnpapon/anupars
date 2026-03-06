@@ -12,9 +12,10 @@ use crate::view::desktop::program::Program;
 #[cfg(feature = "microcontroller")]
 use crate::view::microcontroller::program::Program;
 
-use super::command::{Adjustment, Command, MoveDirection};
+use super::command::Command;
 use super::timing::metronome;
 use super::{consts, utils};
+use crate::core::command::Adjustment;
 
 use cursive::event::{Event, Key};
 use cursive::views::{LinearLayout, TextView};
@@ -45,7 +46,7 @@ impl CommandManager {
   ) -> Self {
     let bindings = RefCell::new(Self::get_bindings());
     Self {
-      aliases: HashMap::new(),
+      aliases: HashMap::new(), // ? maybe obsolete
       bindings,
       program: Arc::new(prog),
       metronome_sender: m_tx,
@@ -106,21 +107,6 @@ impl CommandManager {
             .unwrap();
           let _ = interactive_display_section_view.set_focus_index(0);
         }
-
-        Ok(None)
-      }
-      Command::AdjustPlayhead(direction) => {
-        let dir = match direction {
-          MoveDirection::Down => (0, -1),
-          MoveDirection::Left => (-1, 0),
-          MoveDirection::Right => (1, 0),
-          MoveDirection::Up => (0, 1),
-        };
-
-        self
-          .playhead_tx_cloned
-          .send(playhead_controller::Message::Scale(dir))
-          .unwrap();
 
         Ok(None)
       }
@@ -335,29 +321,14 @@ impl CommandManager {
     }
   }
 
+  /// global default keybindings
   fn default_keybindings() -> HashMap<String, Vec<Command>> {
     let mut kb = HashMap::new();
 
     kb.insert("q".into(), vec![Command::Quit]);
     kb.insert("Space".into(), vec![Command::TogglePlay]);
-    kb.insert("Ctrl+h".into(), vec![Command::ShowMenubar]);
+    kb.insert("Ctrl+b".into(), vec![Command::ShowMenubar]); // Changed from Ctrl+m (conflicts with Enter)
     kb.insert("Esc".into(), vec![Command::ToggleInputRegexAndCanvas]);
-    kb.insert(
-      "Shift+D".into(),
-      vec![Command::AdjustPlayhead(MoveDirection::Right)],
-    );
-    kb.insert(
-      "Shift+A".into(),
-      vec![Command::AdjustPlayhead(MoveDirection::Left)],
-    );
-    kb.insert(
-      "Shift+W".into(),
-      vec![Command::AdjustPlayhead(MoveDirection::Up)],
-    );
-    kb.insert(
-      "Shift+S".into(),
-      vec![Command::AdjustPlayhead(MoveDirection::Down)],
-    );
     kb.insert(">".into(), vec![Command::AdjustBPM(Adjustment::Increase)]);
     kb.insert("<".into(), vec![Command::AdjustBPM(Adjustment::Decrease)]);
     kb.insert("}".into(), vec![Command::AdjustRatio(Adjustment::Increase)]);

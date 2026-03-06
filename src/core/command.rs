@@ -2,14 +2,6 @@ use serde::{Deserialize, Serialize};
 use std::fmt;
 
 #[derive(Clone, Serialize, Deserialize, Debug, Copy)]
-pub enum MoveDirection {
-  Up,
-  Down,
-  Left,
-  Right,
-}
-
-#[derive(Clone, Serialize, Deserialize, Debug, Copy)]
 pub enum Adjustment {
   Increase,
   Decrease,
@@ -21,7 +13,6 @@ pub enum Command {
   TogglePlay,
   ShowMenubar,
   ToggleInputRegexAndCanvas,
-  AdjustPlayhead(MoveDirection),
   AdjustBPM(Adjustment),
   AdjustRatio(Adjustment),
   ToggleForward,
@@ -48,7 +39,6 @@ impl fmt::Display for Command {
       | Self::TogglePlay
       | Self::AdjustBPM(_)
       | Self::AdjustRatio(_)
-      | Self::AdjustPlayhead(_)
       | Self::ToggleForward
       | Self::ToggleReverse
       | Self::TogglePendulum
@@ -74,7 +64,6 @@ impl Command {
       Self::TogglePlay => "playpause",
       Self::ShowMenubar => "showmenubar",
       Self::ToggleInputRegexAndCanvas => "toggleinputregexandcanvas",
-      Self::AdjustPlayhead(_) => "adjustplayhead",
       Self::AdjustBPM(_) => "adjustbpm",
       Self::AdjustRatio(_) => "adjustratio",
       Self::ToggleForward => "toggleforward",

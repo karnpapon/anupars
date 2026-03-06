@@ -3,7 +3,6 @@ use std::sync::mpsc::Sender;
 use cursive::event::Callback;
 use cursive::event::Event;
 use cursive::event::EventResult;
-use cursive::event::Key;
 use cursive::event::MouseButton;
 use cursive::event::MouseEvent;
 use cursive::theme::ColorStyle;
@@ -35,11 +34,11 @@ use consts::KEYBOARD_MARGIN_TOP;
 use consts::NOTE_NAMES;
 use consts::QUEUE_MARGIN_RIGHT;
 
-use super::playhead_controller::{self, Direction, Message};
+use super::playhead_controller::{self, Direction, Message as PlayheadMessage};
 
 pub struct GridEditor {
   size: Vec2,
-  pub playhead_tx: Sender<Message>,
+  pub playhead_tx: Sender<PlayheadMessage>,
   pub grid: Matrix<char>,
   pub text_contents: Option<String>,
   pub playhead_ui: PlayheadUI,
@@ -57,7 +56,7 @@ pub struct GridEditor {
 }
 
 impl GridEditor {
-  pub fn new(playhead_tx: Sender<playhead_controller::Message>) -> GridEditor {
+  pub fn new(playhead_tx: Sender<PlayheadMessage>) -> GridEditor {
     GridEditor {
       size: Vec2::zero(),
       playhead_tx,
@@ -526,9 +525,9 @@ impl GridEditor {
     // Update grid width and height for precise timing calculations and note mapping
     let _ = self
       .playhead_tx
-      .send(Message::SetGridSize(grid_width, grid_height));
+      .send(PlayheadMessage::SetGridSize(grid_width, grid_height));
     // Ensure playhead stays within new bounds
-    let _ = self.playhead_tx.send(Message::Move(
+    let _ = self.playhead_tx.send(PlayheadMessage::Move(
       Direction::Idle,
       (grid_width, grid_height).into(),
     ));
@@ -670,35 +669,177 @@ fn take_focus(
 fn on_event(canvas: &mut GridEditor, event: Event) -> EventResult {
   match event {
     Event::Refresh => EventResult::consumed(),
-    Event::Key(Key::Left) => {
+    // Vim keybindings for movement (h/j/k/l)
+    Event::Char('h') => {
       let grid_size = (canvas.grid.width, canvas.grid.height).into();
       canvas
         .playhead_tx
-        .send(Message::Move(Direction::Left, grid_size))
+        .send(PlayheadMessage::Move(Direction::Left, grid_size))
         .unwrap();
       EventResult::Ignored
     }
-    Event::Key(Key::Right) => {
+    Event::Char('j') => {
       let grid_size = (canvas.grid.width, canvas.grid.height).into();
       canvas
         .playhead_tx
-        .send(Message::Move(Direction::Right, grid_size))
+        .send(PlayheadMessage::Move(Direction::Down, grid_size))
         .unwrap();
       EventResult::Ignored
     }
-    Event::Key(Key::Up) => {
+    Event::Char('k') => {
       let grid_size = (canvas.grid.width, canvas.grid.height).into();
       canvas
         .playhead_tx
-        .send(Message::Move(Direction::Up, grid_size))
+        .send(PlayheadMessage::Move(Direction::Up, grid_size))
         .unwrap();
-      EventResult::consumed()
+      EventResult::Ignored
     }
-    Event::Key(Key::Down) => {
+    Event::Char('l') => {
       let grid_size = (canvas.grid.width, canvas.grid.height).into();
       canvas
         .playhead_tx
-        .send(Message::Move(Direction::Down, grid_size))
+        .send(PlayheadMessage::Move(Direction::Right, grid_size))
+        .unwrap();
+      EventResult::Ignored
+    }
+    Event::AltChar('h') => {
+      let grid_size = (canvas.grid.width, canvas.grid.height).into();
+      canvas
+        .playhead_tx
+        .send(PlayheadMessage::Leap(Direction::Left, grid_size))
+        .unwrap();
+      EventResult::Ignored
+    }
+    Event::AltChar('j') => {
+      let grid_size = (canvas.grid.width, canvas.grid.height).into();
+      canvas
+        .playhead_tx
+        .send(PlayheadMessage::Leap(Direction::Down, grid_size))
+        .unwrap();
+      EventResult::Ignored
+    }
+    Event::AltChar('k') => {
+      let grid_size = (canvas.grid.width, canvas.grid.height).into();
+      canvas
+        .playhead_tx
+        .send(PlayheadMessage::Leap(Direction::Up, grid_size))
+        .unwrap();
+      EventResult::Ignored
+    }
+    Event::AltChar('l') => {
+      let grid_size = (canvas.grid.width, canvas.grid.height).into();
+      canvas
+        .playhead_tx
+        .send(PlayheadMessage::Leap(Direction::Right, grid_size))
+        .unwrap();
+      EventResult::Ignored
+    }
+    #[cfg(target_os = "macos")]
+    Event::Char('˙') => {
+      // Option+h on macOS
+      let grid_size = (canvas.grid.width, canvas.grid.height).into();
+      canvas
+        .playhead_tx
+        .send(PlayheadMessage::Leap(Direction::Left, grid_size))
+        .unwrap();
+      EventResult::Ignored
+    }
+    #[cfg(target_os = "macos")]
+    Event::Char('∆') => {
+      // Option+j on macOS
+      let grid_size = (canvas.grid.width, canvas.grid.height).into();
+      canvas
+        .playhead_tx
+        .send(PlayheadMessage::Leap(Direction::Down, grid_size))
+        .unwrap();
+      EventResult::Ignored
+    }
+    #[cfg(target_os = "macos")]
+    Event::Char('˚') => {
+      // Option+k on macOS
+      let grid_size = (canvas.grid.width, canvas.grid.height).into();
+      canvas
+        .playhead_tx
+        .send(PlayheadMessage::Leap(Direction::Up, grid_size))
+        .unwrap();
+      EventResult::Ignored
+    }
+    #[cfg(target_os = "macos")]
+    Event::Char('¬') => {
+      // Option+l on macOS
+      let grid_size = (canvas.grid.width, canvas.grid.height).into();
+      canvas
+        .playhead_tx
+        .send(PlayheadMessage::Leap(Direction::Right, grid_size))
+        .unwrap();
+      EventResult::Ignored
+    }
+    // Vim keybindings - Shift for adjusting playhead area (Shift+h/j/k/l = H/J/K/L)
+    Event::Char('H') => {
+      let dir = (-1, 0);
+      canvas
+        .playhead_tx
+        .send(PlayheadMessage::Scale(dir))
+        .unwrap();
+      EventResult::Ignored
+    }
+    Event::Char('J') => {
+      let dir = (0, -1);
+      canvas
+        .playhead_tx
+        .send(PlayheadMessage::Scale(dir))
+        .unwrap();
+      EventResult::Ignored
+    }
+    Event::Char('K') => {
+      let dir = (0, 1);
+      canvas
+        .playhead_tx
+        .send(PlayheadMessage::Scale(dir))
+        .unwrap();
+      EventResult::Ignored
+    }
+    Event::Char('L') => {
+      let dir = (1, 0);
+      canvas
+        .playhead_tx
+        .send(PlayheadMessage::Scale(dir))
+        .unwrap();
+      EventResult::Ignored
+    }
+    #[cfg(target_os = "macos")]
+    Event::Char('Ó') => {
+      let dir = (-8, 0);
+      canvas
+        .playhead_tx
+        .send(PlayheadMessage::Scale(dir))
+        .unwrap();
+      EventResult::Ignored
+    }
+    #[cfg(target_os = "macos")]
+    Event::Char('Ô') => {
+      let dir = (0, -8);
+      canvas
+        .playhead_tx
+        .send(PlayheadMessage::Scale(dir))
+        .unwrap();
+      EventResult::Ignored
+    }
+    #[cfg(target_os = "macos")]
+    Event::Char('\u{f8ff}') => {
+      let dir = (0, 8);
+      canvas
+        .playhead_tx
+        .send(PlayheadMessage::Scale(dir))
+        .unwrap();
+      EventResult::Ignored
+    }
+    #[cfg(target_os = "macos")]
+    Event::Char('Ò') => {
+      let dir = (8, 0);
+      canvas
+        .playhead_tx
+        .send(PlayheadMessage::Scale(dir))
         .unwrap();
       EventResult::Ignored
     }
@@ -726,16 +867,16 @@ fn on_event(canvas: &mut GridEditor, event: Event) -> EventResult {
 
       canvas
         .playhead_tx
-        .send(Message::SetCurrentPos(adjusted_position, offset))
+        .send(PlayheadMessage::SetCurrentPos(adjusted_position, offset))
         .unwrap();
       let grid_size = (canvas.grid.width, canvas.grid.height).into();
       canvas
         .playhead_tx
-        .send(Message::Move(Direction::Idle, grid_size))
+        .send(PlayheadMessage::Move(Direction::Idle, grid_size))
         .unwrap();
       canvas
         .playhead_tx
-        .send(Message::UpdateInfoStatusView())
+        .send(PlayheadMessage::UpdateInfoStatusView())
         .unwrap();
 
       EventResult::consumed()
@@ -765,7 +906,7 @@ fn on_event(canvas: &mut GridEditor, event: Event) -> EventResult {
 
       canvas
         .playhead_tx
-        .send(Message::SetGridArea((pos_x, pos_y).into()))
+        .send(PlayheadMessage::SetGridArea((pos_x, pos_y).into()))
         .unwrap();
 
       EventResult::Ignored
@@ -786,7 +927,9 @@ fn on_event(canvas: &mut GridEditor, event: Event) -> EventResult {
       canvas.grid_h_splits = h;
       canvas.playhead_ui.grid_v_splits = v;
       canvas.playhead_ui.grid_h_splits = h;
-      let _ = canvas.playhead_tx.send(Message::SetGridSplits(v, h));
+      let _ = canvas
+        .playhead_tx
+        .send(PlayheadMessage::SetGridSplits(v, h));
 
       let pos = canvas.playhead_ui.playhead_pos;
       let gw = canvas.grid.width.max(1);

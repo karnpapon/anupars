@@ -172,6 +172,7 @@ impl PlayheadUI {
 #[derive(Clone, Debug)]
 pub enum Message {
   Move(Direction, XY<usize>, cursive::CbSink),
+  Leap(Direction, usize, XY<usize>, cursive::CbSink),
   SetCurrentPos(XY<usize>, XY<usize>, cursive::CbSink),
   UpdateInfoStatusView(cursive::CbSink),
   SetGridArea(XY<usize>, cursive::CbSink),
@@ -434,13 +435,69 @@ impl PlayheadArea {
       .unwrap();
   }
 
+  fn handle_movement(
+    &self,
+    direction: Direction,
+    steps: usize,
+    canvas_size: Vec2,
+    cb_sink: cursive::CbSink,
+  ) {
+    self.ratchet_generation.fetch_add(1, Ordering::SeqCst);
+    self.is_ratcheting.store(false, Ordering::Relaxed);
+    self.set_leap(direction, steps, canvas_size);
+    self.reset_accumulation_counter();
+
+    let pos_mutex = self.pos.lock().unwrap();
+    let pos = *pos_mutex;
+    drop(pos_mutex);
+
+    let area_mutex = self.area.lock().unwrap();
+    let area = *area_mutex;
+    drop(area_mutex);
+
+    let chn_str = self.compute_chn_str(pos);
+
+    cb_sink
+      .send(Box::new(move |siv| {
+        siv.call_on_name(consts::pos_status_unit_view, move |view: &mut TextView| {
+          view.set_content(utils::build_pos_status_str(pos));
+        });
+
+        siv.call_on_name(consts::input_status_unit_view, |view: &mut TextView| {
+          view.set_content("-");
+        });
+
+        siv.call_on_name(consts::chn_status_unit_view, |view: &mut TextView| {
+          view.set_content(chn_str);
+        });
+
+        siv.call_on_name(
+          consts::canvas_editor_section_view,
+          move |canvas: &mut Canvas<GridEditor>| {
+            let editor = canvas.state_mut();
+            editor.playhead_ui.playhead_pos = pos;
+            editor.playhead_ui.playhead_area = area;
+          },
+        );
+      }))
+      .unwrap();
+  }
+
   fn set_move(&self, direction: Direction, canvas_size: Vec2) {
+    self.set_leap(direction, 1, canvas_size);
+  }
+
+  fn set_leap(&self, direction: Direction, steps: usize, canvas_size: Vec2) {
     let mut pos = self.pos.lock().unwrap();
     let mut area = self.area.lock().unwrap();
     let (dx, dy) = direction.get_direction();
+
+    let leap_x = dx * steps as i32;
+    let leap_y = dy * steps as i32;
+
     let next_pos = Vec2::new(
-      pos.x.saturating_add_signed(dx as isize),
-      pos.y.saturating_add_signed(dy as isize),
+      pos.x.saturating_add_signed(leap_x as isize),
+      pos.y.saturating_add_signed(leap_y as isize),
     );
     let next_pos_bottom_right: Vec2 = (
       next_pos.x + area.width() - 1,
@@ -1219,10 +1276,11 @@ impl PlayheadArea {
     let pos = self.pos.lock().unwrap();
     let mut area = self.area.lock().unwrap();
 
-    *area = Rect::from_size(
-      *pos,
-      ((area.width() as i32) + w, (area.height() as i32) - h),
-    );
+    // Calculate new dimensions with bounds checking
+    let new_width = ((area.width() as i32) + w).max(1);
+    let new_height = ((area.height() as i32) - h).max(1);
+
+    *area = Rect::from_size(*pos, (new_width, new_height));
   }
 
   pub fn set_text_matcher(&self, text_matcher: Option<HashMap<usize, Match>>) {
@@ -1624,6 +1682,326 @@ impl PlayheadArea {
     *counter = 0;
   }
 
+  fn handle_set_current_pos(
+    &self,
+    position: XY<usize>,
+    offset: XY<usize>,
+    cb_sink: cursive::CbSink,
+  ) {
+    self.ratchet_generation.fetch_add(1, Ordering::SeqCst);
+    self.is_ratcheting.store(false, Ordering::Relaxed);
+    self.set_current_pos(position, offset);
+    self.reset_accumulation_counter();
+
+    let mutex_pos = self.pos.lock().unwrap();
+    let pos = *mutex_pos;
+    drop(mutex_pos);
+    cb_sink
+      .send(Box::new(move |siv| {
+        siv.call_on_name(consts::input_status_unit_view, |view: &mut TextView| {
+          view.set_content("-");
+        });
+
+        siv.call_on_name(
+          consts::canvas_editor_section_view,
+          move |canvas: &mut Canvas<GridEditor>| {
+            let editor = canvas.state_mut();
+            editor.playhead_ui.playhead_pos = pos;
+          },
+        );
+      }))
+      .unwrap();
+  }
+
+  fn handle_update_info_status_view(&self, cb_sink: cursive::CbSink) {
+    let pos = self.pos.lock().unwrap();
+    let area = self.area.lock().unwrap();
+    let pos_x = pos.x;
+    let pos_y = pos.y;
+    let w = area.width();
+    let h = area.height();
+    drop(pos);
+    drop(area);
+
+    let chn_str = self.compute_chn_str(Vec2::new(pos_x, pos_y));
+
+    cb_sink
+      .send(Box::new(move |siv| {
+        siv.call_on_name(consts::pos_status_unit_view, move |view: &mut TextView| {
+          view.set_content(utils::build_pos_status_str((pos_x, pos_y).into()))
+        });
+
+        siv.call_on_name(consts::len_status_unit_view, move |view: &mut TextView| {
+          view.set_content(utils::build_len_status_str((w, h)));
+        });
+
+        siv.call_on_name(consts::chn_status_unit_view, |view: &mut TextView| {
+          view.set_content(chn_str);
+        });
+      }))
+      .unwrap();
+  }
+
+  fn handle_set_grid_area(&self, current_pos: XY<usize>, cb_sink: cursive::CbSink) {
+    self.set_grid_area(current_pos);
+    self.reset_accumulation_counter();
+
+    let area = self.area.lock().unwrap();
+    let w = area.width();
+    let h = area.height();
+    let playhead_area = *area;
+
+    cb_sink
+      .send(Box::new(move |siv| {
+        siv.call_on_name(consts::input_status_unit_view, |view: &mut TextView| {
+          view.set_content("-");
+        });
+
+        siv.call_on_name(consts::len_status_unit_view, move |view: &mut TextView| {
+          view.set_content(utils::build_len_status_str((w, h)));
+        });
+
+        siv.call_on_name(
+          consts::canvas_editor_section_view,
+          move |canvas: &mut Canvas<GridEditor>| {
+            let editor = canvas.state_mut();
+
+            editor.playhead_ui.playhead_area = playhead_area;
+          },
+        );
+      }))
+      .unwrap();
+  }
+
+  fn handle_set_active_pos(&self, tick: usize, cb_sink: cursive::CbSink) {
+    let ratio = self.ratio.lock().unwrap();
+    let divider = 16 / ratio.1;
+    drop(ratio);
+
+    let should_advance =
+      tick.is_multiple_of(divider) && !self.is_ratcheting.load(Ordering::Relaxed);
+    if should_advance {
+      let mut step_idx = self.step_index.lock().unwrap();
+      *step_idx += 1;
+      self.set_actived_pos(*step_idx);
+      drop(step_idx);
+
+      let active_pos_mutex = self.actived_pos.lock().unwrap();
+      let mut active_pos = *active_pos_mutex;
+      drop(active_pos_mutex);
+
+      let (abs_x, abs_y, curr_running_playhead) = self.calculate_absolute_position(active_pos);
+
+      let (note_position, scale_mode) =
+        self.determine_note_position_and_scale(active_pos, abs_x, abs_y);
+
+      let mut did_jump = false;
+
+      let matcher_guard = self.text_matcher.lock().unwrap();
+      let has_match = matcher_guard
+        .as_ref()
+        .is_some_and(|m| m.contains_key(&curr_running_playhead));
+      drop(matcher_guard);
+
+      if has_match {
+        if self.accumulation_mode.load(Ordering::Relaxed) {
+          if let Some(new_active_pos) = self.handle_accumulation_mode(abs_x, &cb_sink) {
+            active_pos = new_active_pos;
+            did_jump = true;
+          }
+        }
+        if !did_jump && !self.is_ratcheting.load(Ordering::Relaxed) {
+          self.trigger_midi_if_matched(curr_running_playhead, note_position, scale_mode);
+        }
+        if self.hold_next_note.load(Ordering::Relaxed) {
+          self.hold_next_note.store(false, Ordering::Relaxed);
+        }
+      }
+
+      let matcher_guard = self.text_matcher.lock().unwrap();
+      if let Some(ref m) = *matcher_guard {
+        self.handle_silent_step(m, &cb_sink);
+      }
+      drop(matcher_guard);
+
+      if !did_jump && !self.is_ratcheting.load(Ordering::Relaxed) {
+        self.trigger_midi_if_matched_sweep(curr_running_playhead, abs_x);
+      }
+      self.update_active_pos_ui(active_pos, &cb_sink);
+    }
+  }
+
+  fn handle_scale(&self, size: (i32, i32), cb_sink: cursive::CbSink) {
+    self.scale(size);
+    self.reset_accumulation_counter();
+
+    let area = self.area.lock().unwrap();
+    let playhead_area = *area;
+    let area_size = area.size();
+
+    cb_sink
+      .send(Box::new(move |siv| {
+        siv.call_on_name(consts::input_status_unit_view, |view: &mut TextView| {
+          view.set_content("-");
+        });
+
+        siv.call_on_name(consts::len_status_unit_view, move |view: &mut TextView| {
+          view.set_content(utils::build_len_status_str((area_size.x, area_size.y)));
+        });
+
+        siv.call_on_name(
+          consts::canvas_editor_section_view,
+          move |canvas: &mut Canvas<GridEditor>| {
+            let editor = canvas.state_mut();
+            editor.playhead_ui.playhead_area = playhead_area;
+          },
+        );
+      }))
+      .unwrap();
+  }
+
+  fn handle_set_matcher(&self, matcher: Option<HashMap<usize, Match>>, cb_sink: cursive::CbSink) {
+    self.set_text_matcher(matcher);
+
+    let text_matcher = self.text_matcher.lock().unwrap();
+    let mm = text_matcher.clone();
+
+    let regex_indexes_cloned = self.regex_indexes.clone();
+
+    cb_sink
+      .send(Box::new(move |siv| {
+        siv.call_on_name(
+          consts::canvas_editor_section_view,
+          move |canvas: &mut Canvas<GridEditor>| {
+            let editor = canvas.state_mut();
+            editor.playhead_ui.text_matcher = mm;
+            editor.playhead_ui.regex_indexes = regex_indexes_cloned;
+          },
+        );
+      }))
+      .unwrap();
+  }
+
+  fn handle_set_grid_size(&self, width: usize, height: usize, cb_sink: cursive::CbSink) {
+    self.grid_width.store(width, Ordering::Relaxed);
+    self.grid_height.store(height, Ordering::Relaxed);
+
+    let operator_queue_cloned = self.operator_queue.clone();
+    let event_queue_cloned = self.event_queue.clone();
+    let pending_jump_position_cloned = self.pending_jump_position.clone();
+
+    cb_sink
+      .send(Box::new(move |siv| {
+        siv.call_on_name(
+          consts::canvas_editor_section_view,
+          move |canvas: &mut Canvas<GridEditor>| {
+            let editor = canvas.state_mut();
+            editor.playhead_ui.operator_queue = operator_queue_cloned;
+            editor.playhead_ui.event_queue = event_queue_cloned;
+            editor.playhead_ui.pending_jump_position = pending_jump_position_cloned;
+          },
+        );
+      }))
+      .unwrap();
+  }
+
+  fn handle_set_scale_mode_left(&self, scale_mode: crate::core::scale::ScaleMode) {
+    let mut mode = self.scale_mode_left.lock().unwrap();
+    *mode = scale_mode;
+  }
+
+  fn handle_set_scale_root_top(&self, scale_root: crate::core::scale::ScaleRoot) {
+    let mut root = self.scale_root_top.lock().unwrap();
+    *root = scale_root;
+  }
+
+  fn handle_set_scale_mode_top(&self, scale_mode: crate::core::scale::ScaleMode) {
+    let mut mode = self.scale_mode_top.lock().unwrap();
+    *mode = scale_mode;
+  }
+
+  fn handle_toggle_accumulation_mode(&self, cb_sink: cursive::CbSink) {
+    let is_enabled = !self.accumulation_mode.load(Ordering::Relaxed);
+    self.accumulation_mode.store(is_enabled, Ordering::Relaxed);
+    self.reset_accumulation_counter();
+
+    if !is_enabled {
+      let mut queue = self.operator_queue.lock().unwrap();
+      queue.clear();
+      drop(queue);
+
+      let mut pushed = self.pushed_positions.lock().unwrap();
+      pushed.clear();
+      drop(pushed);
+
+      *self.pending_jump_position.lock().unwrap() = PendingJumpPosition::Empty;
+    }
+
+    let mode_status = self.build_mode_status_string();
+
+    cb_sink
+      .send(Box::new(move |siv| {
+        siv.call_on_name(
+          consts::canvas_editor_section_view,
+          |canvas: &mut Canvas<GridEditor>| {
+            let editor = canvas.state_mut();
+            editor.accumulation_mode = is_enabled;
+            editor.playhead_ui.accumulation_mode = is_enabled;
+          },
+        );
+
+        siv.call_on_name(consts::input_status_unit_view, |view: &mut TextView| {
+          view.set_content("-");
+        });
+
+        siv.call_on_name(consts::mode_unit_view, |view: &mut TextView| {
+          view.set_content(mode_status);
+        });
+      }))
+      .unwrap();
+  }
+
+  fn handle_set_tempo(&self, bpm: usize) {
+    self.tempo.store(bpm, Ordering::Relaxed);
+  }
+
+  fn handle_set_ratio(&self, new_ratio: (usize, usize), cb_sink: cursive::CbSink) {
+    let mut ratio = self.ratio.lock().unwrap();
+    *ratio = new_ratio;
+    drop(ratio);
+
+    cb_sink
+      .send(Box::new(move |siv| {
+        siv.call_on_name(consts::ratio_status_unit_view, |view: &mut TextView| {
+          view.set_content(utils::build_ratio_status_str(new_ratio));
+        });
+      }))
+      .unwrap();
+  }
+
+  fn handle_clear_queue(&self, cb_sink: cursive::CbSink) {
+    self.operator_queue.lock().unwrap().clear();
+    self.event_queue.lock().unwrap().clear();
+    self.pushed_positions.lock().unwrap().clear();
+    *self.pending_jump_position.lock().unwrap() = PendingJumpPosition::Empty;
+    self.reset_accumulation_counter();
+    let _ = cb_sink.send(Box::new(move |siv| {
+      siv.call_on_name(consts::input_status_unit_view, |view: &mut TextView| {
+        view.set_content("-");
+      });
+    }));
+  }
+
+  fn handle_set_grid_splits(&self, v: usize, h: usize) {
+    self.grid_v_splits.store(v, Ordering::Relaxed);
+    self.grid_h_splits.store(h, Ordering::Relaxed);
+    let pos = *self.pos.lock().unwrap();
+    let chn_str = self.compute_chn_str(pos);
+    let mut q = self.ui_update_queue.lock().unwrap();
+    q.push_back(UIUpdate::GridSplits(v, h));
+    q.push_back(UIUpdate::ChnStatus(chn_str));
+  }
+
   pub fn run(self: Arc<Self>) -> Sender<Message> {
     let (tx, rx) = channel();
 
@@ -1634,356 +2012,49 @@ impl PlayheadArea {
       for control_message in &rx {
         match control_message {
           Message::Move(direction, canvas_size, cb_sink) => {
-            self.ratchet_generation.fetch_add(1, Ordering::SeqCst);
-            self.is_ratcheting.store(false, Ordering::Relaxed);
-            self.set_move(direction.clone(), canvas_size);
-            self.reset_accumulation_counter();
-
-            let pos_mutex = self.pos.lock().unwrap();
-            let pos = *pos_mutex;
-            drop(pos_mutex);
-
-            let area_mutex = self.area.lock().unwrap();
-            let area = *area_mutex;
-            drop(area_mutex);
-
-            let chn_str = self.compute_chn_str(pos);
-
-            cb_sink
-              .send(Box::new(move |siv| {
-                siv.call_on_name(consts::pos_status_unit_view, move |view: &mut TextView| {
-                  view.set_content(utils::build_pos_status_str(pos));
-                });
-
-                siv.call_on_name(consts::input_status_unit_view, |view: &mut TextView| {
-                  view.set_content("-");
-                });
-
-                siv.call_on_name(consts::chn_status_unit_view, |view: &mut TextView| {
-                  view.set_content(chn_str);
-                });
-
-                siv.call_on_name(
-                  consts::canvas_editor_section_view,
-                  move |canvas: &mut Canvas<GridEditor>| {
-                    let editor = canvas.state_mut();
-                    editor.playhead_ui.playhead_pos = pos;
-                    editor.playhead_ui.playhead_area = area;
-                  },
-                );
-              }))
-              .unwrap();
+            self.handle_movement(direction, 1, canvas_size, cb_sink);
+          }
+          Message::Leap(direction, steps, canvas_size, cb_sink) => {
+            self.handle_movement(direction, steps, canvas_size, cb_sink);
           }
           Message::SetCurrentPos(position, offset, cb_sink) => {
-            self.ratchet_generation.fetch_add(1, Ordering::SeqCst);
-            self.is_ratcheting.store(false, Ordering::Relaxed);
-            self.set_current_pos(position, offset);
-            self.reset_accumulation_counter();
-
-            let mutex_pos = self.pos.lock().unwrap();
-            let pos = *mutex_pos;
-            drop(mutex_pos);
-            cb_sink
-              .send(Box::new(move |siv| {
-                siv.call_on_name(consts::input_status_unit_view, |view: &mut TextView| {
-                  view.set_content("-");
-                });
-
-                siv.call_on_name(
-                  consts::canvas_editor_section_view,
-                  move |canvas: &mut Canvas<GridEditor>| {
-                    let editor = canvas.state_mut();
-                    editor.playhead_ui.playhead_pos = pos;
-                  },
-                );
-              }))
-              .unwrap();
+            self.handle_set_current_pos(position, offset, cb_sink);
           }
           Message::UpdateInfoStatusView(cb_sink) => {
-            let pos = self.pos.lock().unwrap();
-            let area = self.area.lock().unwrap();
-            let pos_x = pos.x;
-            let pos_y = pos.y;
-            let w = area.width();
-            let h = area.height();
-            drop(pos);
-            drop(area);
-
-            let chn_str = self.compute_chn_str(Vec2::new(pos_x, pos_y));
-
-            cb_sink
-              .send(Box::new(move |siv| {
-                siv.call_on_name(consts::pos_status_unit_view, move |view: &mut TextView| {
-                  view.set_content(utils::build_pos_status_str((pos_x, pos_y).into()))
-                });
-
-                siv.call_on_name(consts::len_status_unit_view, move |view: &mut TextView| {
-                  view.set_content(utils::build_len_status_str((w, h)));
-                });
-
-                siv.call_on_name(consts::chn_status_unit_view, |view: &mut TextView| {
-                  view.set_content(chn_str);
-                });
-              }))
-              .unwrap();
+            self.handle_update_info_status_view(cb_sink);
           }
           Message::SetGridArea(current_pos, cb_sink) => {
-            self.set_grid_area(current_pos);
-            self.reset_accumulation_counter();
-
-            let area = self.area.lock().unwrap();
-            let w = area.width();
-            let h = area.height();
-            let playhead_area = *area;
-
-            cb_sink
-              .send(Box::new(move |siv| {
-                siv.call_on_name(consts::input_status_unit_view, |view: &mut TextView| {
-                  view.set_content("-");
-                });
-
-                siv.call_on_name(consts::len_status_unit_view, move |view: &mut TextView| {
-                  view.set_content(utils::build_len_status_str((w, h)));
-                });
-
-                siv.call_on_name(
-                  consts::canvas_editor_section_view,
-                  move |canvas: &mut Canvas<GridEditor>| {
-                    let editor = canvas.state_mut();
-
-                    editor.playhead_ui.playhead_area = playhead_area;
-                  },
-                );
-              }))
-              .unwrap();
+            self.handle_set_grid_area(current_pos, cb_sink);
           }
           Message::SetActivePos(tick, cb_sink) => {
-            // #[cfg(debug_assertions)]
-            // let start = Instant::now();
-
-            let ratio = self.ratio.lock().unwrap();
-            let divider = 16 / ratio.1;
-            drop(ratio);
-
-            // While ratcheting, freeze the playhead position — don't advance step_index
-            // (accumulation also won't increment, satisfying the "once only" requirement)
-            let should_advance = tick % divider == 0 && !self.is_ratcheting.load(Ordering::Relaxed);
-            if should_advance {
-              let mut step_idx = self.step_index.lock().unwrap();
-              *step_idx += 1;
-              self.set_actived_pos(*step_idx);
-              drop(step_idx);
-
-              let active_pos_mutex = self.actived_pos.lock().unwrap();
-              let mut active_pos = *active_pos_mutex;
-              drop(active_pos_mutex);
-
-              let (abs_x, abs_y, curr_running_playhead) =
-                self.calculate_absolute_position(active_pos);
-
-              let (note_position, scale_mode) =
-                self.determine_note_position_and_scale(active_pos, abs_x, abs_y);
-
-              let mut did_jump = false;
-
-              let matcher_guard = self.text_matcher.lock().unwrap();
-              let has_match = matcher_guard
-                .as_ref()
-                .is_some_and(|m| m.contains_key(&curr_running_playhead));
-              drop(matcher_guard);
-
-              if has_match {
-                if self.accumulation_mode.load(Ordering::Relaxed) {
-                  // accum heppens before MIDI trigger
-                  // since accu should execute any ops first (if needed)
-                  if let Some(new_active_pos) = self.handle_accumulation_mode(abs_x, &cb_sink) {
-                    active_pos = new_active_pos;
-                    did_jump = true;
-                  }
-                }
-                // prevents extra note before jump
-                // also skip if ratcheting: r_op owns all hits including hit 0
-                if !did_jump && !self.is_ratcheting.load(Ordering::Relaxed) {
-                  self.trigger_midi_if_matched(curr_running_playhead, note_position, scale_mode);
-                }
-                if self.hold_next_note.load(Ordering::Relaxed) {
-                  self.hold_next_note.store(false, Ordering::Relaxed);
-                }
-              }
-
-              let matcher_guard = self.text_matcher.lock().unwrap();
-              if let Some(ref m) = *matcher_guard {
-                self.handle_silent_step(m, &cb_sink);
-              }
-              drop(matcher_guard);
-
-              if !did_jump && !self.is_ratcheting.load(Ordering::Relaxed) {
-                self.trigger_midi_if_matched_sweep(curr_running_playhead, abs_x);
-              }
-              self.update_active_pos_ui(active_pos, &cb_sink);
-            }
-
-            // #[cfg(debug_assertions)]
-            // {
-            //   let elapsed = start.elapsed().as_micros() as u64;
-            //   self.timing_stats.record(elapsed);
-
-            //   // Immediate warning for slow calls
-            //   if elapsed > 1000 {
-            //     eprintln!(
-            //       "⚠️  SLOW: SetActivePos took {}μs ({:.2}ms)",
-            //       elapsed,
-            //       elapsed as f64 / 1000.0
-            //     );
-            //   }
-            // }
+            self.handle_set_active_pos(tick, cb_sink);
           }
           Message::Scale(size, cb_sink) => {
-            self.scale(size);
-            self.reset_accumulation_counter();
-
-            let area = self.area.lock().unwrap();
-            let playhead_area = *area;
-            let area_size = area.size();
-
-            cb_sink
-              .send(Box::new(move |siv| {
-                siv.call_on_name(consts::input_status_unit_view, |view: &mut TextView| {
-                  view.set_content("-");
-                });
-
-                siv.call_on_name(consts::len_status_unit_view, move |view: &mut TextView| {
-                  view.set_content(utils::build_len_status_str((area_size.x, area_size.y)));
-                });
-
-                siv.call_on_name(
-                  consts::canvas_editor_section_view,
-                  move |canvas: &mut Canvas<GridEditor>| {
-                    let editor = canvas.state_mut();
-                    editor.playhead_ui.playhead_area = playhead_area;
-                  },
-                );
-              }))
-              .unwrap();
+            self.handle_scale(size, cb_sink);
           }
           Message::SetMatcher(matcher, cb_sink) => {
-            self.set_text_matcher(matcher);
-
-            let text_matcher = self.text_matcher.lock().unwrap();
-            let mm = text_matcher.clone();
-
-            let regex_indexes_cloned = self.regex_indexes.clone();
-
-            cb_sink
-              .send(Box::new(move |siv| {
-                siv.call_on_name(
-                  consts::canvas_editor_section_view,
-                  move |canvas: &mut Canvas<GridEditor>| {
-                    let editor = canvas.state_mut();
-                    editor.playhead_ui.text_matcher = mm;
-                    editor.playhead_ui.regex_indexes = regex_indexes_cloned;
-                  },
-                );
-              }))
-              .unwrap();
+            self.handle_set_matcher(matcher, cb_sink);
           }
           Message::SetGridSize(width, height, cb_sink) => {
-            self.grid_width.store(width, Ordering::Relaxed);
-            self.grid_height.store(height, Ordering::Relaxed);
-
-            // Clone queue references to share with PlayheadUI
-            let operator_queue_cloned = self.operator_queue.clone();
-            let event_queue_cloned = self.event_queue.clone();
-            let pending_jump_position_cloned = self.pending_jump_position.clone();
-
-            cb_sink
-              .send(Box::new(move |siv| {
-                siv.call_on_name(
-                  consts::canvas_editor_section_view,
-                  move |canvas: &mut Canvas<GridEditor>| {
-                    let editor = canvas.state_mut();
-                    editor.playhead_ui.operator_queue = operator_queue_cloned;
-                    editor.playhead_ui.event_queue = event_queue_cloned;
-                    editor.playhead_ui.pending_jump_position = pending_jump_position_cloned;
-                  },
-                );
-              }))
-              .unwrap();
+            self.handle_set_grid_size(width, height, cb_sink);
           }
           Message::SetScaleModeLeft(scale_mode) => {
-            let mut mode = self.scale_mode_left.lock().unwrap();
-            *mode = scale_mode;
+            self.handle_set_scale_mode_left(scale_mode);
           }
           Message::SetScaleRootTop(scale_root) => {
-            let mut root = self.scale_root_top.lock().unwrap();
-            *root = scale_root;
+            self.handle_set_scale_root_top(scale_root);
           }
           Message::SetScaleModeTop(scale_mode) => {
-            let mut mode = self.scale_mode_top.lock().unwrap();
-            *mode = scale_mode;
+            self.handle_set_scale_mode_top(scale_mode);
           }
           Message::ToggleAccumulationMode(cb_sink) => {
-            let is_enabled = !self.accumulation_mode.load(Ordering::Relaxed);
-            self.accumulation_mode.store(is_enabled, Ordering::Relaxed);
-            self.reset_accumulation_counter();
-
-            if !is_enabled {
-              let mut queue = self.operator_queue.lock().unwrap();
-              queue.clear();
-              drop(queue);
-
-              let mut pushed = self.pushed_positions.lock().unwrap();
-              pushed.clear();
-              drop(pushed);
-
-              *self.pending_jump_position.lock().unwrap() = PendingJumpPosition::Empty;
-            }
-
-            let mode_status = self.build_mode_status_string();
-
-            // Update UI to clear accumulation display and queue display
-            cb_sink
-              .send(Box::new(move |siv| {
-                siv.call_on_name(
-                  consts::canvas_editor_section_view,
-                  |canvas: &mut Canvas<GridEditor>| {
-                    let editor = canvas.state_mut();
-                    editor.accumulation_mode = is_enabled;
-                    editor.playhead_ui.accumulation_mode = is_enabled;
-                  },
-                );
-
-                siv.call_on_name(consts::input_status_unit_view, |view: &mut TextView| {
-                  view.set_content("-");
-                });
-
-                // if !is_enabled {
-                //   siv.call_on_name(consts::op_queue_status_unit_view, |view: &mut TextView| {
-                //     view.set_content("[]");
-                //   });
-                // }
-
-                siv.call_on_name(consts::mode_unit_view, |view: &mut TextView| {
-                  view.set_content(mode_status);
-                });
-              }))
-              .unwrap();
+            self.handle_toggle_accumulation_mode(cb_sink);
           }
           Message::SetTempo(bpm) => {
-            self.tempo.store(bpm, Ordering::Relaxed);
+            self.handle_set_tempo(bpm);
           }
           Message::SetRatio(new_ratio, cb_sink) => {
-            let mut ratio = self.ratio.lock().unwrap();
-            *ratio = new_ratio;
-            drop(ratio);
-
-            cb_sink
-              .send(Box::new(move |siv| {
-                siv.call_on_name(consts::ratio_status_unit_view, |view: &mut TextView| {
-                  view.set_content(utils::build_ratio_status_str(new_ratio));
-                });
-              }))
-              .unwrap();
+            self.handle_set_ratio(new_ratio, cb_sink);
           }
           Message::ToggleForwardMode(cb_sink) => {
             self.switch_movement(Movement::Forward, cb_sink);
@@ -2019,25 +2090,10 @@ impl PlayheadArea {
             self.cycle_scale_mode(cb_sink, dir);
           }
           Message::ClearQueue(cb_sink) => {
-            self.operator_queue.lock().unwrap().clear();
-            self.event_queue.lock().unwrap().clear();
-            self.pushed_positions.lock().unwrap().clear();
-            *self.pending_jump_position.lock().unwrap() = PendingJumpPosition::Empty;
-            self.reset_accumulation_counter();
-            let _ = cb_sink.send(Box::new(move |siv| {
-              siv.call_on_name(consts::input_status_unit_view, |view: &mut TextView| {
-                view.set_content("-");
-              });
-            }));
+            self.handle_clear_queue(cb_sink);
           }
           Message::SetGridSplits(v, h) => {
-            self.grid_v_splits.store(v, Ordering::Relaxed);
-            self.grid_h_splits.store(h, Ordering::Relaxed);
-            let pos = *self.pos.lock().unwrap();
-            let chn_str = self.compute_chn_str(pos);
-            let mut q = self.ui_update_queue.lock().unwrap();
-            q.push_back(UIUpdate::GridSplits(v, h));
-            q.push_back(UIUpdate::ChnStatus(chn_str));
+            self.handle_set_grid_splits(v, h);
           }
         }
       }

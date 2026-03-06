@@ -23,6 +23,7 @@ pub enum Direction {
 #[derive(Clone, Debug)]
 pub enum Message {
   Move(Direction, XY<usize>),
+  Leap(Direction, XY<usize>),
   SetCurrentPos(XY<usize>, XY<usize>),
   UpdateInfoStatusView(),
   SetGridArea(XY<usize>),
@@ -100,6 +101,17 @@ impl Playhead {
             playhead_area_tx
               .send(playhead::Message::Move(
                 direction,
+                canvas_size,
+                self.cb_sink.clone(),
+              ))
+              .unwrap();
+          }
+          Message::Leap(direction, canvas_size) => {
+            let leap_steps = 8;
+            playhead_area_tx
+              .send(playhead::Message::Leap(
+                direction,
+                leap_steps,
                 canvas_size,
                 self.cb_sink.clone(),
               ))
