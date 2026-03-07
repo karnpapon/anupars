@@ -13,9 +13,12 @@ anupars (อนุภา(ส), meaning "tiny following light" in Thai), a Rust-b
 > [!WARNING]
 > This project is a **work in progress**. Features and APIs are subject to change anytime.
 
-<img src="ss.png" />
+<img src="ss2.png" />
 
 # Features
+
+- **Tiny Binary Size**
+  - Optimized for minimal footprint (~855 KB) - release builds use `opt-level = "z"`, `lto`, and symbol stripping, producing a small self-contained binary suitable for resource-constrained devices.
 
 - **MIDI Out Selector**
   - Choose from available MIDI output devices for flexible routing to synths, DAWs, or hardware.
@@ -61,8 +64,26 @@ anupars (อนุภา(ส), meaning "tiny following light" in Thai), a Rust-b
   - `s`: Sweep, sweeps through positions across the playhead range.
 
 - **Scale Selection**
-  - 16 scales available: `Chromatic`, `Major`, `Minor`, `Harmonic Minor`, `Melodic Minor`, `Dorian`, `Phrygian`, `Lydian`, `Mixolydian`, `Locrian`, `Major Pentatonic`, `Minor Pentatonic`, `Blues`, `Whole Tone`, `Diminished`, and **Thai 7-TET** (microtonal).
   - Scale root selectable across all 12 chromatic pitches (C–B).
+
+  | # | Scale | Notes |
+  |---|---|---|
+  | 1 | `Chromatic` | |
+  | 2 | `Major` | |
+  | 3 | `Minor` | |
+  | 4 | `Harmonic Minor` | |
+  | 5 | `Melodic Minor` | |
+  | 6 | `Dorian` | |
+  | 7 | `Phrygian` | |
+  | 8 | `Lydian` | |
+  | 9 | `Mixolydian` | |
+  | 10 | `Locrian` | |
+  | 11 | `Major Pentatonic` | |
+  | 12 | `Minor Pentatonic` | |
+  | 13 | `Blues` | |
+  | 14 | `Whole Tone` | |
+  | 15 | `Diminished` | |
+  | 16 | `Thai 7-TET` | microtonal |
 
 
 # Queue System
@@ -71,8 +92,9 @@ Inpspired by [Event Loop](https://medium.com/@ignatovich.dm/the-javascript-event
 
 it comprised of 
 - **Event Queue (EVQ)** holds pending event operators to be fused into the next push, current available ops are
-  - `c` / `>CHORD` chord event triggers a triad on the next matched position.
-  - `h` / `>HOLDN` hold event sustains the note on the next matched position.
+  - `c` / `>CHORD` chord event triggers a triad.
+  - `h` / `>HOLDN` hold event sustains the note.
+  - `r` / `>RTCHT` ratheting (re-triggering) the note.
 - **Queue Operators** spatially mapped on keyboard, current available ops are
   - `P` Push, push current playhead position (or front event) onto OPQ.
   - `S` Swap, swap the top two items in OPQ.
