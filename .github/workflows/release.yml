@@ -91,7 +91,7 @@ jobs:
         shell: bash
         run: |
           mkdir dist
-          if [ "${{ matrix.os }}" = "windows-2019" ]; then
+          if [ "${{ matrix.os }}" = "windows-2022" ]; then
             cp "target/${{ matrix.target }}/release/$BIN_NAME.exe" "dist/"
           else
             cp "target/${{ matrix.target }}/release/$BIN_NAME" "dist/"
@@ -145,6 +145,17 @@ jobs:
                   (cd tmp && 7z a -r ../dist/$pkgname.zip $pkgname)
               fi
           done
+
+      - name: Create Git tag and GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.TAG }}
+          name: ${{ env.TAG }}
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload binaries to release
         uses: svenstaro/upload-release-action@v2
