@@ -41,7 +41,7 @@ lazy_static! {
   pub static ref APP_WELCOME_MSG: StaticStrStr = Vec::from([
     // ("", ""),
     // ("(Return)", "eval input"),
-    ("(Ctrl-h)", "show menubar"),
+    ("(Ctrl-b)", "show menubar"),
   ]);
 }
 

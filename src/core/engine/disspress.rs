@@ -1,5 +1,4 @@
 use rand::seq::IteratorRandom;
-use rand::Rng;
 use std::collections::HashMap;
 use std::fs;
 
@@ -40,7 +39,7 @@ fn dissociated_generate(
   length: Option<usize>,
 ) -> String {
   let mut rng = rand::thread_rng();
-  let length = length.unwrap_or(100);
+  let length = length.unwrap_or(DISSPRESS_LENGTH);
 
   let mut words = Vec::new();
   let mut current_word: Option<String> = None;
@@ -69,15 +68,6 @@ fn dissociated_generate(
   }
 
   words.join(" ")
-}
-
-pub fn run() -> String {
-  let mut _dissociated: HashMap<String, HashMap<String, usize>> = HashMap::new();
-  let diss = dissociated();
-  let min_content = 40;
-  let max_content = DISSPRESS_LENGTH;
-  let random_length = rand::thread_rng().gen_range(min_content..max_content);
-  dissociated_generate(&diss, Some(random_length))
 }
 
 pub fn run_with_length(length: usize) -> String {
