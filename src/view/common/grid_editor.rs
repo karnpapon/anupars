@@ -21,11 +21,10 @@ use cursive::Vec2;
 
 use ringbuffer::RingBuffer;
 
-use crate::core::{consts, traits::Matrix};
-use crate::view::common::playhead::PendingJumpPosition;
-use crate::view::common::playhead::PlayheadUI;
-use crate::view::common::playhead::EVENT_OPERATORS;
-use crate::view::common::playhead::QUEUE_OPERATORS;
+use crate::core::playhead::queue::EVENT_OPERATORS;
+use crate::core::playhead::queue::QUEUE_OPERATORS;
+use crate::core::{consts, playhead::queue::PendingJumpPosition, traits::Matrix};
+use crate::view::common::playhead_handler::PlayheadUI;
 
 use consts::BASE_OCTAVE;
 use consts::KEYBOARD_MARGIN_BOTTOM;
@@ -34,7 +33,7 @@ use consts::KEYBOARD_MARGIN_TOP;
 use consts::NOTE_NAMES;
 use consts::QUEUE_MARGIN_RIGHT;
 
-use super::playhead_controller::{self, Direction, Message as PlayheadMessage};
+use super::playhead::{self, Direction, Message as PlayheadMessage};
 
 pub struct GridEditor {
   size: Vec2,
@@ -209,7 +208,7 @@ impl GridEditor {
 
     // Top half: EVQ (Event Queue)
     // Read and display event queue items (bottom-aligned)
-    let event_queue = self.playhead_ui.event_queue.lock().unwrap();
+    let event_queue = self.playhead_ui.queue_manager.event_queue.lock().unwrap();
     let evq_items: Vec<String> = event_queue
       .iter()
       .map(|op| op.get_event_name().to_string())
@@ -270,7 +269,12 @@ impl GridEditor {
     let opq_start_y = half_height;
 
     // Read and display operator queue items (bottom-aligned)
-    let operator_queue = self.playhead_ui.operator_queue.lock().unwrap();
+    let operator_queue = self
+      .playhead_ui
+      .queue_manager
+      .operator_queue
+      .lock()
+      .unwrap();
     let opq_items: Vec<String> = operator_queue
       .iter()
       .map(|item| format!("{}", item))
@@ -331,7 +335,12 @@ impl GridEditor {
     });
 
     // Pending jump position indicator
-    let pending = self.playhead_ui.pending_jump_position.lock().unwrap();
+    let pending = self
+      .playhead_ui
+      .queue_manager
+      .pending_jump_position
+      .lock()
+      .unwrap();
     let (pending_str, pending_color) = match *pending {
       PendingJumpPosition::Empty => (None, ColorType::rgb(60, 60, 60)),
       PendingJumpPosition::Waiting(x, y) => {
@@ -439,7 +448,7 @@ impl GridEditor {
   }
 
   pub fn build(
-    playhead_tx: Sender<playhead_controller::Message>,
+    playhead_tx: Sender<playhead::Message>,
   ) -> ResizedView<ResizedView<NamedView<Canvas<GridEditor>>>> {
     Canvas::new(GridEditor::new(playhead_tx))
       .with_draw(draw)

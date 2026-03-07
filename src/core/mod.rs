@@ -1,10 +1,10 @@
 pub mod command;
-pub mod command_handler;
 pub mod consts;
 pub mod disspress;
 pub mod midi;
 pub mod parser;
 pub mod playback_modes;
+pub mod playhead;
 pub mod position;
 pub mod rect;
 pub mod regex;

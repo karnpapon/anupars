@@ -2,7 +2,7 @@ use std::sync::mpsc::Sender;
 
 use cursive::views::{Canvas, FocusTracker, NamedView, ResizedView};
 
-use super::{grid_editor::GridEditor, playhead_controller};
+use super::{grid_editor::GridEditor, playhead};
 
 pub struct GridSection {}
 
@@ -18,7 +18,7 @@ impl GridSection {
   }
 
   pub fn build(
-    playhead_tx: Sender<playhead_controller::Message>,
+    playhead_tx: Sender<playhead::Message>,
   ) -> FocusTracker<ResizedView<ResizedView<NamedView<Canvas<GridEditor>>>>> {
     FocusTracker::new(GridEditor::build(playhead_tx))
   }

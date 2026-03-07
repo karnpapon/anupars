@@ -1,12 +1,12 @@
 use std::fmt;
 
-use crate::core::command_handler::CommandManager;
+use crate::core::command::command_handler::CommandManager;
 use crate::core::consts;
 use crate::core::midi;
 use crate::core::regex::RegExpHandler;
 use crate::core::timing::metronome::{Message, Metronome};
 use crate::view::common::menubar::Menubar;
-use crate::view::common::playhead_controller::Playhead;
+use crate::view::common::playhead::Playhead;
 #[cfg(feature = "microcontroller")]
 use crate::view::microcontroller::console::RegexFlag;
 use cursive::theme::{BorderStyle, Palette};

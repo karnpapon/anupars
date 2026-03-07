@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 use crate::app::UserData;
-use crate::view::common::playhead_controller;
+use crate::view::common::playhead;
 
 #[cfg(feature = "desktop")]
 use crate::view::desktop::program::Program;
@@ -13,9 +13,9 @@ use crate::view::desktop::program::Program;
 use crate::view::microcontroller::program::Program;
 
 use super::command::Command;
-use super::timing::metronome;
-use super::{consts, utils};
-use crate::core::command::Adjustment;
+use crate::core::command::command::Adjustment;
+use crate::core::timing::metronome;
+use crate::core::{consts, utils};
 
 use cursive::event::{Event, Key};
 use cursive::views::{LinearLayout, TextView};
@@ -32,7 +32,7 @@ pub struct CommandManager {
   temp_tempo: Arc<Mutex<usize>>,
   temp_ratio: Arc<Mutex<(usize, usize)>>,
   pub last_key_time: Arc<Mutex<Option<Instant>>>,
-  playhead_tx_cloned: Sender<playhead_controller::Message>,
+  playhead_tx_cloned: Sender<playhead::Message>,
 }
 
 impl CommandManager {
@@ -42,7 +42,7 @@ impl CommandManager {
     cb_sink: cursive::CbSink,
     temp_tempo: Arc<Mutex<usize>>,
     last_key_time: Arc<Mutex<Option<Instant>>>,
-    playhead_tx_cloned: Sender<playhead_controller::Message>,
+    playhead_tx_cloned: Sender<playhead::Message>,
   ) -> Self {
     let bindings = RefCell::new(Self::get_bindings());
     Self {
@@ -125,7 +125,7 @@ impl CommandManager {
 
         self
           .playhead_tx_cloned
-          .send(playhead_controller::Message::SetTempo(temp))
+          .send(playhead::Message::SetTempo(temp))
           .unwrap();
 
         self
@@ -173,7 +173,7 @@ impl CommandManager {
 
         self
           .playhead_tx_cloned
-          .send(playhead_controller::Message::SetRatio(new_ratio))
+          .send(playhead::Message::SetRatio(new_ratio))
           .unwrap();
 
         self
@@ -185,84 +185,84 @@ impl CommandManager {
       Command::ToggleForward => {
         self
           .playhead_tx_cloned
-          .send(playhead_controller::Message::ToggleForwardMode())
+          .send(playhead::Message::ToggleForwardMode())
           .unwrap();
         Ok(None)
       }
       Command::ToggleReverse => {
         self
           .playhead_tx_cloned
-          .send(playhead_controller::Message::ToggleReverseMode())
+          .send(playhead::Message::ToggleReverseMode())
           .unwrap();
         Ok(None)
       }
       Command::ToggleArpeggiator => {
         self
           .playhead_tx_cloned
-          .send(playhead_controller::Message::ToggleArpeggiatorMode())
+          .send(playhead::Message::ToggleArpeggiatorMode())
           .unwrap();
         Ok(None)
       }
       Command::ToggleAccumulation => {
         self
           .playhead_tx_cloned
-          .send(playhead_controller::Message::ToggleAccumulationMode())
+          .send(playhead::Message::ToggleAccumulationMode())
           .unwrap();
         Ok(None)
       }
       Command::ToggleRandom => {
         self
           .playhead_tx_cloned
-          .send(playhead_controller::Message::ToggleRandomMode())
+          .send(playhead::Message::ToggleRandomMode())
           .unwrap();
         Ok(None)
       }
       Command::TogglePendulum => {
         self
           .playhead_tx_cloned
-          .send(playhead_controller::Message::TogglePendulumMode())
+          .send(playhead::Message::TogglePendulumMode())
           .unwrap();
         Ok(None)
       }
       Command::ToggleEventOperator => {
         self
           .playhead_tx_cloned
-          .send(playhead_controller::Message::ToggleEventOperatorMode())
+          .send(playhead::Message::ToggleEventOperatorMode())
           .unwrap();
         Ok(None)
       }
       Command::ToggleDrainQueue => {
         self
           .playhead_tx_cloned
-          .send(playhead_controller::Message::ToggleDrainQueueMode())
+          .send(playhead::Message::ToggleDrainQueueMode())
           .unwrap();
         Ok(None)
       }
       Command::ToggleSweep => {
         self
           .playhead_tx_cloned
-          .send(playhead_controller::Message::ToggleSweepMode())
+          .send(playhead::Message::ToggleSweepMode())
           .unwrap();
         Ok(None)
       }
       Command::ToggleDynLength => {
         self
           .playhead_tx_cloned
-          .send(playhead_controller::Message::ToggleDynLengthMode())
+          .send(playhead::Message::ToggleDynLengthMode())
           .unwrap();
         Ok(None)
       }
       Command::ChangeRootNote(dir) => {
         self
           .playhead_tx_cloned
-          .send(playhead_controller::Message::CycleScaleRootTop(*dir))
+          .send(playhead::Message::CycleScaleRootTop(*dir))
           .unwrap();
         Ok(None)
       }
       Command::ChangeScaleMode(dir) => {
         self
           .playhead_tx_cloned
-          .send(playhead_controller::Message::CycleScaleMode(*dir))
+          .send(playhead::Message::CycleScaleMode(*dir))
           .unwrap();
         Ok(None)
       }

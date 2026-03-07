@@ -5,7 +5,7 @@ use cursive::utils::span::SpannedString;
 use cursive::Printer;
 use cursive::Vec2;
 
-use crate::view::common::playhead::PlayheadUI;
+use crate::view::common::playhead_handler::PlayheadUI;
 
 use super::{consts, regex::Match};
 use std::collections::HashMap;

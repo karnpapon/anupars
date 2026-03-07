@@ -149,7 +149,7 @@ impl Menubar {
             let _ = canvas
               .state_mut()
               .playhead_tx
-              .send(super::playhead_controller::Message::ClearQueue());
+              .send(super::playhead::Message::ClearQueue());
           },
         );
       })
@@ -242,9 +242,7 @@ fn build_scale_menu_left() -> cursive::menu::Tree {
             canvas
               .state_mut()
               .playhead_tx
-              .send(super::playhead_controller::Message::SetScaleModeLeft(
-                scale_clone,
-              ))
+              .send(super::playhead::Message::SetScaleModeLeft(scale_clone))
               .unwrap();
           },
         );
@@ -266,9 +264,7 @@ fn build_scale_menu_top() -> cursive::menu::Tree {
             canvas
               .state_mut()
               .playhead_tx
-              .send(super::playhead_controller::Message::SetScaleModeTop(
-                scale_clone,
-              ))
+              .send(super::playhead::Message::SetScaleModeTop(scale_clone))
               .unwrap();
           },
         );
@@ -290,9 +286,7 @@ fn build_scale_root_menu_top() -> cursive::menu::Tree {
             canvas
               .state_mut()
               .playhead_tx
-              .send(super::playhead_controller::Message::SetScaleRootTop(
-                root_clone,
-              ))
+              .send(super::playhead::Message::SetScaleRootTop(root_clone))
               .unwrap();
           },
         );

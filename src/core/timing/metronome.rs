@@ -11,7 +11,7 @@ use num::ToPrimitive;
 
 use crate::core::consts;
 use crate::core::midi;
-use crate::view::common::playhead_controller;
+use crate::view::common::playhead;
 
 use super::clock;
 
@@ -31,7 +31,7 @@ pub enum Message {
 pub struct Metronome {
   pub tx: Sender<Message>,
   pub rx: Receiver<Message>,
-  pub playhead_tx: Sender<playhead_controller::Message>,
+  pub playhead_tx: Sender<playhead::Message>,
   pub midi_tx: Option<Sender<midi::Message>>,
   cb_sink: cursive::CbSink,
   is_playing: Arc<AtomicBool>,
@@ -40,7 +40,7 @@ pub struct Metronome {
 }
 
 impl Metronome {
-  pub fn new(cb_sink: cursive::CbSink, playhead_tx: Sender<playhead_controller::Message>) -> Self {
+  pub fn new(cb_sink: cursive::CbSink, playhead_tx: Sender<playhead::Message>) -> Self {
     let (tx, rx) = channel();
 
     Self {
@@ -107,7 +107,7 @@ impl Metronome {
           self.current_bpm.store(bpm, Ordering::Relaxed);
           self
             .playhead_tx
-            .send(playhead_controller::Message::SetTempo(bpm))
+            .send(playhead::Message::SetTempo(bpm))
             .unwrap();
         }
         Message::Time(time) => {
@@ -116,7 +116,7 @@ impl Metronome {
 
           self
             .playhead_tx
-            .send(playhead_controller::Message::SetActivePos(tick))
+            .send(playhead::Message::SetActivePos(tick))
             .unwrap();
 
           // Send MIDI clock ticks

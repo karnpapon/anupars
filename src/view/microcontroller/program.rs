@@ -13,7 +13,7 @@ use crate::app::Movement;
 use crate::core::consts;
 use crate::core::regex;
 use crate::view::common::grid::GridSection;
-use crate::view::common::playhead_controller;
+use crate::view::common::playhead;
 
 use super::console::{Console, RegexFlag, RegexMode};
 
@@ -44,7 +44,7 @@ impl Program {
   pub fn build(
     &mut self,
     regex_tx: Sender<regex::Message>,
-    playhead_tx: Sender<playhead_controller::Message>,
+    playhead_tx: Sender<playhead::Message>,
   ) -> NamedView<LinearLayout> {
     let top_section = Console::build(self, regex_tx);
     let padding_section = DummyView::new().fixed_width(1);
