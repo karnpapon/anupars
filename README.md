@@ -1,8 +1,12 @@
-# anupars
+<div align="center">
 
 [![Build](https://github.com/karnpapon/anupars/actions/workflows/build.yml/badge.svg)](https://github.com/karnpapon/anupars/actions/workflows/build.yml)
-
 [![Release](https://github.com/karnpapon/anupars/actions/workflows/release.yml/badge.svg)](https://github.com/karnpapon/anupars/actions/workflows/release.yml)
+
+</div>
+
+# anupars
+
 
 anupars (อนุภา(ส), meaning "tiny following light" in Thai), a Rust-based reimagining of [`anu`](https://github.com/karnpapon/anu) a musical sequencer driven by regular expressions, designed to operate on resource-constrained devices, and performance-oriented.
 
