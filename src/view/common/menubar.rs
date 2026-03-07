@@ -20,6 +20,7 @@ use cursive::view::Resizable;
 use cursive::views::Canvas;
 use cursive::views::Dialog;
 use cursive::views::DummyView;
+use cursive::views::EditView;
 use cursive::views::HideableView;
 use cursive::views::LinearLayout;
 use cursive::views::NamedView;
@@ -336,8 +337,37 @@ fn build_about_view(siv: &mut Cursive) {
 // generate random text based-on Dissociate Press algorithm:
 // https://en.wikipedia.org/wiki/Dissociated_press
 pub fn generate_contents(siv: &mut Cursive) {
-  let contents = disspress::run();
-  set_contents(siv, contents);
+  let max_len = siv
+    .call_on_name(
+      consts::canvas_editor_section_view,
+      |c: &mut Canvas<GridEditor>| c.state_mut().grid.width * c.state_mut().grid.height,
+    )
+    .unwrap_or(800);
+
+  siv.add_layer(
+    Dialog::around(
+      LinearLayout::vertical()
+        .child(TextView::new(format!(
+          "Enter number of words (1–{}):",
+          max_len
+        )))
+        .child(
+          EditView::new()
+            .on_submit(move |s, text| {
+              let length = text.parse::<usize>().unwrap_or(1).max(1).min(max_len);
+              s.pop_layer();
+              let contents = disspress::run_with_length(length);
+              set_contents(s, contents);
+            })
+            .with_name("disspress_length_input")
+            .fixed_width(20),
+        ),
+    )
+    .title("Generate Text")
+    .button("Cancel", |s| {
+      s.pop_layer();
+    }),
+  );
 }
 
 fn set_contents(siv: &mut Cursive, contents: String) {

@@ -79,3 +79,8 @@ pub fn run() -> String {
   let random_length = rand::thread_rng().gen_range(min_content..max_content);
   dissociated_generate(&diss, Some(random_length))
 }
+
+pub fn run_with_length(length: usize) -> String {
+  let diss = dissociated();
+  dissociated_generate(&diss, Some(length))
+}
