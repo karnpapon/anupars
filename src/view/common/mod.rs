@@ -5,4 +5,3 @@ pub mod playhead;
 pub mod playhead_handler;
 pub mod printer;
 pub mod rect;
-// pub mod timing_diagnostic;
