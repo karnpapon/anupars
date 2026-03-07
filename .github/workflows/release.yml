@@ -56,6 +56,10 @@ jobs:
           target: ${{ matrix.target }}
           override: true
 
+      - name: Install ALSA dev libraries (Linux native)
+        if: matrix.build == 'x86_64-linux'
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev
+
       - name: Run cargo test
         uses: actions-rs/cargo@v1
         with:
