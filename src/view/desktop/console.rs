@@ -6,7 +6,7 @@ use cfonts::{render, Fonts, Options};
 use super::program::Program;
 use crate::app::UserData;
 use crate::core::consts;
-use crate::core::regex;
+use crate::core::engine::regex;
 use crate::core::utils;
 use crate::view::common::grid_editor::GridEditor;
 use crate::view::microcontroller::console::RegexFlag;

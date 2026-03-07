@@ -5,7 +5,7 @@ use std::thread;
 
 use cursive::{views::Canvas, XY};
 
-use crate::core::{consts, midi, regex::Match};
+use crate::core::{consts, engine::regex::Match, io::midi};
 
 use super::grid_editor::GridEditor;
 use super::playhead_handler;
@@ -31,9 +31,9 @@ pub enum Message {
   Scale((i32, i32)),
   SetMatcher(Option<HashMap<usize, Match>>),
   SetGridSize(usize, usize),
-  SetScaleModeLeft(crate::core::scale::ScaleMode),
-  SetScaleModeTop(crate::core::scale::ScaleMode),
-  SetScaleRootTop(crate::core::scale::ScaleRoot),
+  SetScaleModeLeft(crate::core::tonal::scale::ScaleMode),
+  SetScaleModeTop(crate::core::tonal::scale::ScaleMode),
+  SetScaleRootTop(crate::core::tonal::scale::ScaleRoot),
   CycleScaleRootTop(crate::core::command::command::Adjustment),
   CycleScaleMode(crate::core::command::command::Adjustment),
   ToggleAccumulationMode(),

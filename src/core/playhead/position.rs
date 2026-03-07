@@ -4,8 +4,9 @@ use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
-use crate::app::Movement;
-use crate::core::{playback_modes, regex::Match};
+use super::movement;
+use crate::core::engine::regex::Match;
+use crate::core::playhead::movement::Movement;
 
 // ============================================================================
 // Position Calculator
@@ -50,7 +51,7 @@ impl PositionCalculator {
       let regex_indexes = self.regex_indexes.lock().unwrap();
       let movement = self.movement.lock().unwrap();
       let movement_random = *movement == Movement::Random;
-      let matches = playback_modes::get_arpeggiator_matches(
+      let matches = movement::get_arpeggiator_matches(
         &regex_indexes,
         playhead_x,
         playhead_y,
@@ -64,7 +65,7 @@ impl PositionCalculator {
 
       if !matches.is_empty() {
         let step = if movement_random {
-          playback_modes::get_random_index(pos, matches.len())
+          movement::get_random_index(pos, matches.len())
         } else {
           pos % matches.len()
         };
@@ -74,7 +75,7 @@ impl PositionCalculator {
       } else {
         let movement = self.movement.lock().unwrap();
         // No matches, fallback to normal running
-        playback_modes::calculate_position_fallback(
+        movement::calculate_position_fallback(
           pos,
           playhead_w,
           playhead_h,
@@ -86,7 +87,7 @@ impl PositionCalculator {
     } else {
       let movement = self.movement.lock().unwrap();
       // Normal running without arpeggiator
-      playback_modes::calculate_position_fallback(
+      movement::calculate_position_fallback(
         pos,
         playhead_w,
         playhead_h,

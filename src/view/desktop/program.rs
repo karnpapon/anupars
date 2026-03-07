@@ -9,9 +9,9 @@ use std::sync::Arc;
 use std::sync::RwLock;
 
 use crate::app::AppMode;
-use crate::app::Movement;
 use crate::core::consts;
-use crate::core::regex;
+use crate::core::engine::regex;
+use crate::core::playhead::movement::Movement;
 use crate::view::common::grid::GridSection;
 use crate::view::common::playhead;
 use crate::view::microcontroller::console::RegexFlag;

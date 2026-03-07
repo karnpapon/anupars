@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use super::midi::{self, MidiMsg};
+use crate::core::io::midi::{self, MidiMsg};
 
 type NoteKey = (u8, u8, u8); // (note, octave, channel)
 type HeldNotes = Arc<Mutex<HashMap<NoteKey, midi::MidiMsg>>>;

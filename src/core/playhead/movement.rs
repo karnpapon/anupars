@@ -1,4 +1,4 @@
-//! Playback mode position calculation strategies
+//! movementt position calculation strategies
 //!
 //! This module contains position calculation logic for different playback modes:
 //! - Normal: Sequential forward movement
@@ -6,7 +6,49 @@
 //! - Random: Deterministic pseudo-random positioning
 //! - Arpeggiator: Pattern-based movement through regex matches
 
-use crate::app::Movement;
+use std::fmt;
+
+#[derive(Clone, PartialEq, Copy)]
+pub enum Movement {
+  Forward,
+  Reverse,
+  Random,
+  Pendulum,
+}
+
+impl fmt::Display for Movement {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    match self {
+      Movement::Forward => write!(f, "f"),
+      Movement::Reverse => write!(f, "r"),
+      Movement::Random => write!(f, "d"),
+      Movement::Pendulum => write!(f, "p"),
+    }
+  }
+}
+
+impl Movement {
+  pub fn print_movements(&self) -> String {
+    let movements = [
+      Movement::Forward,
+      Movement::Reverse,
+      Movement::Random,
+      Movement::Pendulum,
+    ];
+    movements
+      .iter()
+      .map(|mv| {
+        let movement = self;
+        if *mv == *movement {
+          format!("[{}]", mv)
+        } else {
+          format!("{}", mv)
+        }
+      })
+      .collect::<Vec<_>>()
+      .join("")
+  }
+}
 use cursive::Vec2;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::Hash;

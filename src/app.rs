@@ -2,8 +2,8 @@ use std::fmt;
 
 use crate::core::command::command_handler::CommandManager;
 use crate::core::consts;
-use crate::core::midi;
-use crate::core::regex::RegExpHandler;
+use crate::core::engine::regex::RegExpHandler;
+use crate::core::io::midi;
 use crate::core::timing::metronome::{Message, Metronome};
 use crate::view::common::menubar::Menubar;
 use crate::view::common::playhead::Playhead;
@@ -43,48 +43,6 @@ pub enum AppMode {
   EventOperator, // e
   Sweep,         // s
   None,
-}
-
-#[derive(Clone, PartialEq, Copy)]
-pub enum Movement {
-  Forward,
-  Reverse,
-  Random,
-  Pendulum,
-}
-
-impl fmt::Display for Movement {
-  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-    match self {
-      Movement::Forward => write!(f, "f"),
-      Movement::Reverse => write!(f, "r"),
-      Movement::Random => write!(f, "d"),
-      Movement::Pendulum => write!(f, "p"),
-    }
-  }
-}
-
-impl Movement {
-  pub fn print_movements(&self) -> String {
-    let movements = [
-      Movement::Forward,
-      Movement::Reverse,
-      Movement::Random,
-      Movement::Pendulum,
-    ];
-    movements
-      .iter()
-      .map(|mv| {
-        let movement = self;
-        if *mv == *movement {
-          format!("[{}]", mv)
-        } else {
-          format!("{}", mv)
-        }
-      })
-      .collect::<Vec<_>>()
-      .join("")
-  }
 }
 
 impl fmt::Display for AppMode {

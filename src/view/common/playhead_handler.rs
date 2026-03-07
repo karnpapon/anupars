@@ -17,9 +17,9 @@ use cursive::Vec2;
 use cursive::XY;
 
 use crate::app::AppMode;
-use crate::app::Movement;
 use crate::core::command::command;
 use crate::core::playhead::midi::MidiTriggerHandler;
+use crate::core::playhead::movement::Movement;
 use crate::core::playhead::position::PositionCalculator;
 use crate::core::playhead::queue::EventOperator;
 use crate::core::playhead::queue::PendingJumpPosition;
@@ -27,12 +27,13 @@ use crate::core::playhead::queue::QueueItem;
 use crate::core::playhead::queue::QueueManager;
 use crate::core::playhead::queue::QueueOperator;
 use crate::core::playhead::queue::QUEUE_OPERATORS;
-use crate::core::scale;
+use crate::core::tonal::scale;
 
-use crate::core::regex;
-use crate::core::{consts, midi, rect::Rect, regex::Match, utils};
+use crate::core::engine::regex;
+use crate::core::{consts, engine::regex::Match, io::midi, utils};
 use crate::view::common::grid_editor::GridEditor;
 use crate::view::common::playhead::Direction;
+use crate::view::common::rect::Rect;
 // #[cfg(debug_assertions)]
 // use crate::view::common::timing_diagnostic::TimingStats;
 

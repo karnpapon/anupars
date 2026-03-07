@@ -17,11 +17,11 @@ use cursive::Vec2;
 use std::sync::mpsc::Sender;
 
 use crate::app::UserData;
-use crate::core::regex;
+use crate::core::engine::regex;
 
 use super::program::Program;
 use crate::core::consts;
-use crate::core::midi::{self, MidiMsg};
+use crate::core::io::midi::{self, MidiMsg};
 use crate::core::parser::{self};
 use crate::core::utils;
 use crate::view::common::grid_editor::GridEditor;

@@ -2,7 +2,7 @@ use crate::{
   app::UserData,
   core::{
     consts,
-    midi::{self, MidiMsg},
+    io::midi::{self, MidiMsg},
     parser::{self},
     utils,
   },

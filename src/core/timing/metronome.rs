@@ -10,7 +10,7 @@ use std::sync::Arc;
 use num::ToPrimitive;
 
 use crate::core::consts;
-use crate::core::midi;
+use crate::core::io::midi;
 use crate::view::common::playhead;
 
 use super::clock;

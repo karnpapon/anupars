@@ -7,7 +7,7 @@ use cursive::Vec2;
 
 use crate::view::common::playhead_handler::PlayheadUI;
 
-use super::{consts, regex::Match};
+use crate::core::{consts, engine::regex::Match};
 use std::collections::HashMap;
 
 #[derive(Clone, Default, Debug)]

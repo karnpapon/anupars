@@ -6,8 +6,8 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 // use std::time::Duration;
 
-use super::stack::{self, Stack};
 use crate::core::consts;
+use crate::core::engine::stack::{self, Stack};
 
 // Constants for note length calculation
 const BASE_LENGTH_FIXED: usize = 12; // 96ms at 120 BPM - for DynLength OFF
@@ -28,7 +28,7 @@ pub struct TriggerParams {
   pub grid_width: usize,
   pub grid_v_splits: usize,
   pub grid_h_splits: usize,
-  pub scale_mode: crate::core::scale::ScaleMode,
+  pub scale_mode: crate::core::tonal::scale::ScaleMode,
   pub scale_root_offset: u8,
   pub bpm: usize,
   pub trigger_pos_y: usize,

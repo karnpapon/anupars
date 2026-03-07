@@ -6,7 +6,7 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 
-use crate::core::{consts, midi, regex::Match, scale};
+use crate::core::{consts, engine::regex::Match, io::midi, tonal::scale};
 
 // ============================================================================
 // MIDI Helper Functions

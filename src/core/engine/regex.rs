@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::view::common::{grid_editor::GridEditor, playhead};
 
-use super::consts;
+use crate::core::consts;
 
 #[derive(Debug, Serialize, Deserialize)]
 struct RegexError {

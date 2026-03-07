@@ -31,7 +31,7 @@ use cursive::Cursive;
 use cursive::With;
 
 use super::grid_editor::GridEditor;
-use crate::core::{consts, disspress};
+use crate::core::{consts, engine::disspress};
 
 #[derive(Clone, Copy)]
 pub struct Menubar {
@@ -104,7 +104,7 @@ impl Menubar {
 
   pub fn build_menu_app(
     midi_devices: &[(String, usize)],
-    midi_tx: Sender<crate::core::midi::Message>,
+    midi_tx: Sender<crate::core::io::midi::Message>,
   ) -> Tree {
     let midi_tx_reset = midi_tx.clone();
     let midi_tx_clock = midi_tx.clone();
@@ -139,8 +139,8 @@ impl Menubar {
       .leaf("Release All", move |s| {
         s.reset_default_callbacks();
         // Clear MIDI config and stop all notes
-        let _ = midi_tx_reset.send(crate::core::midi::Message::ClearMsgConfig());
-        let _ = midi_tx_reset.send(crate::core::midi::Message::Panic());
+        let _ = midi_tx_reset.send(crate::core::io::midi::Message::ClearMsgConfig());
+        let _ = midi_tx_reset.send(crate::core::io::midi::Message::Panic());
       })
       .leaf("Clear Queue", |s| {
         s.call_on_name(
@@ -167,7 +167,7 @@ impl Menubar {
 
 fn build_midi_menu(
   devices: Vec<(String, usize)>,
-  midi_tx: Sender<crate::core::midi::Message>,
+  midi_tx: Sender<crate::core::io::midi::Message>,
 ) -> cursive::menu::Tree {
   menu::Tree::new().with(|tree| {
     if devices.is_empty() {
@@ -178,7 +178,7 @@ fn build_midi_menu(
         let name_clone = name.clone();
         tree.add_item(menu::Item::leaf(format!("{}: {}", idx, name), move |s| {
           // Send message to switch MIDI device
-          if let Err(e) = midi_tx_clone.send(crate::core::midi::Message::SwitchDevice(idx)) {
+          if let Err(e) = midi_tx_clone.send(crate::core::io::midi::Message::SwitchDevice(idx)) {
             s.add_layer(Dialog::info(format!("Failed to switch device: {}", e)));
           } else {
             // Update the MIDI status display
@@ -201,15 +201,15 @@ fn build_osc_menu() -> cursive::menu::Tree {
 
 fn toggle_clock_out(
   siv: &mut Cursive,
-  midi_tx: &Sender<crate::core::midi::Message>,
+  midi_tx: &Sender<crate::core::io::midi::Message>,
   devices: &[(String, usize)],
-  menu_midi_tx: &Sender<crate::core::midi::Message>,
+  menu_midi_tx: &Sender<crate::core::io::midi::Message>,
 ) {
   let current = consts::CLOCK_ENABLED.load(Ordering::Relaxed);
   let new_state = !current;
   consts::CLOCK_ENABLED.store(new_state, Ordering::Relaxed);
 
-  let _ = midi_tx.send(crate::core::midi::Message::EnableClock(new_state));
+  let _ = midi_tx.send(crate::core::io::midi::Message::EnableClock(new_state));
 
   // Rebuild menubar with updated status
   let menu_app = Menubar::build_menu_app(devices, menu_midi_tx.clone());
@@ -230,7 +230,7 @@ fn toggle_clock_out(
 // ------------------------------------------------------------
 
 fn build_scale_menu_left() -> cursive::menu::Tree {
-  use crate::core::scale::ScaleMode;
+  use crate::core::tonal::scale::ScaleMode;
 
   menu::Tree::new().with(|tree| {
     for scale in ScaleMode::all() {
@@ -252,7 +252,7 @@ fn build_scale_menu_left() -> cursive::menu::Tree {
 }
 
 fn build_scale_menu_top() -> cursive::menu::Tree {
-  use crate::core::scale::ScaleMode;
+  use crate::core::tonal::scale::ScaleMode;
 
   menu::Tree::new().with(|tree| {
     for scale in ScaleMode::all() {
@@ -274,7 +274,7 @@ fn build_scale_menu_top() -> cursive::menu::Tree {
 }
 
 fn build_scale_root_menu_top() -> cursive::menu::Tree {
-  use crate::core::scale::ScaleRoot;
+  use crate::core::tonal::scale::ScaleRoot;
 
   menu::Tree::new().with(|tree| {
     for root in ScaleRoot::all() {
