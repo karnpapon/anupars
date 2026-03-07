@@ -12,12 +12,13 @@ use crate::view::desktop::program::Program;
 #[cfg(feature = "microcontroller")]
 use crate::view::microcontroller::program::Program;
 
-use super::command::Command;
-use crate::core::command::command::Adjustment;
+use super::types::Command;
+use crate::core::command::binding;
+use crate::core::command::types::Adjustment;
 use crate::core::timing::metronome;
 use crate::core::{consts, utils};
 
-use cursive::event::{Event, Key};
+use cursive::event::Event;
 use cursive::views::{LinearLayout, TextView};
 use cursive::Cursive;
 use log::error;
@@ -44,7 +45,7 @@ impl CommandManager {
     last_key_time: Arc<Mutex<Option<Instant>>>,
     playhead_tx_cloned: Sender<playhead::Message>,
   ) -> Self {
-    let bindings = RefCell::new(Self::get_bindings());
+    let bindings = RefCell::new(binding::get_bindings());
     Self {
       aliases: HashMap::new(), // ? maybe obsolete
       bindings,
@@ -56,10 +57,6 @@ impl CommandManager {
       last_key_time,
       playhead_tx_cloned,
     }
-  }
-
-  pub fn get_bindings() -> HashMap<String, Vec<Command>> {
-    Self::default_keybindings()
   }
 
   pub fn register_aliases<S: Into<String>>(&mut self, name: S, aliases: Vec<S>) {
@@ -303,7 +300,7 @@ impl CommandManager {
     let kb = self.bindings.borrow();
 
     for (k, _v) in kb.iter() {
-      if let Some(binding) = Self::parse_keybinding(k) {
+      if let Some(binding) = binding::parse_keybinding(k) {
         cursive.clear_global_callbacks(binding);
       }
     }
@@ -313,120 +310,11 @@ impl CommandManager {
     let kb = self.bindings.borrow();
 
     for (k, v) in kb.iter() {
-      if let Some(binding) = Self::parse_keybinding(k) {
+      if let Some(binding) = binding::parse_keybinding(k) {
         self.register_keybinding(cursive, binding, v.clone());
       } else {
         error!("Could not parse keybinding: \"{}\"", k);
       }
-    }
-  }
-
-  /// global default keybindings
-  fn default_keybindings() -> HashMap<String, Vec<Command>> {
-    let mut kb = HashMap::new();
-
-    kb.insert("q".into(), vec![Command::Quit]);
-    kb.insert("Space".into(), vec![Command::TogglePlay]);
-    kb.insert("Ctrl+b".into(), vec![Command::ShowMenubar]); // Changed from Ctrl+m (conflicts with Enter)
-    kb.insert("Esc".into(), vec![Command::ToggleInputRegexAndCanvas]);
-    kb.insert(">".into(), vec![Command::AdjustBPM(Adjustment::Increase)]);
-    kb.insert("<".into(), vec![Command::AdjustBPM(Adjustment::Decrease)]);
-    kb.insert("}".into(), vec![Command::AdjustRatio(Adjustment::Increase)]);
-    kb.insert("{".into(), vec![Command::AdjustRatio(Adjustment::Decrease)]);
-    kb.insert("Ctrl+f".into(), vec![Command::ToggleForward]);
-    kb.insert("Ctrl+r".into(), vec![Command::ToggleReverse]);
-    kb.insert("Ctrl+d".into(), vec![Command::ToggleRandom]);
-    kb.insert("Ctrl+p".into(), vec![Command::TogglePendulum]);
-    kb.insert("Ctrl+a".into(), vec![Command::ToggleArpeggiator]);
-    kb.insert("Ctrl+u".into(), vec![Command::ToggleAccumulation]);
-    kb.insert("Ctrl+e".into(), vec![Command::ToggleEventOperator]);
-    kb.insert("Ctrl+n".into(), vec![Command::ToggleDrainQueue]);
-    kb.insert("Ctrl+s".into(), vec![Command::ToggleSweep]);
-    kb.insert("Ctrl+l".into(), vec![Command::ToggleDynLength]);
-    kb.insert(
-      "Shift+Plus".into(),
-      vec![Command::ChangeScaleMode(Adjustment::Increase)],
-    );
-    kb.insert(
-      "Shift+Underscore".into(),
-      vec![Command::ChangeScaleMode(Adjustment::Decrease)],
-    );
-    kb.insert(
-      "Equal".into(),
-      vec![Command::ChangeRootNote(Adjustment::Increase)],
-    );
-    kb.insert(
-      "Minus".into(),
-      vec![Command::ChangeRootNote(Adjustment::Decrease)],
-    );
-    kb
-  }
-
-  fn parse_key(key: &str) -> Event {
-    match key {
-      "Enter" => Event::Key(Key::Enter),
-      "Space" => Event::Char(" ".chars().next().unwrap()),
-      "Tab" => Event::Key(Key::Tab),
-      "Backspace" => Event::Key(Key::Backspace),
-      "Esc" => Event::Key(Key::Esc),
-      "Left" => Event::Key(Key::Left),
-      "Right" => Event::Key(Key::Right),
-      "Up" => Event::Key(Key::Up),
-      "Down" => Event::Key(Key::Down),
-      "Ins" => Event::Key(Key::Ins),
-      "Del" => Event::Key(Key::Del),
-      "Home" => Event::Key(Key::Home),
-      "End" => Event::Key(Key::End),
-      "PageUp" => Event::Key(Key::PageUp),
-      "PageDown" => Event::Key(Key::PageDown),
-      "PauseBreak" => Event::Key(Key::PauseBreak),
-      "NumpadCenter" => Event::Key(Key::NumpadCenter),
-      "Plus" => Event::Char('+'),
-      "Underscore" => Event::Char('_'),
-      "Equal" => Event::Char('='),
-      "Minus" => Event::Char('-'),
-      "F0" => Event::Key(Key::F0),
-      "F1" => Event::Key(Key::F1),
-      "F2" => Event::Key(Key::F2),
-      "F3" => Event::Key(Key::F3),
-      "F4" => Event::Key(Key::F4),
-      "F5" => Event::Key(Key::F5),
-      "F6" => Event::Key(Key::F6),
-      "F7" => Event::Key(Key::F7),
-      "F8" => Event::Key(Key::F8),
-      "F9" => Event::Key(Key::F9),
-      "F10" => Event::Key(Key::F10),
-      "F11" => Event::Key(Key::F11),
-      "F12" => Event::Key(Key::F12),
-      s => Event::Char(s.chars().next().unwrap()),
-    }
-  }
-
-  fn parse_keybinding(kb: &str) -> Option<cursive::event::Event> {
-    let mut split = kb.split('+');
-    if kb != "+" && split.clone().count() == 2 {
-      let modifier = split.next().unwrap();
-      let key = split.next().unwrap();
-      let parsed = Self::parse_key(key);
-      if let Event::Key(parsed) = parsed {
-        match modifier {
-          "Shift" => Some(Event::Shift(parsed)),
-          "Alt" => Some(Event::Alt(parsed)),
-          "Ctrl" => Some(Event::Ctrl(parsed)),
-          _ => None,
-        }
-      } else if let Event::Char(parsed) = parsed {
-        match modifier {
-          "Shift" => Some(Event::Char(parsed.to_uppercase().next().unwrap())),
-          "Alt" => Some(Event::AltChar(parsed)),
-          "Ctrl" => Some(Event::CtrlChar(parsed)),
-          _ => None,
-        }
-      } else {
-        None
-      }
-    } else {
-      Some(Self::parse_key(kb))
     }
   }
 }

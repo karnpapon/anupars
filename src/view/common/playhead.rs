@@ -5,11 +5,13 @@ use std::thread;
 
 use cursive::{views::Canvas, XY};
 
+use crate::core::tonal::scale;
 use crate::core::{consts, engine::regex::Match, io::midi};
 
 use super::grid_editor::GridEditor;
 use super::playhead_handler;
 use super::playhead_handler::PlayheadArea;
+use crate::core::command::types;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Direction {
@@ -31,11 +33,11 @@ pub enum Message {
   Scale((i32, i32)),
   SetMatcher(Option<HashMap<usize, Match>>),
   SetGridSize(usize, usize),
-  SetScaleModeLeft(crate::core::tonal::scale::ScaleMode),
-  SetScaleModeTop(crate::core::tonal::scale::ScaleMode),
-  SetScaleRootTop(crate::core::tonal::scale::ScaleRoot),
-  CycleScaleRootTop(crate::core::command::command::Adjustment),
-  CycleScaleMode(crate::core::command::command::Adjustment),
+  SetScaleModeLeft(scale::ScaleMode),
+  SetScaleModeTop(scale::ScaleMode),
+  SetScaleRootTop(scale::ScaleRoot),
+  CycleScaleRootTop(types::Adjustment),
+  CycleScaleMode(types::Adjustment),
   ToggleAccumulationMode(),
   ToggleForwardMode(),
   ToggleReverseMode(),

@@ -1,3 +1,3 @@
-#[allow(clippy::module_inception)]
-pub mod command;
-pub mod command_handler;
+pub mod binding;
+pub mod register;
+pub mod types;

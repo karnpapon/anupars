@@ -31,6 +31,8 @@ use cursive::views::TextView;
 use cursive::Cursive;
 use cursive::With;
 
+use crate::core::io::midi;
+
 use super::grid_editor::GridEditor;
 use crate::core::{consts, engine::disspress};
 
@@ -140,8 +142,8 @@ impl Menubar {
       .leaf("Release All", move |s| {
         s.reset_default_callbacks();
         // Clear MIDI config and stop all notes
-        let _ = midi_tx_reset.send(crate::core::io::midi::Message::ClearMsgConfig());
-        let _ = midi_tx_reset.send(crate::core::io::midi::Message::Panic());
+        let _ = midi_tx_reset.send(midi::Message::ClearMsgConfig());
+        let _ = midi_tx_reset.send(midi::Message::Panic());
       })
       .leaf("Clear Queue", |s| {
         s.call_on_name(
@@ -179,7 +181,7 @@ fn build_midi_menu(
         let name_clone = name.clone();
         tree.add_item(menu::Item::leaf(format!("{}: {}", idx, name), move |s| {
           // Send message to switch MIDI device
-          if let Err(e) = midi_tx_clone.send(crate::core::io::midi::Message::SwitchDevice(idx)) {
+          if let Err(e) = midi_tx_clone.send(midi::Message::SwitchDevice(idx)) {
             s.add_layer(Dialog::info(format!("Failed to switch device: {}", e)));
           } else {
             // Update the MIDI status display
@@ -202,15 +204,15 @@ fn build_osc_menu() -> cursive::menu::Tree {
 
 fn toggle_clock_out(
   siv: &mut Cursive,
-  midi_tx: &Sender<crate::core::io::midi::Message>,
+  midi_tx: &Sender<midi::Message>,
   devices: &[(String, usize)],
-  menu_midi_tx: &Sender<crate::core::io::midi::Message>,
+  menu_midi_tx: &Sender<midi::Message>,
 ) {
   let current = consts::CLOCK_ENABLED.load(Ordering::Relaxed);
   let new_state = !current;
   consts::CLOCK_ENABLED.store(new_state, Ordering::Relaxed);
 
-  let _ = midi_tx.send(crate::core::io::midi::Message::EnableClock(new_state));
+  let _ = midi_tx.send(midi::Message::EnableClock(new_state));
 
   // Rebuild menubar with updated status
   let menu_app = Menubar::build_menu_app(devices, menu_midi_tx.clone());

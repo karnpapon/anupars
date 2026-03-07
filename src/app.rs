@@ -1,6 +1,6 @@
 use std::fmt;
 
-use crate::core::command::command_handler::CommandManager;
+use crate::core::command::register::CommandManager;
 use crate::core::consts;
 use crate::core::engine::regex::RegExpHandler;
 use crate::core::io::midi;

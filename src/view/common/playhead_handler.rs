@@ -17,7 +17,7 @@ use cursive::Vec2;
 use cursive::XY;
 
 use crate::app::AppMode;
-use crate::core::command::command;
+use crate::core::command::types;
 use crate::core::playhead::midi::MidiTriggerHandler;
 use crate::core::playhead::movement::Movement;
 use crate::core::playhead::position::PositionCalculator;
@@ -113,8 +113,8 @@ pub enum Message {
   ToggleDrainQueueMode(cursive::CbSink),
   ToggleSweepMode(cursive::CbSink),
   ToggleDynLengthMode(cursive::CbSink),
-  CycleScaleRootTop(cursive::CbSink, command::Adjustment),
-  CycleScaleMode(cursive::CbSink, command::Adjustment),
+  CycleScaleRootTop(cursive::CbSink, types::Adjustment),
+  CycleScaleMode(cursive::CbSink, types::Adjustment),
   SetTempo(usize),
   SetRatio((usize, usize), cursive::CbSink),
   ClearQueue(cursive::CbSink),
@@ -1010,7 +1010,7 @@ impl PlayheadArea {
       .unwrap();
   }
 
-  pub fn cycle_scale_root(&self, cb_sink: cursive::CbSink, dir: command::Adjustment) {
+  pub fn cycle_scale_root(&self, cb_sink: cursive::CbSink, dir: types::Adjustment) {
     let mut root = self.music.scale_root_top.lock().unwrap();
     *root = root.cycle(dir);
     let new_root = *root;
@@ -1029,7 +1029,7 @@ impl PlayheadArea {
       .unwrap();
   }
 
-  pub fn cycle_scale_mode(&self, cb_sink: cursive::CbSink, dir: command::Adjustment) {
+  pub fn cycle_scale_mode(&self, cb_sink: cursive::CbSink, dir: types::Adjustment) {
     let mut mode = self.music.scale_mode_top.lock().unwrap();
     *mode = mode.cycle(dir);
     let new_mode = *mode;

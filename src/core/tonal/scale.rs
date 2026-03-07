@@ -1,3 +1,4 @@
+use crate::core::command::types;
 use serde::{Deserialize, Serialize};
 
 /// Musical scale modes and their interval patterns
@@ -110,12 +111,12 @@ impl ScaleRoot {
   }
 
   /// Cycle to the next or previous root note based on adjustment
-  pub fn cycle(&self, adjustment: crate::core::command::command::Adjustment) -> ScaleRoot {
+  pub fn cycle(&self, adjustment: types::Adjustment) -> ScaleRoot {
     let all = Self::all();
     let idx = all.iter().position(|&r| r == *self).unwrap_or(0);
     match adjustment {
-      crate::core::command::command::Adjustment::Increase => all[(idx + 1) % all.len()],
-      crate::core::command::command::Adjustment::Decrease => all[(idx + all.len() - 1) % all.len()],
+      types::Adjustment::Increase => all[(idx + 1) % all.len()],
+      types::Adjustment::Decrease => all[(idx + all.len() - 1) % all.len()],
     }
   }
 }
@@ -227,12 +228,12 @@ impl ScaleMode {
     note_index
   }
 
-  pub fn cycle(&self, adjustment: crate::core::command::command::Adjustment) -> ScaleMode {
+  pub fn cycle(&self, adjustment: types::Adjustment) -> ScaleMode {
     let all = Self::all();
     let idx = all.iter().position(|&m| m == *self).unwrap_or(0);
     match adjustment {
-      crate::core::command::command::Adjustment::Increase => all[(idx + 1) % all.len()],
-      crate::core::command::command::Adjustment::Decrease => all[(idx + all.len() - 1) % all.len()],
+      types::Adjustment::Increase => all[(idx + 1) % all.len()],
+      types::Adjustment::Decrease => all[(idx + all.len() - 1) % all.len()],
     }
   }
 
