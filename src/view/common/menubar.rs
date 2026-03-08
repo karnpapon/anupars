@@ -32,6 +32,7 @@ use cursive::Cursive;
 use cursive::With;
 
 use crate::core::io::midi;
+use crate::core::tonal::scale;
 
 use super::grid_editor::GridEditor;
 use crate::core::{consts, engine::disspress};
@@ -105,10 +106,7 @@ impl Menubar {
   //     .set_visible(show);
   // }
 
-  pub fn build_menu_app(
-    midi_devices: &[(String, usize)],
-    midi_tx: Sender<crate::core::io::midi::Message>,
-  ) -> Tree {
+  pub fn build_menu_app(midi_devices: &[(String, usize)], midi_tx: Sender<midi::Message>) -> Tree {
     let midi_tx_reset = midi_tx.clone();
     let midi_tx_clock = midi_tx.clone();
 
@@ -170,7 +168,7 @@ impl Menubar {
 
 fn build_midi_menu(
   devices: Vec<(String, usize)>,
-  midi_tx: Sender<crate::core::io::midi::Message>,
+  midi_tx: Sender<midi::Message>,
 ) -> cursive::menu::Tree {
   menu::Tree::new().with(|tree| {
     if devices.is_empty() {
@@ -233,10 +231,8 @@ fn toggle_clock_out(
 // ------------------------------------------------------------
 
 fn build_scale_menu_left() -> cursive::menu::Tree {
-  use crate::core::tonal::scale::ScaleMode;
-
   menu::Tree::new().with(|tree| {
-    for scale in ScaleMode::all() {
+    for scale in scale::ScaleMode::all() {
       let scale_clone = *scale;
       tree.add_item(menu::Item::leaf(scale.name(), move |s| {
         s.call_on_name(
@@ -255,10 +251,8 @@ fn build_scale_menu_left() -> cursive::menu::Tree {
 }
 
 fn build_scale_menu_top() -> cursive::menu::Tree {
-  use crate::core::tonal::scale::ScaleMode;
-
   menu::Tree::new().with(|tree| {
-    for scale in ScaleMode::all() {
+    for scale in scale::ScaleMode::all() {
       let scale_clone = *scale;
       tree.add_item(menu::Item::leaf(scale.name(), move |s| {
         s.call_on_name(
@@ -277,10 +271,8 @@ fn build_scale_menu_top() -> cursive::menu::Tree {
 }
 
 fn build_scale_root_menu_top() -> cursive::menu::Tree {
-  use crate::core::tonal::scale::ScaleRoot;
-
   menu::Tree::new().with(|tree| {
-    for root in ScaleRoot::all() {
+    for root in scale::ScaleRoot::all() {
       let root_clone = *root;
       tree.add_item(menu::Item::leaf(root.name(), move |s| {
         s.call_on_name(

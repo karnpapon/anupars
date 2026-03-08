@@ -23,6 +23,7 @@ use ringbuffer::RingBuffer;
 
 use crate::core::playhead::queue::EVENT_OPERATORS;
 use crate::core::playhead::queue::QUEUE_OPERATORS;
+use crate::core::tonal::scale;
 use crate::core::{consts, playhead::queue::PendingJumpPosition};
 use crate::view::common::playhead_handler::PlayheadUI;
 use crate::view::common::printer::Matrix;
@@ -43,9 +44,9 @@ pub struct GridEditor {
   pub text_contents: Option<String>,
   pub playhead_ui: PlayheadUI,
   pub show_keyboard: bool,
-  pub scale_mode_left: crate::core::tonal::scale::ScaleMode,
-  pub scale_mode_top: crate::core::tonal::scale::ScaleMode,
-  pub scale_root_top: crate::core::tonal::scale::ScaleRoot,
+  pub scale_mode_left: scale::ScaleMode,
+  pub scale_mode_top: scale::ScaleMode,
+  pub scale_root_top: scale::ScaleRoot,
   pub arpeggiator_mode: bool,
   pub accumulation_mode: bool,
   pub event_operator_mode: bool,
@@ -64,9 +65,9 @@ impl GridEditor {
       text_contents: None,
       playhead_ui: PlayheadUI::new(),
       show_keyboard: true,
-      scale_mode_left: crate::core::tonal::scale::ScaleMode::default(),
-      scale_mode_top: crate::core::tonal::scale::ScaleMode::default(),
-      scale_root_top: crate::core::tonal::scale::ScaleRoot::default(),
+      scale_mode_left: scale::ScaleMode::default(),
+      scale_mode_top: scale::ScaleMode::default(),
+      scale_root_top: scale::ScaleRoot::default(),
       arpeggiator_mode: false,
       accumulation_mode: false,
       event_operator_mode: false,

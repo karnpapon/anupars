@@ -7,6 +7,7 @@ use super::program::Program;
 use crate::app::UserData;
 use crate::core::consts;
 use crate::core::engine::regex;
+use crate::core::playhead::tilt;
 use crate::core::utils;
 use crate::view::common::grid_editor::GridEditor;
 use crate::view::microcontroller::console::RegexFlag;
@@ -164,8 +165,7 @@ impl TopSection {
       )
       .child(
         "TLT:",
-        TextView::new(crate::core::playhead::tilt::TiltMode::default().print_tilts())
-          .with_name(consts::tilt_unit_view),
+        TextView::new(tilt::TiltMode::default().print_tilts()).with_name(consts::tilt_unit_view),
       )
       // .child(
       //   "OPQ:",

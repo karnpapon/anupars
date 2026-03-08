@@ -23,6 +23,7 @@ use super::program::Program;
 use crate::core::consts;
 use crate::core::io::midi::{self, MidiMsg};
 use crate::core::parser::{self};
+use crate::core::playhead::tilt;
 use crate::core::utils;
 use crate::view::common::grid_editor::GridEditor;
 use cursive::theme::Style;
@@ -170,8 +171,7 @@ impl Console {
       )
       .child(
         "TLT:",
-        TextView::new(crate::core::playhead::tilt::TiltMode::default().print_tilts())
-          .with_name(consts::tilt_unit_view),
+        TextView::new(tilt::TiltMode::default().print_tilts()).with_name(consts::tilt_unit_view),
       )
       // .child(
       //   "MIDI:",
