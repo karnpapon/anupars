@@ -63,6 +63,13 @@ anupars (อนุภา(ส), meaning "tiny following light" in Thai), a Rust-b
   - `e`: Event Operator, enables event operator triggering from keyboard.
   - `s`: Sweep, sweeps through positions across the playhead range.
 
+- **Sweep Tilt (TLT)**
+Controls the angle of the sweep crosshair. **this mode should be used with "Sweep" mode**, it moves like a "Bishop" movement in chess. Each triggered cell fires on the MIDI channel matching its visual column band
+Cycles through three modes displayed in the status bar:
+    - `|` Vertical (default): crosshair sweeps straight down, same column for every row.
+    - `\` DiagDown: crosshair shifts one column right per row below the playhead, left per row above (like a `\` diagonal).
+    - `/` DiagUp: crosshair shifts one column left per row below the playhead, right per row above (like a `/` diagonal).
+
 - **Scale Selection**
   - Scale root selectable across all 12 chromatic pitches (C–B).
 
@@ -164,6 +171,7 @@ it comprised of
 | `Ctrl+e` | Toggle Event Operator | Enable/disable event operators |
 | `Ctrl+n` | Toggle Drain Queue | Enable/disable queue draining |
 | `Ctrl+s` | Toggle Sweep | Enable/disable sweep mode |
+| `Ctrl+t` | Cycle Tilt (TLT) | Cycle sweep crosshair angle: `|` → `/` → `\` |
 | `Ctrl+l` | Toggle Dynamic Length | Enable/disable dynamic length mode |
 
 ## Tempo & Timing
