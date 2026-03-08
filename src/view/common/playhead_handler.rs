@@ -27,6 +27,7 @@ use crate::core::playhead::queue::QueueItem;
 use crate::core::playhead::queue::QueueManager;
 use crate::core::playhead::queue::QueueOperator;
 use crate::core::playhead::queue::QUEUE_OPERATORS;
+use crate::core::playhead::tilt::TiltMode;
 use crate::core::tonal::scale;
 
 use crate::core::engine::regex;
@@ -66,6 +67,7 @@ pub struct PlayheadUI {
   pub arpeggiator_mode: bool,
   pub accumulation_mode: bool,
   pub sweep_mode: bool,
+  pub tilt_mode: TiltMode,
   pub queue_manager: Arc<QueueManager>,
   pub grid_v_splits: usize,
   pub grid_h_splits: usize,
@@ -82,6 +84,7 @@ impl PlayheadUI {
       arpeggiator_mode: false,
       accumulation_mode: false,
       sweep_mode: false,
+      tilt_mode: TiltMode::default(),
       queue_manager: Arc::new(QueueManager::new()),
       grid_v_splits: 1,
       grid_h_splits: 1,
@@ -119,6 +122,7 @@ pub enum Message {
   SetRatio((usize, usize), cursive::CbSink),
   ClearQueue(cursive::CbSink),
   SetGridSplits(usize, usize),
+  CycleTiltMode(cursive::CbSink),
 }
 
 /// Grid and layout state shared across playhead subsystems.
@@ -230,6 +234,7 @@ pub struct PlayheadArea {
   // Accumulation mode state
   accumulation_counter: Arc<Mutex<usize>>,
   movement: Arc<Mutex<Movement>>,
+  tilt_mode: Arc<Mutex<TiltMode>>,
 
   // Threading/sync state
   pub ui_update_queue: Arc<Mutex<VecDeque<UIUpdate>>>,
@@ -249,6 +254,8 @@ impl PlayheadArea {
     let modes = ModeFlags::new();
     let prev_active_pos = Arc::new(Mutex::new(Vec2::zero()));
     let ratchet_generation = Arc::new(AtomicUsize::new(0));
+    let pos = Arc::new(Mutex::new(Vec2::zero()));
+    let tilt_mode = Arc::new(Mutex::new(TiltMode::default()));
 
     // Create MIDI handler with shared state
     let midi_handler = Arc::new(MidiTriggerHandler::new(
@@ -269,10 +276,12 @@ impl PlayheadArea {
       Arc::clone(&modes.sweep_mode),
       Arc::clone(&modes.dyn_length_mode),
       Arc::clone(&modes.arpeggiator_mode),
+      Arc::clone(&tilt_mode),
+      Arc::clone(&pos),
     ));
 
     PlayheadArea {
-      pos: Arc::new(Mutex::new(Vec2::zero())),
+      pos,
       area: Arc::new(Mutex::new(Rect::from_point(Vec2::zero()))),
       drag_start_x: AtomicUsize::new(0),
       drag_start_y: AtomicUsize::new(0),
@@ -284,6 +293,7 @@ impl PlayheadArea {
       regex_indexes: Arc::clone(&position_calc.regex_indexes),
       text_matcher: Arc::clone(&position_calc.text_matcher),
       movement: Arc::clone(&position_calc.movement),
+      tilt_mode,
       // midi_tx,
       queue_manager: Arc::new(QueueManager::new()),
       position_calc,
@@ -992,6 +1002,30 @@ impl PlayheadArea {
       .unwrap();
   }
 
+  pub fn cycle_tilt_mode(&self, cb_sink: cursive::CbSink) {
+    let mut tilt = self.tilt_mode.lock().unwrap();
+    *tilt = tilt.cycle_next();
+    let new_tilt = *tilt;
+    drop(tilt);
+
+    let tilt_status = new_tilt.print_tilts();
+
+    cb_sink
+      .send(Box::new(move |siv| {
+        siv.call_on_name(
+          consts::canvas_editor_section_view,
+          |canvas: &mut Canvas<GridEditor>| {
+            let editor = canvas.state_mut();
+            editor.playhead_ui.tilt_mode = new_tilt;
+          },
+        );
+        siv.call_on_name(consts::tilt_unit_view, |view: &mut TextView| {
+          view.set_content(tilt_status);
+        });
+      }))
+      .unwrap();
+  }
+
   pub fn toggle_dyn_length_mode(&self, cb_sink: cursive::CbSink) {
     let is_dyn_length = !self.modes.dyn_length_mode.load(Ordering::Relaxed);
     self
@@ -1551,6 +1585,9 @@ impl PlayheadArea {
           }
           Message::SetGridSplits(v, h) => {
             self.handle_set_grid_splits(v, h);
+          }
+          Message::CycleTiltMode(cb_sink) => {
+            self.cycle_tilt_mode(cb_sink);
           }
         }
       }

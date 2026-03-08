@@ -162,6 +162,11 @@ impl TopSection {
         "CHN:",
         TextView::new("1/1").with_name(consts::chn_status_unit_view),
       )
+      .child(
+        "TLT:",
+        TextView::new(crate::core::playhead::tilt::TiltMode::default().print_tilts())
+          .with_name(consts::tilt_unit_view),
+      )
       // .child(
       //   "OPQ:",
       //   TextView::new("[]").with_name(consts::op_queue_status_unit_view),

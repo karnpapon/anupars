@@ -159,6 +159,7 @@ impl<T: Printable + Copy> Matrix<T> {
       playhead_area,
       actived_pos,
       sweep_mode,
+      tilt_mode,
       grid_v_splits,
       grid_h_splits,
       ..
@@ -198,25 +199,56 @@ impl<T: Printable + Copy> Matrix<T> {
       None
     };
 
+    // Pre-compute tilt sweep metrics: playhead column/row and cell widths for per-row offset
+    let (playhead_col, playhead_row, col_w_tilt, row_h_tilt) = if v > 1 || h > 1 {
+      let col_w = (self.width / v).max(1);
+      let row_h = (self.height / h).max(1);
+      let pc = (playhead_pos.x / col_w).min(v.saturating_sub(1));
+      let pr = (playhead_pos.y / row_h).min(h.saturating_sub(1));
+      (pc, pr, col_w, row_h)
+    } else {
+      (0, 0, self.width.max(1), self.height.max(1))
+    };
+
     // Standard row-major order: iterate rows (y) then columns (x)
     for y in 0..self.height {
+      // Compute the tilt-adjusted sweep column for this row.
+      // Clamp row_idx to h-1 so remainder rows (when height % h != 0) stay in the last band.
+      let row_idx = (y / row_h_tilt).min(h.saturating_sub(1));
+      let tilt_col_idx = tilt_mode.sweep_col_for_row(playhead_col, playhead_row, row_idx, v, h);
+      // None means the diagonal is out of bounds for this row: no strip highlight
+      let (sweep_col_band_start, sweep_col_band_end, sweep_col_x) = match tilt_col_idx {
+        Some(col_idx) => {
+          let start = col_idx * col_w_tilt;
+          // Extend last column band to self.width (mirrors channel_bounds x1 logic)
+          let end = if col_idx + 1 >= v {
+            self.width
+          } else {
+            start + col_w_tilt
+          };
+          let sx = start + (active_absolute_pos.x % col_w_tilt.max(1));
+          (start, end, sx)
+        }
+        None => (0, 0, usize::MAX),
+      };
+
       for x in 0..self.width {
         let cell_index = x + y * self.width;
         let pos = (x, y);
         let is_in_playhead_area = playhead_area.contains(pos.into());
         let is_active_pos = active_absolute_pos.eq(&pos);
-        let is_on_crosshair_vertical = x == active_absolute_pos.x && !is_active_pos;
+        let is_on_crosshair_vertical = x == sweep_col_x && !is_active_pos;
 
         let is_in_active_channel = match channel_bounds {
           Some((x0, x1, y0, y1)) => x >= x0 && x < x1 && y >= y0 && y < y1,
           None => true,
         };
 
-        // Column-strip bounds (x only)
-        // shares the same vertical channels (e.g. ch2 + ch6 are same x-strip)
-        let is_in_active_col_strip = match channel_bounds {
-          Some((x0, x1, _, _)) => x >= x0 && x < x1,
-          None => true,
+        // Column-strip: tilt-adjusted per row so highlight band shifts with TLT
+        let is_in_active_col_strip = if v > 1 || h > 1 {
+          x >= sweep_col_band_start && x < sweep_col_band_end
+        } else {
+          true
         };
 
         let is_regex_match = text_matcher

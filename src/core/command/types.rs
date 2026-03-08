@@ -27,6 +27,7 @@ pub enum Command {
   ToggleDynLength,
   ChangeRootNote(Adjustment),
   ChangeScaleMode(Adjustment),
+  CycleTilt,
 }
 
 impl fmt::Display for Command {
@@ -50,6 +51,7 @@ impl fmt::Display for Command {
       | Self::ToggleDynLength
       | Self::ChangeRootNote(_)
       | Self::ChangeScaleMode(_)
+      | Self::CycleTilt
       | Self::ToggleRandom => vec![],
     };
     repr_tokens.append(&mut extras_args);
@@ -78,6 +80,7 @@ impl Command {
       Self::ToggleDynLength => "toggledynlength",
       Self::ChangeRootNote(_) => "changerootnote",
       Self::ChangeScaleMode(_) => "changescale",
+      Self::CycleTilt => "cycletilt",
     }
   }
 }

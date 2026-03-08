@@ -6,6 +6,7 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 
+use crate::core::playhead::tilt::TiltMode;
 use crate::core::{consts, engine::regex::Match, io::midi, tonal::scale};
 
 // ============================================================================
@@ -64,6 +65,8 @@ pub struct MidiTriggerHandler {
   pub sweep_mode: Arc<AtomicBool>,
   pub dyn_length_mode: Arc<AtomicBool>,
   pub arpeggiator_mode: Arc<AtomicBool>,
+  pub tilt_mode: Arc<Mutex<TiltMode>>,
+  pub playhead_pos: Arc<Mutex<Vec2>>,
 }
 
 impl MidiTriggerHandler {
@@ -86,6 +89,8 @@ impl MidiTriggerHandler {
     sweep_mode: Arc<AtomicBool>,
     dyn_length_mode: Arc<AtomicBool>,
     arpeggiator_mode: Arc<AtomicBool>,
+    tilt_mode: Arc<Mutex<TiltMode>>,
+    playhead_pos: Arc<Mutex<Vec2>>,
   ) -> Self {
     MidiTriggerHandler {
       midi_tx,
@@ -105,6 +110,8 @@ impl MidiTriggerHandler {
       sweep_mode,
       dyn_length_mode,
       arpeggiator_mode,
+      tilt_mode,
+      playhead_pos,
     }
   }
 
@@ -164,7 +171,7 @@ impl MidiTriggerHandler {
       }));
   }
 
-  /// Trigger MIDI for sweep mode (vertical crosshair)
+  /// Trigger MIDI for sweep mode (vertical crosshair, tilt-adjusted per row)
   pub fn trigger_midi_if_matched_sweep(
     &self,
     curr_running_playhead: usize,
@@ -180,15 +187,37 @@ impl MidiTriggerHandler {
     let current_tempo = self.tempo.load(Ordering::Relaxed);
     let x_scale_mode = *self.scale_mode_top.lock().unwrap();
 
-    // Collect all matched y positions for the current x
-    let matched_y_positions: Vec<usize> = {
+    // Precompute tilt sweep geometry (mirrors printer.rs logic)
+    let tilt_mode = *self.tilt_mode.lock().unwrap();
+    let playhead_pos = *self.playhead_pos.lock().unwrap();
+    let v = self.grid_v_splits.load(Ordering::Relaxed).max(1);
+    let h = self.grid_h_splits.load(Ordering::Relaxed).max(1);
+    let col_w = (grid_width / v).max(1);
+    let row_h = (grid_height / h).max(1);
+    let playhead_col = (playhead_pos.x / col_w).min(v.saturating_sub(1));
+    let playhead_row = (playhead_pos.y / row_h).min(h.saturating_sub(1));
+    let x_offset_in_band = abs_x % col_w.max(1);
+
+    // Collect matched (y, tilt_x) pairs — each row may have a different tilt-adjusted x
+    // and therefore a different MIDI channel, so we trigger once per matched cell.
+    let matched: Vec<(usize, usize)> = {
       let matcher = self.text_matcher.lock().unwrap();
       if let Some(ref m) = *matcher {
         (0..grid_height)
-          .filter(|&y| {
-            let crosshair_index = y * grid_width + abs_x;
+          .filter_map(|y| {
+            let row_idx = (y / row_h).min(h.saturating_sub(1));
+            let tilt_x =
+              match tilt_mode.sweep_col_for_row(playhead_col, playhead_row, row_idx, v, h) {
+                Some(col_idx) => col_idx * col_w + x_offset_in_band,
+                None => return None,
+              };
+            let crosshair_index = y * grid_width + tilt_x;
             // Skip current playhead position to avoid duplicate MIDI trigger
-            crosshair_index != curr_running_playhead && m.contains_key(&crosshair_index)
+            if crosshair_index != curr_running_playhead && m.contains_key(&crosshair_index) {
+              Some((y, tilt_x))
+            } else {
+              None
+            }
           })
           .collect()
       } else {
@@ -196,25 +225,24 @@ impl MidiTriggerHandler {
       }
     };
 
-    // If we have matched positions, send a single MIDI trigger with average velocity
-    if !matched_y_positions.is_empty() {
-      // Calculate average y position for velocity reference
-      let avg_y = matched_y_positions.iter().sum::<usize>() / matched_y_positions.len();
-      let default_length = 4;
-
+    // Send one TriggerWithPosition per matched cell so each uses the correct
+    // tilt-adjusted x_position → correct MIDI channel via calculate_channel.
+    let default_length = 4;
+    let scale_root_offset = self.scale_root_top.lock().unwrap().to_root_offset();
+    for (y, tilt_x) in matched {
       let _ = self
         .midi_tx
         .send(midi::Message::TriggerWithPosition(midi::TriggerParams {
-          y_position: avg_y,
+          y_position: y,
           grid_height,
-          x_position: abs_x,
+          x_position: tilt_x,
           grid_width,
           grid_v_splits: self.grid_v_splits.load(Ordering::Relaxed),
           grid_h_splits: self.grid_h_splits.load(Ordering::Relaxed),
           scale_mode: x_scale_mode,
-          scale_root_offset: self.scale_root_top.lock().unwrap().to_root_offset(),
+          scale_root_offset,
           bpm: current_tempo,
-          trigger_pos_y: avg_y,
+          trigger_pos_y: y,
           active_pos_y,
           distance_to_next: default_length,
           hold: false,

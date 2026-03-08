@@ -52,6 +52,7 @@ pub enum Message {
   SetRatio((usize, usize)),
   ClearQueue(),
   SetGridSplits(usize, usize),
+  CycleTiltMode(),
 }
 
 pub struct Playhead {
@@ -324,6 +325,12 @@ impl Playhead {
           Message::SetGridSplits(v, h) => {
             playhead_area_tx
               .send(playhead_handler::Message::SetGridSplits(v, h))
+              .unwrap();
+          }
+          Message::CycleTiltMode() => {
+            let cb_sink = self.cb_sink.clone();
+            playhead_area_tx
+              .send(playhead_handler::Message::CycleTiltMode(cb_sink))
               .unwrap();
           }
         }

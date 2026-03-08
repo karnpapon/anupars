@@ -242,6 +242,13 @@ impl CommandManager {
           .unwrap();
         Ok(None)
       }
+      Command::CycleTilt => {
+        self
+          .playhead_tx_cloned
+          .send(playhead::Message::CycleTiltMode())
+          .unwrap();
+        Ok(None)
+      }
       Command::ToggleDynLength => {
         self
           .playhead_tx_cloned
