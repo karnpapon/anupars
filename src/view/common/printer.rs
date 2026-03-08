@@ -164,23 +164,36 @@ impl<T: Printable + Copy> Matrix<T> {
       ..
     } = playhead_ui;
 
-    // Calculate absolute active position for crosshair
     let active_absolute_pos = playhead_pos.saturating_add(actived_pos);
 
     // Compute the active channel region for dimming
     let v = (*grid_v_splits).max(1);
     let h = (*grid_h_splits).max(1);
+
+    //            x0    x1
+    //            ↓     ↓
+    //  col:  0     1     2     3
+    //      ┌─────┬─────┬─────┬─────┐
+    //      │  1  │  2  │  3  │  4  │  row 0
+    // y0 → ├─────╔═════╗─────┬─────┤
+    //      │  5  ║  6  ║  7  │  8  │  row 1
+    // y1 → └─────╚═════╝─────┴─────┘
     let channel_bounds: Option<(usize, usize, usize, usize)> = if v > 1 || h > 1 {
       let col_w = (self.width / v).max(1);
       let row_h = (self.height / h).max(1);
       let curr_col = (playhead_pos.x / col_w).min(v.saturating_sub(1));
       let curr_row = (playhead_pos.y / row_h).min(h.saturating_sub(1));
-      Some((
-        curr_col * col_w,
-        ((curr_col + 1) * col_w).min(self.width),
-        curr_row * row_h,
-        ((curr_row + 1) * row_h).min(self.height),
-      ))
+      let x1 = if curr_col + 1 >= v {
+        self.width
+      } else {
+        (curr_col + 1) * col_w
+      };
+      let y1 = if curr_row + 1 >= h {
+        self.height
+      } else {
+        (curr_row + 1) * row_h
+      };
+      Some((curr_col * col_w, x1, curr_row * row_h, y1))
     } else {
       None
     };
