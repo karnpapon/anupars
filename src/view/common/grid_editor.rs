@@ -641,8 +641,13 @@ fn draw(canvas: &GridEditor, printer: &Printer) {
     vec![]
   };
 
+  let playhead_area = canvas.playhead_ui.playhead_area;
+
   for &sep_x in &sep_xs {
     for y in 0..canvas.grid.height {
+      if playhead_area.contains((sep_x, y).into()) {
+        continue;
+      }
       let ch = if sep_ys.contains(&y) { "┼" } else { "│" };
       grid_printer.with_style(sep_style, |printer| {
         printer.print((sep_x, y), ch);
@@ -652,6 +657,9 @@ fn draw(canvas: &GridEditor, printer: &Printer) {
 
   for &sep_y in &sep_ys {
     for x in 0..canvas.grid.width {
+      if playhead_area.contains((x, sep_y).into()) {
+        continue;
+      }
       let ch = if sep_xs.contains(&x) { "┼" } else { "─" };
       grid_printer.with_style(sep_style, |printer| {
         printer.print((x, sep_y), ch);
