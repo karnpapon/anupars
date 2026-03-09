@@ -8,6 +8,8 @@ use std::path::Path;
 use std::path::PathBuf;
 use std::sync::atomic::Ordering;
 use std::sync::mpsc::Sender;
+use std::sync::Mutex;
+use std::sync::OnceLock;
 
 use cursive::align::HAlign;
 use cursive::event::Event;
@@ -36,6 +38,11 @@ use crate::core::tonal::scale;
 
 use super::grid_editor::GridEditor;
 use crate::core::{consts, engine::disspress};
+
+type MidiMenuState = (Vec<(String, usize)>, Sender<midi::Message>);
+
+// Stored once at startup so any full-menubar rebuild can reconstruct "anupars".
+static MIDI_MENU_STATE: OnceLock<Mutex<MidiMenuState>> = OnceLock::new();
 
 #[derive(Clone, Copy)]
 pub struct Menubar {
@@ -107,6 +114,12 @@ impl Menubar {
   // }
 
   pub fn build_menu_app(midi_devices: &[(String, usize)], midi_tx: Sender<midi::Message>) -> Tree {
+    // Persist MIDI state for later full-menubar rebuilds.
+    let state =
+      MIDI_MENU_STATE.get_or_init(|| Mutex::new((midi_devices.to_vec(), midi_tx.clone())));
+    if let Ok(mut guard) = state.lock() {
+      *guard = (midi_devices.to_vec(), midi_tx.clone());
+    }
     let midi_tx_reset = midi_tx.clone();
     let midi_tx_clock = midi_tx.clone();
 
@@ -158,6 +171,11 @@ impl Menubar {
       .leaf("About", build_about_view)
   }
 
+  pub fn build_menu_view() -> Tree {
+    let label = focus_label();
+    menu::Tree::new().leaf(label, toggle_focus)
+  }
+
   pub fn build_menu_help() -> Tree {
     // menu::Tree::new().leaf("Docs [h]", |s| Self::show_doc_view(s, true))
     menu::Tree::new().leaf("Docs [h]", |s| s.add_layer(Self::build_doc_view()))
@@ -200,6 +218,57 @@ fn build_osc_menu() -> cursive::menu::Tree {
   })
 }
 
+fn focus_label() -> String {
+  use std::sync::atomic::Ordering;
+  let state = if consts::FOCUS_MODE.load(Ordering::Relaxed) {
+    " "
+  } else {
+    "X"
+  };
+  format!("Toggle Focus [{}]", state)
+}
+
+fn toggle_focus(siv: &mut Cursive) {
+  use std::sync::atomic::Ordering;
+  let new_state = !consts::FOCUS_MODE.load(Ordering::Relaxed);
+  consts::FOCUS_MODE.store(new_state, Ordering::Relaxed);
+
+  // Propagate to the canvas PlayheadUI
+  siv.call_on_name(
+    consts::canvas_editor_section_view,
+    |canvas: &mut Canvas<GridEditor>| {
+      canvas.state_mut().playhead_ui.focus_mode = new_state;
+    },
+  );
+
+  rebuild_menubar(siv);
+}
+
+fn rebuild_menubar(siv: &mut Cursive) {
+  let menu_view = Menubar::build_menu_view();
+  let menu_help = Menubar::build_menu_help();
+
+  siv.menubar().clear();
+
+  // Clone the MIDI state while holding the lock, then drop it *before* calling
+  // build_menu_app which also locks MIDI_MENU_STATE and would otherwise deadlock.
+  let midi_state = MIDI_MENU_STATE
+    .get()
+    .and_then(|s| s.lock().ok().map(|g| (g.0.clone(), g.1.clone())));
+
+  if let Some((devices, midi_tx)) = midi_state {
+    let menu_app = Menubar::build_menu_app(&devices, midi_tx);
+    siv.menubar().add_subtree("anupars", menu_app);
+  }
+
+  siv
+    .menubar()
+    .add_subtree("view", menu_view)
+    .add_subtree("help", menu_help)
+    .add_delimiter()
+    .add_leaf("quit", |s| s.quit());
+}
+
 fn toggle_clock_out(
   siv: &mut Cursive,
   midi_tx: &Sender<midi::Message>,
@@ -212,17 +281,9 @@ fn toggle_clock_out(
 
   let _ = midi_tx.send(midi::Message::EnableClock(new_state));
 
-  // Rebuild menubar with updated status
-  let menu_app = Menubar::build_menu_app(devices, menu_midi_tx.clone());
-  let menu_help = Menubar::build_menu_help();
-
-  siv.menubar().clear();
-  siv
-    .menubar()
-    .add_subtree("anupars", menu_app)
-    .add_subtree("help", menu_help)
-    .add_delimiter()
-    .add_leaf("quit", |s| s.quit());
+  // Update the stored MIDI state so the clock label is fresh on next rebuild.
+  Menubar::build_menu_app(devices, menu_midi_tx.clone());
+  rebuild_menubar(siv);
 
   let state_text = if new_state { "ON" } else { "OFF" };
   siv.add_layer(Dialog::info(format!("MIDI Clock Output: {}", state_text)));

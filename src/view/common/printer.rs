@@ -162,6 +162,7 @@ impl<T: Printable + Copy> Matrix<T> {
       tilt_mode,
       grid_v_splits,
       grid_h_splits,
+      focus_mode,
       ..
     } = playhead_ui;
 
@@ -283,6 +284,22 @@ impl<T: Printable + Copy> Matrix<T> {
             pos,
             &SpannedString::styled(crosshair_char.0, crosshair_char.1),
           );
+        }
+
+        // Focus mode: dim cells outside the playhead area, but preserve the full
+        // vertical column strip (playhead x-range)
+        if *focus_mode && !is_in_playhead_area {
+          let in_playhead_x_range = x >= playhead_area.left() && x < playhead_area.right();
+          if !in_playhead_x_range {
+            let dim_char = self.get_display_char(x, y);
+            printer.print_styled(
+              pos,
+              &SpannedString::styled(
+                dim_char,
+                Style::from_color_style(ColorStyle::front(ColorType::rgb(50, 50, 50))),
+              ),
+            );
+          }
         }
 
         // Render playhead-specific overlays

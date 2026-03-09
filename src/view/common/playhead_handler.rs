@@ -71,6 +71,7 @@ pub struct PlayheadUI {
   pub queue_manager: Arc<QueueManager>,
   pub grid_v_splits: usize,
   pub grid_h_splits: usize,
+  pub focus_mode: bool,
 }
 
 impl PlayheadUI {
@@ -88,6 +89,7 @@ impl PlayheadUI {
       queue_manager: Arc::new(QueueManager::new()),
       grid_v_splits: 1,
       grid_h_splits: 1,
+      focus_mode: false,
     }
   }
 }

@@ -183,12 +183,14 @@ pub fn setup_ui(components: &mut Application) {
 
   let devices = components.midi.get_available_devices();
   let menu_app = Menubar::build_menu_app(&devices, midi_tx.clone());
+  let menu_view = Menubar::build_menu_view();
   let menu_help = Menubar::build_menu_help();
 
   components
     .cursive
     .menubar()
     .add_subtree("anupars", menu_app)
+    .add_subtree("view", menu_view)
     .add_subtree("help", menu_help)
     .add_delimiter()
     .add_leaf("quit", |s| s.quit());
