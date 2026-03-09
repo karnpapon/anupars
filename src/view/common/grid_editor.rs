@@ -54,6 +54,7 @@ pub struct GridEditor {
   pub sweep_mode: bool,
   pub grid_v_splits: usize,
   pub grid_h_splits: usize,
+  pub is_canvas_focused: bool,
 }
 
 impl GridEditor {
@@ -75,6 +76,7 @@ impl GridEditor {
       sweep_mode: false,
       grid_v_splits: 1,
       grid_h_splits: 1,
+      is_canvas_focused: false,
     }
   }
 
@@ -666,6 +668,19 @@ fn draw(canvas: &GridEditor, printer: &Printer) {
         printer.print((x, sep_y), ch);
       });
     }
+  }
+
+  // Canvas focus indicator: shown at top-left margin (row 2, free space)
+  if canvas.show_keyboard {
+    let (label, color) = if canvas.is_canvas_focused {
+      ("[  >  ]", ColorType::rgb(200, 200, 200))
+    } else {
+      ("[     ]", ColorType::rgb(40, 40, 40))
+    };
+    let style = Style::from(ColorStyle::front(color));
+    printer.with_style(style, |printer| {
+      printer.print((0, 2), label);
+    });
   }
 }
 

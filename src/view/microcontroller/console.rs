@@ -10,9 +10,10 @@ use cursive::views::NamedView;
 use cursive::views::PaddedView;
 use cursive::views::ResizedView;
 use cursive::views::TextView;
-use cursive_tabs::{Align, TabPanel};
+use cursive::views::ThemedView;
 use std::sync::Arc;
 
+use cursive::event::EventResult;
 use cursive::Vec2;
 use std::sync::mpsc::Sender;
 
@@ -26,7 +27,12 @@ use crate::core::parser::{self};
 use crate::core::playhead::tilt;
 use crate::core::utils;
 use crate::view::common::grid_editor::GridEditor;
+use cursive::theme::BorderStyle;
+use cursive::theme::Color;
+use cursive::theme::Palette;
+use cursive::theme::PaletteColor;
 use cursive::theme::Style;
+use cursive::theme::Theme;
 use cursive::view::{Nameable, Resizable};
 use cursive::Cursive;
 
@@ -69,10 +75,7 @@ impl Console {
     }
   }
 
-  pub fn build_main(
-    app: &mut Program,
-    regex_tx: Sender<regex::Message>,
-  ) -> NamedView<LinearLayout> {
+  pub fn build_main(app: &mut Program, regex_tx: Sender<regex::Message>) -> LinearLayout {
     let regex_tx_on_edit = regex_tx.clone();
     let regex_tx_on_submit = regex_tx.clone();
     let regex_input_unit_view = EditView::new()
@@ -211,31 +214,6 @@ impl Console {
           .child(DummyView.fixed_height(1)),
       )
       .child(DummyView.fixed_width(1))
-      .with_name(consts::control_section_view)
-
-    // FocusTracker::new(
-    //   Dialog::around(
-    //     LinearLayout::horizontal()
-    //       .child(input_controller_section_view.with_name(config::input_controller_section_view))
-    //       .child(status_controller_section_view.with_name(config::status_controller_section_view))
-    //       .child(
-    //         protocol_controller_section_view.with_name(config::protocol_controller_section_view),
-    //       ),
-    //   )
-    //   .title_position(cursive::align::HAlign::Right)
-    //   .with_name(config::control_section_view),
-    // )
-    // .on_focus(|this| {
-    //   this.get_mut().set_title(SpannedString::styled(
-    //     format!(" {} ", config::control_section_view),
-    //     Style::highlight(),
-    //   ));
-    //   EventResult::consumed()
-    // })
-    // .on_focus_lost(|this| {
-    //   this.get_mut().set_title("");
-    //   EventResult::consumed()
-    // })
   }
 
   fn build_welcome_msg() -> NamedView<TextView> {
@@ -357,28 +335,43 @@ impl Console {
     .with_name("midi_input")
   }
 
-  pub fn build_tab(app: &mut Program, regex_tx: Sender<regex::Message>) -> NamedView<TabPanel> {
-    let mut tab = TabPanel::new()
-      // .with_tab(Self::build_midi_input())
-      .with_tab(Self::build_main(app, regex_tx))
-      .with_bar_alignment(Align::End)
-      .with_name(consts::interactive_display_section_view);
-
-    tab.get_mut().add_tab_at(Self::build_welcome_msg(), 0);
-    tab
-      .get_mut()
-      .set_active_tab(consts::control_section_view)
-      .expect("View not found");
-
-    tab
+  pub fn build_tab(app: &mut Program, regex_tx: Sender<regex::Message>) -> LinearLayout {
+    Self::build_main(app, regex_tx)
   }
 
   pub fn build(
     app: &mut Program,
     regex_tx: Sender<regex::Message>,
-  ) -> ResizedView<FocusTracker<NamedView<TabPanel>>> {
-    let tab = Self::build_tab(app, regex_tx);
-    FocusTracker::new(tab).fixed_height(7)
+  ) -> ResizedView<FocusTracker<ThemedView<NamedView<Dialog>>>> {
+    let content = Self::build_main(app, regex_tx);
+    let dim_theme = || {
+      let mut p = Palette::terminal_default();
+      p[PaletteColor::Primary] = Color::Rgb(50, 50, 50);
+      Theme {
+        shadow: false,
+        borders: BorderStyle::Simple,
+        palette: p,
+      }
+    };
+    let normal_theme = || Theme {
+      shadow: false,
+      borders: BorderStyle::Simple,
+      palette: Palette::terminal_default(),
+    };
+    FocusTracker::new(ThemedView::new(
+      dim_theme(),
+      Dialog::around(ThemedView::new(normal_theme(), content))
+        .with_name(consts::control_section_view),
+    ))
+    .on_focus(move |this| {
+      this.set_theme(normal_theme());
+      EventResult::consumed()
+    })
+    .on_focus_lost(move |this| {
+      this.set_theme(dim_theme());
+      EventResult::consumed()
+    })
+    .fixed_height(7)
   }
 }
 fn input_submit_note(s: &mut Cursive, midi_msg: &[MidiMsg]) {
@@ -432,17 +425,10 @@ fn input_submit(siv: &mut Cursive, texts: &str, regex_tx: Sender<regex::Message>
 }
 
 fn input_edit(siv: &mut Cursive, texts: &str, _cursor: usize, regex_tx: Sender<regex::Message>) {
-  let mut display_view = siv.find_name::<TextView>(consts::display_view).unwrap();
-
   if texts.is_empty() {
-    display_view.set_content(utils::build_doc_string(&consts::APP_WELCOME_MSG));
     regex_tx.send(regex::Message::Clear).unwrap();
     return;
   }
-
-  let banner_text = texts.to_string();
-
-  display_view.set_content(banner_text);
 
   solve_regex(siv, texts, regex_tx);
 }

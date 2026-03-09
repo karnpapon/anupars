@@ -12,8 +12,12 @@ use crate::core::utils;
 use crate::view::common::grid_editor::GridEditor;
 use crate::view::microcontroller::console::RegexFlag;
 use cursive::event::EventResult;
+use cursive::theme::BorderStyle;
+use cursive::theme::Color;
+use cursive::theme::Palette;
+use cursive::theme::PaletteColor;
 use cursive::theme::Style;
-use cursive::utils::span::SpannedString;
+use cursive::theme::Theme;
 use cursive::view::{Nameable, Resizable};
 use cursive::views::Canvas;
 use cursive::views::Dialog;
@@ -23,6 +27,7 @@ use cursive::views::LinearLayout;
 use cursive::views::ListView;
 use cursive::views::NamedView;
 use cursive::views::TextView;
+use cursive::views::ThemedView;
 use cursive::Cursive;
 use cursive::Vec2;
 
@@ -58,7 +63,7 @@ impl TopSection {
   pub fn build(
     prog: &mut Program,
     regex_tx: Sender<regex::Message>,
-  ) -> FocusTracker<NamedView<Dialog>> {
+  ) -> FocusTracker<ThemedView<NamedView<Dialog>>> {
     let regex_tx_on_edit = regex_tx.clone();
     let regex_tx_on_submit = regex_tx.clone();
     let regex_input_unit_view = EditView::new()
@@ -177,27 +182,40 @@ impl TopSection {
       // )
       .full_width();
 
-    FocusTracker::new(
-      Dialog::around(
+    let dim_theme = || {
+      let mut p = Palette::terminal_default();
+      p[PaletteColor::Primary] = Color::Rgb(50, 50, 50);
+      Theme {
+        shadow: false,
+        borders: BorderStyle::Simple,
+        palette: p,
+      }
+    };
+    let normal_theme = || Theme {
+      shadow: false,
+      borders: BorderStyle::Simple,
+      palette: Palette::terminal_default(),
+    };
+
+    FocusTracker::new(ThemedView::new(
+      dim_theme(),
+      Dialog::around(ThemedView::new(
+        normal_theme(),
         LinearLayout::horizontal()
           .child(input_controller_section_view.with_name(consts::input_controller_section_view))
           .child(status_controller_section_view.with_name(consts::status_controller_section_view))
           .child(
             protocol_controller_section_view.with_name(consts::protocol_controller_section_view),
           ),
-      )
-      .title_position(cursive::align::HAlign::Right)
+      ))
       .with_name(consts::control_section_view),
-    )
-    .on_focus(|this| {
-      this.get_mut().set_title(SpannedString::styled(
-        format!(" {} ", consts::control_section_view),
-        Style::highlight(),
-      ));
+    ))
+    .on_focus(move |this| {
+      this.set_theme(normal_theme());
       EventResult::consumed()
     })
-    .on_focus_lost(|this| {
-      this.get_mut().set_title("");
+    .on_focus_lost(move |this| {
+      this.set_theme(dim_theme());
       EventResult::consumed()
     })
   }
@@ -239,10 +257,10 @@ fn input_submit(siv: &mut Cursive, texts: &str, regex_tx: Sender<regex::Message>
 }
 
 fn input_edit(siv: &mut Cursive, texts: &str, _cursor: usize, regex_tx: Sender<regex::Message>) {
-  let mut display_view = siv.find_name::<TextView>(consts::display_view).unwrap();
-
   if texts.is_empty() {
-    display_view.set_content(utils::build_doc_string(&consts::APP_WELCOME_MSG));
+    if let Some(mut display_view) = siv.find_name::<TextView>(consts::display_view) {
+      display_view.set_content(utils::build_doc_string(&consts::APP_WELCOME_MSG));
+    }
     regex_tx.send(regex::Message::Clear).unwrap();
     return;
   }
@@ -260,7 +278,9 @@ fn input_edit(siv: &mut Cursive, texts: &str, _cursor: usize, regex_tx: Sender<r
   #[cfg(not(feature = "desktop"))]
   let banner_text = texts.to_string();
 
-  display_view.set_content(banner_text);
+  if let Some(mut display_view) = siv.find_name::<TextView>(consts::display_view) {
+    display_view.set_content(banner_text);
+  }
 
   solve_regex(siv, texts, regex_tx);
 }

@@ -223,10 +223,10 @@ impl RegExpHandler {
               };
 
               if !res.is_empty() {
-                s.call_on_name(consts::display_view, |c: &mut TextView| {
-                  c.set_content(res.clone())
-                })
-                .unwrap();
+                // s.call_on_name(consts::display_view, |c: &mut TextView| {
+                //   c.set_content(res.clone())
+                // })
+                // .unwrap();
                 s.call_on_name(consts::regex_err_display_unit_view, |c: &mut TextView| {
                   c.set_content("pattern invalid!")
                 })

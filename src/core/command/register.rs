@@ -18,8 +18,11 @@ use crate::core::command::types::Adjustment;
 use crate::core::timing::metronome;
 use crate::core::{consts, utils};
 
+use crate::view::common::grid_editor::GridEditor;
 use cursive::event::Event;
-use cursive::views::{LinearLayout, TextView};
+use cursive::views::Canvas;
+use cursive::views::LinearLayout;
+use cursive::views::TextView;
 use cursive::Cursive;
 use log::error;
 use std::cell::RefCell;
@@ -89,20 +92,42 @@ impl CommandManager {
       }
       Command::ToggleInputRegexAndCanvas => {
         self.program.set_toggle_regex_input();
+        let is_canvas = !self.program.toggle_regex_input();
 
-        if !self.program.toggle_regex_input() {
-          let mut display_view = s.find_name::<TextView>(consts::display_view).unwrap();
-          display_view.set_content(utils::build_doc_string(&consts::APP_WELCOME_MSG));
+        #[cfg(feature = "desktop")]
+        let canvas_idx: usize = 3;
+        #[cfg(not(feature = "desktop"))]
+        let canvas_idx: usize = 2;
 
-          let mut interactive_display_section_view = s
+        if is_canvas {
+          // Switching focus TO canvas
+          if let Some(mut display_view) = s.find_name::<TextView>(consts::display_view) {
+            display_view.set_content(utils::build_doc_string(&consts::APP_WELCOME_MSG));
+          }
+
+          let mut main_layout = s
             .find_name::<LinearLayout>(consts::main_section_view)
             .unwrap();
-          let _ = interactive_display_section_view.set_focus_index(2); // microcontroller=2, desktop=3
+          let _ = main_layout.set_focus_index(canvas_idx);
+          drop(main_layout);
+
+          s.call_on_name(
+            consts::canvas_editor_section_view,
+            |canvas: &mut Canvas<GridEditor>| {
+              canvas.state_mut().is_canvas_focused = true;
+            },
+          );
         } else {
-          let mut interactive_display_section_view = s
+          s.call_on_name(
+            consts::canvas_editor_section_view,
+            |canvas: &mut Canvas<GridEditor>| {
+              canvas.state_mut().is_canvas_focused = false;
+            },
+          );
+          let mut main_layout = s
             .find_name::<LinearLayout>(consts::main_section_view)
             .unwrap();
-          let _ = interactive_display_section_view.set_focus_index(0);
+          let _ = main_layout.set_focus_index(0);
         }
 
         Ok(None)
