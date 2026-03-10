@@ -242,6 +242,9 @@ pub struct PlayheadArea {
   pub ui_update_queue: Arc<Mutex<VecDeque<UIUpdate>>>,
   step_index: Arc<Mutex<usize>>,
   ratchet_generation: Arc<AtomicUsize>,
+  /// Remaining fast-division steps within the current regex match span.
+  /// Non-zero → advance at 2× rate (halved divider) until it reaches 0.
+  match_span_remaining: Arc<AtomicUsize>,
   // #[cfg(debug_assertions)]
   // timing_stats: Arc<TimingStats>,
 }
@@ -304,6 +307,7 @@ impl PlayheadArea {
       ui_update_queue: Arc::new(Mutex::new(VecDeque::new())),
       step_index: Arc::new(Mutex::new(0)),
       ratchet_generation,
+      match_span_remaining: Arc::new(AtomicUsize::new(0)),
       // #[cfg(debug_assertions)]
       // timing_stats: Arc::new(TimingStats::new()),
     }
@@ -434,6 +438,27 @@ impl PlayheadArea {
     movement.print_movements()
   }
 
+  /// Returns true when the playhead is currently advancing in the forward direction.
+  /// For Pendulum, this depends on which half of the cycle we are in.
+  fn is_going_forward(&self) -> bool {
+    let movement = *self.movement.lock().unwrap();
+    match movement {
+      Movement::Forward | Movement::Random => true,
+      Movement::Reverse => false,
+      Movement::Pendulum => {
+        let step_idx = *self.step_index.lock().unwrap();
+        let area = self.area.lock().unwrap();
+        let total = area.width() * area.height();
+        drop(area);
+        if total <= 1 {
+          return true;
+        }
+        let cycle_len = total * 2 - 2;
+        (step_idx % cycle_len) < total
+      }
+    }
+  }
+
   pub fn switch_movement(&self, new_movement: Movement, cb_sink: cursive::CbSink) {
     let mut movement = self.movement.lock().unwrap();
     *movement = new_movement;
@@ -463,6 +488,7 @@ impl PlayheadArea {
   ) {
     self.ratchet_generation.fetch_add(1, Ordering::SeqCst);
     self.modes.is_ratcheting.store(false, Ordering::Relaxed);
+    self.match_span_remaining.store(0, Ordering::Relaxed);
     self.set_leap(direction, steps, canvas_size);
     self.reset_accumulation_counter();
 
@@ -1160,6 +1186,7 @@ impl PlayheadArea {
   ) {
     self.ratchet_generation.fetch_add(1, Ordering::SeqCst);
     self.modes.is_ratcheting.store(false, Ordering::Relaxed);
+    self.match_span_remaining.store(0, Ordering::Relaxed);
     self.set_current_pos(position, offset);
     self.reset_accumulation_counter();
 
@@ -1245,12 +1272,33 @@ impl PlayheadArea {
 
   fn handle_set_active_pos(&self, tick: usize, cb_sink: cursive::CbSink) {
     let ratio = self.music.ratio.lock().unwrap();
-    let divider = 16 / ratio.1;
+    // Clock fires 16 ticks/beat (64 per 4-beat bar). Divider table:
+    //   ratio.1=1  → every 64 ticks (DIV 1)    ratio.1=16 → every  4 ticks (DIV 16)
+    //   ratio.1=32 → every  2 ticks (DIV 32)   ratio.1=64 → every  1 tick  (DIV 64)
+    let base_divider = (64 / ratio.1).max(1);
     drop(ratio);
+
+    let going_forward = self.is_going_forward();
+    // Inside a match span: speed up when going forward (halve divider),
+    // slow down when going reverse (double divider).
+    let in_match_span = self.match_span_remaining.load(Ordering::Relaxed) > 0;
+    let divider = if in_match_span {
+      if going_forward {
+        (base_divider / 2).max(1)
+      } else {
+        base_divider * 2
+      }
+    } else {
+      base_divider
+    };
 
     let should_advance =
       tick.is_multiple_of(divider) && !self.modes.is_ratcheting.load(Ordering::Relaxed);
     if should_advance {
+      if in_match_span {
+        self.match_span_remaining.fetch_sub(1, Ordering::Relaxed);
+      }
+
       let mut step_idx = self.step_index.lock().unwrap();
       *step_idx += 1;
       self.set_actived_pos(*step_idx);
@@ -1268,11 +1316,42 @@ impl PlayheadArea {
 
       let mut did_jump = false;
 
+      // Capture the full Match for the current cell.
+      // Forward: trigger at the first cell (m.i == curr).
+      // Reverse/Pendulum-reverse: trigger at the last cell (m.i + m.l - 1 == curr).
       let matcher_guard = self.text_matcher.lock().unwrap();
-      let has_match = matcher_guard
-        .as_ref()
-        .is_some_and(|m| m.contains_key(&curr_running_playhead));
+      let match_at_pos = if going_forward {
+        matcher_guard
+          .as_ref()
+          .and_then(|m| m.get(&curr_running_playhead))
+          .cloned()
+      } else {
+        matcher_guard.as_ref().and_then(|m| {
+          m.values()
+            .find(|mv| curr_running_playhead == mv.i + mv.l.max(1) - 1)
+            .cloned()
+        })
+      };
       drop(matcher_guard);
+
+      let has_match = match_at_pos.is_some();
+      let match_len = match_at_pos.as_ref().map(|m| m.l).unwrap_or(1).max(1);
+
+      // Retrigger on every fast step inside a span (cells 2, 3, … of a match word)
+      if in_match_span && !has_match && !self.modes.is_ratcheting.load(Ordering::Relaxed) {
+        let playhead_pos = self.pos.lock().unwrap();
+        let playhead_pos_x = playhead_pos.x;
+        let playhead_pos_y = playhead_pos.y;
+        drop(playhead_pos);
+        self.midi_handler.trigger_midi_if_matched(
+          curr_running_playhead,
+          note_position,
+          scale_mode,
+          playhead_pos_x,
+          playhead_pos_y,
+          1,
+        );
+      }
 
       if has_match {
         if self.modes.accumulation_mode.load(Ordering::Relaxed) {
@@ -1287,13 +1366,13 @@ impl PlayheadArea {
           let playhead_pos_y = playhead_pos.y;
           drop(playhead_pos);
 
-          // Calculate distance based on mode settings
-          let distance_to_next = if !self.modes.dyn_length_mode.load(Ordering::Relaxed)
-            || self.modes.arpeggiator_mode.load(Ordering::Relaxed)
+          // Use match length as note duration; dyn_length_mode overrides with distance-based value
+          let distance_to_next = if self.modes.dyn_length_mode.load(Ordering::Relaxed)
+            && !self.modes.arpeggiator_mode.load(Ordering::Relaxed)
           {
-            4
-          } else {
             self.find_distance_to_next_trigger(curr_running_playhead)
+          } else {
+            match_len
           };
 
           self.midi_handler.trigger_midi_if_matched(
@@ -1307,6 +1386,12 @@ impl PlayheadArea {
         }
         if self.modes.hold_next_note.load(Ordering::Relaxed) {
           self.modes.hold_next_note.store(false, Ordering::Relaxed);
+        }
+        // Start fast-stepping for remaining cells in the match span
+        if match_len > 1 {
+          self
+            .match_span_remaining
+            .store(match_len - 1, Ordering::Relaxed);
         }
       }
 

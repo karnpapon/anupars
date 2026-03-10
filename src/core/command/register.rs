@@ -163,7 +163,7 @@ impl CommandManager {
         Ok(None)
       }
       Command::AdjustRatio(direction) => {
-        let ratios = [1, 2, 4, 8, 16];
+        let ratios = [1, 2, 4, 8, 16, 32, 64];
 
         let current_ratio = *self.temp_ratio.lock().unwrap();
         let current_denom = current_ratio.1;

@@ -120,11 +120,13 @@ impl Metronome {
             .unwrap();
 
           // Send MIDI clock ticks
-          // Internal: 4 ticks per quarter note (beat)
+          // Internal: 16 ticks per quarter note (beat)
           // MIDI Standard: 24 PPQN (pulses per quarter note)
-          // Solution: Send 6 MIDI clocks per tick (24/4 = 6)
+          // 24 / 16 = 1.5 per tick → alternate 2 clocks on even ticks, 1 on odd ticks
+          // Over 16 ticks: 8×2 + 8×1 = 24 ✓
           if let Some(ref midi_tx) = self.midi_tx {
-            for _ in 0..6 {
+            let midi_count = if tick % 2 == 0 { 2 } else { 1 };
+            for _ in 0..midi_count {
               let _ = midi_tx.send(midi::Message::ClockTick());
             }
           }
