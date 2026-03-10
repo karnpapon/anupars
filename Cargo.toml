@@ -1,6 +1,6 @@
 [package]
 name = "anupars"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 description = "a tiny backend-agnostic step-sequencer/live-coding environment that harnesses the power of RegEx."
 authors = ["karnpapon <karnpapon@gmail.com>"]
