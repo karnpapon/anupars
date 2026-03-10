@@ -15,6 +15,65 @@ anupars (อนุภา(ส), meaning "tiny following light" in Thai), a Rust-b
 
 <img src="ss2.png" />
 
+# Getting Started
+
+## Prerequisites
+
+- A MIDI-capable application or device connected
+
+## Option A — Download a pre-built binary (easiest)
+
+1. Go to the [Releases page](https://github.com/karnpapon/anupars/releases) and download the archive for your platform.
+2. Extract and make the binary executable:
+
+```sh
+# macOS / Linux
+chmod +x anupars
+./anupars
+```
+
+```powershell
+# Windows — just double-click anupars.exe, or run from PowerShell:
+.\anupars.exe
+```
+
+## Option B — Build from source
+
+Requires the [Rust toolchain](https://rustup.rs/) (stable).
+
+```sh
+git clone https://github.com/karnpapon/anupars.git
+cd anupars
+cargo run
+```
+
+## Quick Start
+
+1. **Open the menubar** with `Ctrl+b`, the menubar will be shown at the top of terminal screen.
+2. **Click "anupars" > "Generate Text"**, enter a length for the generated text, then hit `Enter`, this fills the grid editor with content (you can also provide your own text in `Insert File` below `Generate Text` menu).
+3. **Click `anupars` > `MIDI`** ensure you select the right MIDI output.
+4. **Type a regex**, the matching cells are highlighted on the grid in real time.
+5. **Press `Esc`** to switch between the regex input and the grid editor section (there's a little indicator to tell which section is currently selected).
+6. the playhead will be initialises at position (0, 0) top-left (since it initialized with len=1 so you might trying to look for it).
+7. **Move the playhead** with `h / j / k / l` (vim-style) or click directly on the canvas.
+8. **Scale playhead** with `Shift` modifier key, along with move key (`h / j / k / l`) or just mouse dragging.
+9. **Leap playhead** similar to how `Orca` leap, you can use modifier key `Alt` (or `Option` in osx) combine with move key and scale key.
+10. **Press `Space`** to start playback, the playhead steps through cells that match your pattern (try increasing beat division by `}` if you want to make it faster).
+11. **Change tempo** with `>` (faster) and `<` (slower).
+12. to enable mode use `Ctrl` along with available mode chars (`a`, `n`, `u`, `l`, `e`, `s` you can easily see theses being displayed on the top of the screen) let's start with `sweep` mode using `Ctrl+s` the active mode with change from lowercase to uppercase mode the crosshair appears and it'll trigger all the trigger point along y-axis (the velocity is based-on the trigger point distance to the playhead (in y-axis), the far from playhead, the lower velocity), all modes is togglable all default to off initially.
+13. the top spatial keyboard layout (inspired by Music Mouse - Laurie Spiegel) will hint you what note is being triggered, whre 
+  - `#` represent black-key  
+  - `━` represent white-key 
+  - long-vertical represent natural C 
+  - the number in long-vertical key is an octave
+14. try changing scale by `Shift+Plus` (scale up) or `Shift+Underscore` (scale down)
+15. changing root note by `=` (root note up) or `-` (down)
+
+
+That's all you need for a first session. Explore [Features](#features) and [Keybindings](#keybindings-reference) whenever you're ready to go deeper.
+
+---
+
 # Features
 
 - **Tiny Binary Size**
