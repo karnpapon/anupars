@@ -12,13 +12,10 @@ use crate::app::AppMode;
 use crate::core::consts;
 use crate::core::engine::regex;
 use crate::core::playhead::movement::Movement;
-use crate::view::common::grid::GridSection;
-use crate::view::common::playhead;
-use crate::view::microcontroller::console::RegexFlag;
+use crate::view::grid::GridSection;
+use crate::view::playhead;
 
-use super::console::RegexMode;
-use super::console::TopSection;
-use super::display::MiddleSection;
+use super::console::{Console, RegexFlag, RegexMode};
 
 #[derive(Clone)]
 pub struct Program {
@@ -28,19 +25,19 @@ pub struct Program {
   pub regex_flag_state: RadioGroup<RegexFlag>,
   pub input_regex: String,
   pub toggle_regex_input: Arc<RwLock<bool>>,
-  pub top_section: TopSection,
+  pub top_section: Console,
 }
 
 impl Program {
   pub fn new() -> Self {
     Program {
+      mode: AppMode::None,
+      movement: Movement::Forward,
       regex_mode_state: RadioGroup::new(),
       regex_flag_state: RadioGroup::new(),
       input_regex: String::new(),
       toggle_regex_input: Arc::new(RwLock::new(false)),
-      top_section: TopSection::new(),
-      mode: AppMode::None,
-      movement: Movement::Forward,
+      top_section: Console::new(),
     }
   }
 
@@ -49,14 +46,12 @@ impl Program {
     regex_tx: Sender<regex::Message>,
     playhead_tx: Sender<playhead::Message>,
   ) -> NamedView<LinearLayout> {
-    let top_section = TopSection::build(self, regex_tx);
-    let middle_section = MiddleSection::build();
+    let top_section = Console::build(self, regex_tx);
     let padding_section = DummyView::new().fixed_width(1);
     let canvas_section = GridSection::build(playhead_tx);
 
     LinearLayout::vertical()
       .child(top_section)
-      .child(middle_section)
       .child(padding_section)
       .child(canvas_section)
       .with_name(consts::main_section_view)

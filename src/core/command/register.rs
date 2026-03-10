@@ -4,13 +4,9 @@ use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 use crate::app::UserData;
-use crate::view::common::playhead;
+use crate::view::playhead;
 
-#[cfg(feature = "desktop")]
-use crate::view::desktop::program::Program;
-
-#[cfg(feature = "microcontroller")]
-use crate::view::microcontroller::program::Program;
+use crate::view::layout::Program;
 
 use super::types::Command;
 use crate::core::command::binding;
@@ -18,7 +14,7 @@ use crate::core::command::types::Adjustment;
 use crate::core::timing::metronome;
 use crate::core::{consts, utils};
 
-use crate::view::common::grid_editor::GridEditor;
+use crate::view::grid_editor::GridEditor;
 use cursive::event::Event;
 use cursive::views::Canvas;
 use cursive::views::LinearLayout;
@@ -94,9 +90,6 @@ impl CommandManager {
         self.program.set_toggle_regex_input();
         let is_canvas = !self.program.toggle_regex_input();
 
-        #[cfg(feature = "desktop")]
-        let canvas_idx: usize = 3;
-        #[cfg(not(feature = "desktop"))]
         let canvas_idx: usize = 2;
 
         if is_canvas {

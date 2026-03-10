@@ -8,7 +8,7 @@ use cursive::Vec2;
 use crate::core::consts;
 use crate::core::engine::regex::Match;
 use crate::core::playhead::tilt::TiltMode;
-use crate::view::common::playhead_handler::PlayheadUI;
+use crate::view::playhead_handler::PlayheadUI;
 use std::collections::HashMap;
 
 #[derive(Clone, Default, Debug)]

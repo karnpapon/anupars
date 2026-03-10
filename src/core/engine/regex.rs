@@ -8,7 +8,7 @@ use regex_lite::Regex;
 
 use serde::{Deserialize, Serialize};
 
-use crate::view::common::{grid_editor::GridEditor, playhead};
+use crate::view::{grid_editor::GridEditor, playhead};
 
 use crate::core::consts;
 

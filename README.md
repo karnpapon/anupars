@@ -232,15 +232,7 @@ it comprised of
 - Embedded: Raspberry Pi 4B (aarch64-unknown-linux-gnu)
 
 # Running
-
-- Desktop mode (default): `cargo run`
-- Microcontroller mode: `cargo run --no-default-features --features microcontroller`
+- `cargo run`
 
 # Compilation
-- Desktop mode (default): `cargo build --release`
-- Microcontroller mode: `cargo build --release --no-default-features --features microcontroller`
-
-
-# Credits
-
-- Typography: [Departure Mono](https://departuremono.com/)
+- `cargo build --release`

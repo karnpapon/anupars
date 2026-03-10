@@ -11,7 +11,7 @@ use num::ToPrimitive;
 
 use crate::core::consts;
 use crate::core::io::midi;
-use crate::view::common::playhead;
+use crate::view::playhead;
 
 use super::clock;
 

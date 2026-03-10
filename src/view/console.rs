@@ -20,13 +20,13 @@ use std::sync::mpsc::Sender;
 use crate::app::UserData;
 use crate::core::engine::regex;
 
-use super::program::Program;
+use super::layout::Program;
 use crate::core::consts;
 use crate::core::io::midi::{self, MidiMsg};
 use crate::core::parser::{self};
 use crate::core::playhead::tilt;
 use crate::core::utils;
-use crate::view::common::grid_editor::GridEditor;
+use crate::view::grid_editor::GridEditor;
 use cursive::theme::BorderStyle;
 use cursive::theme::Color;
 use cursive::theme::Palette;

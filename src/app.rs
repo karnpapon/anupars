@@ -5,10 +5,9 @@ use crate::core::consts;
 use crate::core::engine::regex::RegExpHandler;
 use crate::core::io::midi;
 use crate::core::timing::metronome::{Message, Metronome};
-use crate::view::common::menubar::Menubar;
-use crate::view::common::playhead::Playhead;
-#[cfg(feature = "microcontroller")]
-use crate::view::microcontroller::console::RegexFlag;
+// use crate::view::console::RegexFlag;
+use crate::view::menubar::Menubar;
+use crate::view::playhead::Playhead;
 use cursive::theme::{BorderStyle, Palette};
 use cursive::views::TextView;
 use cursive::Cursive;
@@ -22,11 +21,7 @@ use std::time::{Duration, Instant};
 
 use consts::{DEFAULT_TEMPO, TEMPO_CHECK_INTERVAL_MS, TEMPO_RESET_DELAY_MS};
 
-#[cfg(feature = "desktop")]
-use crate::view::desktop::program::Program;
-
-#[cfg(feature = "microcontroller")]
-use crate::view::microcontroller::program::Program;
+use crate::view::layout::Program;
 
 pub type UserData = Rc<UserDataInner>;
 pub struct UserDataInner {

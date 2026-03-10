@@ -32,11 +32,11 @@ use crate::core::tonal::scale;
 
 use crate::core::engine::regex;
 use crate::core::{consts, engine::regex::Match, io::midi, utils};
-use crate::view::common::grid_editor::GridEditor;
-use crate::view::common::playhead::Direction;
-use crate::view::common::rect::Rect;
+use crate::view::grid_editor::GridEditor;
+use crate::view::playhead::Direction;
+use crate::view::rect::Rect;
 // #[cfg(debug_assertions)]
-// use crate::view::common::timing_diagnostic::TimingStats;
+// use crate::view::timing_diagnostic::TimingStats;
 
 // UI update types for batching
 #[derive(Clone, Debug)]

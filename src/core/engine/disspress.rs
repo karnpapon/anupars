@@ -2,11 +2,7 @@ use rand::seq::IteratorRandom;
 use std::collections::HashMap;
 use std::fs;
 
-#[cfg(feature = "desktop")]
-const DISSPRESS_LENGTH: usize = 800;
-
-#[cfg(feature = "microcontroller")]
-const DISSPRESS_LENGTH: usize = 200; // 2000;
+const DISSPRESS_LENGTH: usize = 200;
 
 pub fn dissociated() -> HashMap<String, HashMap<String, usize>> {
   let mut dissociated: HashMap<String, HashMap<String, usize>> = HashMap::new();

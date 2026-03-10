@@ -25,8 +25,8 @@ use crate::core::playhead::queue::EVENT_OPERATORS;
 use crate::core::playhead::queue::QUEUE_OPERATORS;
 use crate::core::tonal::scale;
 use crate::core::{consts, playhead::queue::PendingJumpPosition};
-use crate::view::common::playhead_handler::PlayheadUI;
-use crate::view::common::printer::Matrix;
+use crate::view::playhead_handler::PlayheadUI;
+use crate::view::printer::Matrix;
 
 use consts::BASE_OCTAVE;
 use consts::KEYBOARD_MARGIN_BOTTOM;

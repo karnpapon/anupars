@@ -9,17 +9,10 @@ repository = "https://github.com/karnpapon/anupars"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
-[features]
-default = ["desktop"]
-desktop = ["cfonts"]
-microcontroller = []
-
 [dependencies]
 cursive = "*"
-cursive-tabs = "^0"
 lazy_static = "1.5.0"
 dirs = "5.0.1"
-cfonts = { version = "1.2.0", optional = true }
 log = "0.4.22"
 num = "0.4.3"
 crossbeam = "0.8.4"
