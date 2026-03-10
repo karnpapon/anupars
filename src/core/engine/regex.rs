@@ -2,15 +2,53 @@ use std::collections::HashMap;
 use std::sync::mpsc::channel;
 use std::sync::mpsc::Receiver;
 use std::sync::mpsc::Sender;
+use std::time::Duration;
+use std::time::Instant;
 
-use cursive::views::{Canvas, TextView};
+use cursive::views::Canvas;
+use cursive::views::TextView;
 use regex_lite::Regex;
 
-use serde::{Deserialize, Serialize};
-
-use crate::view::{grid_editor::GridEditor, playhead};
+use serde::Deserialize;
+use serde::Serialize;
 
 use crate::core::consts;
+use crate::view::grid_editor::GridEditor;
+use crate::view::playhead;
+
+/// Maximum text length (in bytes) we will attempt to match against.
+const MAX_INPUT_LEN: usize = 10_000;
+
+/// Abort matching if a single `captures_iter` pass takes longer than this.
+const MATCH_TIMEOUT: Duration = Duration::from_millis(50);
+
+struct RegexCache {
+  last_pattern: String,
+  compiled: Option<Regex>,
+}
+
+impl RegexCache {
+  fn new() -> Self {
+    Self {
+      last_pattern: String::new(),
+      compiled: None,
+    }
+  }
+
+  /// Returns `Some(&Regex)` only when the pattern is syntactically valid.
+  /// Re-compiles only when `pattern` has actually changed.
+  fn get(&mut self, pattern: &str) -> Option<&Regex> {
+    if pattern != self.last_pattern {
+      self.last_pattern = pattern.to_string();
+      self.compiled = if pattern.len() >= 2 {
+        Regex::new(pattern).ok()
+      } else {
+        None
+      };
+    }
+    self.compiled.as_ref()
+  }
+}
 
 #[derive(Debug, Serialize, Deserialize)]
 struct RegexError {
@@ -103,7 +141,20 @@ impl RegExpHandler {
     grid_index
   }
 
-  fn process_event(data: &EventData) -> Result<HashMap<usize, Match>, RegexError> {
+  fn process_event(
+    data: &EventData,
+    cache: &mut RegexCache,
+  ) -> Result<HashMap<usize, Match>, RegexError> {
+    // Guard 1: skip matching on oversized input to avoid UI freeze
+    if data.text.len() > MAX_INPUT_LEN {
+      return Err(RegexError {
+        id: "input_too_large".to_string(),
+        warning: true,
+        name: "InputError".to_string(),
+        message: format!("input exceeds {} bytes", MAX_INPUT_LEN),
+      });
+    }
+
     // Build the regex pattern with flags
     // In Rust regex, flags are added as inline modifiers:
     // (?i) = case insensitive, (?m) = multiline, (?s) = dot matches newline, (?x) = ignore whitespace, (?U) = lazy
@@ -113,60 +164,72 @@ impl RegExpHandler {
       data.pattern.to_string()
     };
 
-    match Regex::new(&pattern_with_flags) {
-      Ok(regex) => {
-        let text = &data.text;
+    // Guard 2: use cache, skips Regex::new if pattern hasn't changed,
+    // and returns None (instead of panicking) for invalid patterns like `foo|[`
+    let regex = cache.get(&pattern_with_flags).ok_or_else(|| RegexError {
+      id: "regex_error".to_string(),
+      warning: true,
+      name: "SyntaxError".to_string(),
+      message: "pattern invalid or too short".to_string(),
+    })?;
 
-        let mut matches = HashMap::new();
+    let text = &data.text;
+    let mut matches = HashMap::new();
+    let deadline = Instant::now();
 
-        for cap in regex.captures_iter(text) {
-          let groups: Vec<MatchGroup> = cap
-            .iter()
-            .enumerate()
-            .filter_map(|(i, s)| {
-              if i == 0 {
-                None
-              } else {
-                Some(MatchGroup {
-                  s: s?.as_str().to_string(),
-                })
-              }
-            })
-            .collect();
-
-          let byte_start = cap.get(0).unwrap().start();
-          // Convert byte index to character index for multi-byte Unicode support
-          let text_char_index = Self::byte_to_char_index(text, byte_start);
-
-          // Convert text character index to grid index (accounting for newlines)
-          let grid_index = Self::text_index_to_grid_index(text, text_char_index, data.grid_width);
-
-          // Calculate the grid length (excluding newlines from the match)
-          let match_str = cap.get(0).unwrap().as_str();
-          let grid_length = match_str.chars().filter(|&c| c != '\n').count();
-
-          matches.insert(
-            grid_index,
-            Match {
-              i: grid_index,
-              l: grid_length,
-              groups,
-            },
-          );
-        }
-
-        Ok(matches)
+    for cap in regex.captures_iter(text) {
+      // Guard 3: timeout, abort if catastrophic backtracking is detected
+      if deadline.elapsed() > MATCH_TIMEOUT {
+        return Err(RegexError {
+          id: "timeout".to_string(),
+          warning: true,
+          name: "TimeoutError".to_string(),
+          message: "pattern caused catastrophic backtracking".to_string(),
+        });
       }
-      Err(e) => Err(RegexError {
-        id: "regex_error".to_string(),
-        warning: true,
-        name: "SyntaxError".to_string(),
-        message: e.to_string(),
-      }),
+
+      let groups: Vec<MatchGroup> = cap
+        .iter()
+        .enumerate()
+        .filter_map(|(i, s)| {
+          if i == 0 {
+            None
+          } else {
+            Some(MatchGroup {
+              s: s?.as_str().to_string(),
+            })
+          }
+        })
+        .collect();
+
+      let byte_start = cap.get(0).unwrap().start();
+      // Convert byte index to character index for multi-byte Unicode support
+      let text_char_index = Self::byte_to_char_index(text, byte_start);
+
+      // Convert text character index to grid index (accounting for newlines)
+      let grid_index = Self::text_index_to_grid_index(text, text_char_index, data.grid_width);
+
+      // Calculate the grid length (excluding newlines from the match)
+      let match_str = cap.get(0).unwrap().as_str();
+      let grid_length = match_str.chars().filter(|&c| c != '\n').count();
+
+      matches.insert(
+        grid_index,
+        Match {
+          i: grid_index,
+          l: grid_length,
+          groups,
+        },
+      );
     }
+
+    Ok(matches)
   }
 
   pub fn run(self) {
+    // Cache lives for the lifetime of this thread, one allocation, reused every solve.
+    let mut cache = RegexCache::new();
+
     for control_message in &self.rx {
       match control_message {
         Message::Clear => {
@@ -189,10 +252,12 @@ impl RegExpHandler {
           }));
         }
         Message::Solve(data) => {
+          let result = Self::process_event(&data, &mut cache);
+
           self
             .cb_sink
             .send(Box::new(move |s| {
-              let res = match Self::process_event(&data) {
+              let res = match result {
                 Ok(matches) => {
                   let total_matches = matches.len();
                   let mm = if matches.is_empty() {
