@@ -129,6 +129,13 @@ fn normal_style(is_match: bool) -> Style {
   }
 }
 
+/// Returns the `Match` whose span `[i, i+l)` covers `cell`, or `None`.
+fn match_covering(matcher: &HashMap<usize, Match>, cell: usize) -> Option<&Match> {
+  matcher
+    .values()
+    .find(|m| cell >= m.i && cell < m.i + m.l.max(1))
+}
+
 impl<T: Printable + Copy> Matrix<T> {
   fn get_display_char(&self, x: usize, y: usize) -> char {
     self.get(x, y).unwrap().display_char((x, y).into())
@@ -142,10 +149,18 @@ impl<T: Printable + Copy> Matrix<T> {
     cell_index: usize,
     text_matcher: &Option<HashMap<usize, Match>>,
   ) {
-    printer.print_styled(pos, &SpannedString::styled('>', Style::none()));
+    printer.print_styled(
+      pos,
+      &SpannedString::styled(consts::PLAYHEAD_CHAR, Style::none()),
+    );
     if let Some(matcher) = text_matcher {
-      if matcher.contains_key(&cell_index) {
-        printer.print_styled(pos, &SpannedString::styled('@', Style::none()));
+      if let Some(m) = match_covering(matcher, cell_index) {
+        let symbol = if m.l <= 1 {
+          consts::PLAYHEAD_MATCH_CHAR
+        } else {
+          consts::MATCH_GROUP_CHAR
+        };
+        printer.print_styled(pos, &SpannedString::styled(symbol, Style::none()));
       }
     }
   }
@@ -163,7 +178,7 @@ impl<T: Printable + Copy> Matrix<T> {
     printer.print_styled((x, y), &SpannedString::styled(ch, Style::highlight()));
 
     if let Some(matcher) = &playhead_ui.text_matcher {
-      if matcher.contains_key(&cell_index) {
+      if let Some(m) = match_covering(matcher, cell_index) {
         let mut regex_indexes = playhead_ui.regex_indexes.lock().unwrap();
         regex_indexes.insert(cell_index);
 
@@ -174,7 +189,12 @@ impl<T: Printable + Copy> Matrix<T> {
           p.fits(playhead_pos) && p.fits_in(playhead_end)
         });
 
-        printer.print_styled((x, y), &SpannedString::styled('*', Style::highlight()));
+        let symbol = if m.l <= 1 {
+          consts::TRIGGER_CHAR
+        } else {
+          consts::MATCH_GROUP_CHAR
+        };
+        printer.print_styled((x, y), &SpannedString::styled(symbol, Style::highlight()));
       }
     }
   }
@@ -322,7 +342,7 @@ impl<T: Printable + Copy> Matrix<T> {
         let is_active_pos = active_absolute_pos.eq(&pos);
         let is_regex_match = text_matcher
           .as_ref()
-          .map(|m| m.contains_key(&cell_index))
+          .map(|m| match_covering(m, cell_index).is_some())
           .unwrap_or(false);
 
         let ch = self.get_display_char(x, y);

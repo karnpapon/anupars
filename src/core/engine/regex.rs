@@ -27,8 +27,8 @@ struct MatchGroup {
 
 #[derive(Debug, Clone)]
 pub struct Match {
-  i: usize,
-  l: usize,
+  pub i: usize,
+  pub l: usize,
   groups: Vec<MatchGroup>,
 }
 

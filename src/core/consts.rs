@@ -146,3 +146,8 @@ pub const QUEUE_PLACEHOLDER_SYMBOL: &str = ":";
 
 pub static CLOCK_ENABLED: AtomicBool = AtomicBool::new(false);
 pub static FOCUS_MODE: AtomicBool = AtomicBool::new(false);
+
+pub const PLAYHEAD_CHAR: char = '>';
+pub const TRIGGER_CHAR: char = '*';
+pub const PLAYHEAD_MATCH_CHAR: char = '@';
+pub const MATCH_GROUP_CHAR: char = '>';
