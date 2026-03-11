@@ -22,7 +22,7 @@ jobs:
     strategy:
       fail-fast: false # don't fail other jobs if one fails
       matrix:
-        build: [x86_64-linux, aarch64-linux, x86_64-macos, x86_64-windows]
+        build: [x86_64-linux, aarch64-linux, x86_64-macos, aarch64-macos, x86_64-windows]
         include:
           - build: x86_64-linux
             os: ubuntu-22.04
@@ -35,9 +35,14 @@ jobs:
             target: aarch64-unknown-linux-gnu
             cross: true
           - build: x86_64-macos
-            os: macos-latest
+            os: macos-13
             rust: stable
             target: x86_64-apple-darwin
+            cross: false
+          - build: aarch64-macos
+            os: macos-14
+            rust: stable
+            target: aarch64-apple-darwin
             cross: false
           - build: x86_64-windows
             os: windows-2022
@@ -47,38 +52,32 @@ jobs:
 
     steps:
       - name: Checkout sources
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
         with:
           submodules: true
 
       - name: Install ${{ matrix.rust }} toolchain
-        uses: actions-rs/toolchain@v1
+        uses: dtolnay/rust-toolchain@stable
         with:
-          profile: minimal
           toolchain: ${{ matrix.rust }}
-          target: ${{ matrix.target }}
-          override: true
+          targets: ${{ matrix.target }}
 
       - name: Install ALSA dev libraries (Linux native)
         if: matrix.build == 'x86_64-linux'
         run: sudo apt-get update && sudo apt-get install -y libasound2-dev
 
+      - name: Install cross
+        if: matrix.cross == true
+        run: cargo install cross --git https://github.com/cross-rs/cross
+
       - name: Run cargo test
-        uses: actions-rs/cargo@v1
-        with:
-          use-cross: ${{ matrix.cross }}
-          command: test
-          args: --release --locked --target ${{ matrix.target }}
+        run: ${{ matrix.cross && 'cross' || 'cargo' }} test --release --locked --target ${{ matrix.target }}
 
       - name: Build release binary
-        uses: actions-rs/cargo@v1
-        with:
-          use-cross: ${{ matrix.cross }}
-          command: build
-          args: --release --locked --target ${{ matrix.target }}
+        run: ${{ matrix.cross && 'cross' || 'cargo' }} build --release --locked --target ${{ matrix.target }}
 
       - name: Strip release binary (linux and macos)
-        if: matrix.build == 'x86_64-linux' || matrix.build == 'x86_64-macos'
+        if: matrix.build == 'x86_64-linux' || matrix.build == 'x86_64-macos' || matrix.build == 'aarch64-macos'
         run: strip "target/${{ matrix.target }}/release/$BIN_NAME"
 
       - name: Strip release binary (arm)
@@ -111,7 +110,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout sources
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
         with:
           submodules: false
 
