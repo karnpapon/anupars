@@ -309,3 +309,15 @@ impl RegExpHandler {
     }
   }
 }
+
+#[cfg(test)]
+impl Match {
+  /// Test-only constructor
+  pub fn make_test(i: usize, l: usize) -> Self {
+    Self {
+      i,
+      l,
+      groups: vec![],
+    }
+  }
+}

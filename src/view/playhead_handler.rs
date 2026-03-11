@@ -1683,3 +1683,7 @@ impl PlayheadArea {
     tx
   }
 }
+
+#[cfg(test)]
+#[path = "view_tests.rs"]
+mod view_tests;
