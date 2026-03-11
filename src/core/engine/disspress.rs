@@ -1,19 +1,17 @@
 use rand::seq::IteratorRandom;
 use std::collections::HashMap;
-use std::fs;
 
 const DISSPRESS_LENGTH: usize = 200;
+const INITIALIZER_TEXT: &str = include_str!("../../_initializer.txt");
 
 pub fn dissociated() -> HashMap<String, HashMap<String, usize>> {
   let mut dissociated: HashMap<String, HashMap<String, usize>> = HashMap::new();
 
-  let file_path = "src/_initializer.txt";
-  let content = fs::read_to_string(file_path).expect("Unable to read file");
   let separators = [
     ' ', ',', '.', '!', '?', ':', '—', '-', '$', '%', '=', '(', ')', ';', '/', '*', '#', '[', ']',
-    '’', '”', '“', '\n',
+    '\u{2018}', '"', '"', '\n',
   ];
-  let mut words: Vec<&str> = content.split(&separators[..]).collect();
+  let mut words: Vec<&str> = INITIALIZER_TEXT.split(&separators[..]).collect();
   words.retain(|word| !word.is_empty());
   let mut prev_word: Option<String> = None;
 
