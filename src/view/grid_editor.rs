@@ -938,9 +938,14 @@ fn on_event(canvas: &mut GridEditor, event: Event) -> EventResult {
       let pos_x = position.x.saturating_sub(x_offset + 1);
       let pos_y = position.y.saturating_sub(offset.y + y_offset);
 
+      // prevent dragging above or left of the origin flips the area.
+      let origin = canvas.playhead_ui.playhead_pos;
+      let clamped_x = pos_x.max(origin.x + 1);
+      let clamped_y = pos_y.max(origin.y + 1);
+
       canvas
         .playhead_tx
-        .send(PlayheadMessage::SetGridArea((pos_x, pos_y).into()))
+        .send(PlayheadMessage::SetGridArea((clamped_x, clamped_y).into()))
         .unwrap();
 
       EventResult::Ignored
