@@ -27,8 +27,9 @@ anupars (อนุภา(ส), meaning "tiny following light" in Thai), a Rust-b
 2. Extract and make the binary executable:
 
 ```sh
-# macOS / Linux
-chmod +x anupars
+# macOS only, remove quarantine set by Gatekeeper on downloaded binaries
+xattr -d com.apple.quarantine ./anupars
+chmod +x ./anupars
 ./anupars
 ```
 
