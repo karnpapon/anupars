@@ -17,6 +17,12 @@ repos:
       language: system
       pass_filenames: false
       always_run: true
+    - id: check-binary-size
+      name: Check Rust Binary Size
+      entry: bash check-binary-size.sh
+      language: system
+      pass_filenames: false
+      always_run: true
 - repo: https://github.com/pre-commit/pre-commit-hooks
   rev: v6.0.0
   hooks:
