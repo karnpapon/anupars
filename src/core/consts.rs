@@ -94,7 +94,11 @@ pub static midi_status_unit_view: &str = "midi_status_unit_view";
 
 pub static input_controller_section_view: &str = "input_controller_section_view";
 pub static status_controller_section_view: &str = "status_controller_section_view";
-pub static protocol_controller_section_view: &str = "protocol_controller_section_view";
+pub static playhead_controller_section_view: &str = "playhead_controller_section_view";
+
+pub static tmp_controller_section_view: &str = "tmp_controller_section_view";
+pub static tmp_status_unit_view: &str = "tmp_status_unit_view";
+pub static sym_status_unit_view: &str = "sym_status_unit_view";
 
 pub static regex_err_display_unit_view: &str = "regex_err_display_unit_view";
 pub static control_section_view: &str = "control_section_view";

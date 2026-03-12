@@ -8,6 +8,12 @@ use std::sync::Arc;
 use std::sync::Mutex;
 use std::thread;
 use std::time::Duration;
+
+#[cfg(feature = "symspell")]
+use symspell_rs::SymSpell;
+#[cfg(feature = "symspell")]
+use symspell_rs::Verbosity;
+
 // #[cfg(debug_assertions)]
 // use std::time::Instant;
 
@@ -48,6 +54,11 @@ pub enum UIUpdate {
   PlayheadPosAndArea(Vec2, Rect),
   ChnStatus(String),
   GridSplits(usize, usize),
+
+  #[cfg(feature = "symspell")]
+  TmpAppend(usize),
+  #[cfg(feature = "symspell")]
+  TmpAppendSpace,
 }
 
 struct GridParams<'a, R: rand::Rng> {
@@ -313,7 +324,12 @@ impl PlayheadArea {
     }
   }
 
-  pub fn spawn_ui_processor(ui_queue: Arc<Mutex<VecDeque<UIUpdate>>>, cb_sink: cursive::CbSink) {
+  pub fn spawn_ui_processor(
+    ui_queue: Arc<Mutex<VecDeque<UIUpdate>>>,
+    cb_sink: cursive::CbSink,
+
+    #[cfg(feature = "symspell")] symspell: Arc<Mutex<SymSpell>>,
+  ) {
     thread::Builder::new()
       .name("ui-batch-processor".to_string())
       .spawn(move || loop {
@@ -328,8 +344,13 @@ impl PlayheadArea {
         let updates: Vec<UIUpdate> = queue.drain(..).collect();
         drop(queue);
 
+        #[cfg(feature = "symspell")]
+        let symspell_cb = Arc::clone(&symspell);
         cb_sink
           .send(Box::new(move |siv| {
+            #[cfg(feature = "symspell")]
+            let symspell = symspell_cb;
+
             for update in updates {
               match update {
                 UIUpdate::ActivePos(active_pos) => {
@@ -380,6 +401,69 @@ impl PlayheadArea {
                       editor.playhead_ui.grid_h_splits = h;
                     },
                   );
+                }
+                #[cfg(feature = "symspell")]
+                UIUpdate::TmpAppendSpace => {
+                  siv.call_on_name(consts::tmp_status_unit_view, |view: &mut TextView| {
+                    let current = view.get_content();
+                    let s = current.source();
+                    if !s.ends_with(' ') {
+                      let new_content = if s == "-" {
+                        " ".to_string()
+                      } else {
+                        format!("{} ", s)
+                      };
+                      view.set_content(new_content);
+                    }
+                  });
+                }
+                #[cfg(feature = "symspell")]
+                UIUpdate::TmpAppend(idx) => {
+                  let ch = siv
+                    .call_on_name(
+                      consts::canvas_editor_section_view,
+                      move |canvas: &mut Canvas<GridEditor>| {
+                        canvas
+                          .state_mut()
+                          .grid
+                          .data
+                          .get(idx)
+                          .copied()
+                          .unwrap_or('\0')
+                      },
+                    )
+                    .unwrap_or('\0');
+                  if ch.is_alphabetic() {
+                    let new_tmp = siv
+                      .call_on_name(consts::tmp_status_unit_view, move |view: &mut TextView| {
+                        let current = view.get_content();
+                        let s = current.source();
+                        let new_content = if s == "-" {
+                          ch.to_string()
+                        } else {
+                          format!("{}{}", s, ch)
+                        };
+                        view.set_content(new_content.clone());
+                        new_content
+                      })
+                      .unwrap_or_default();
+                    // Run symspell on the current TMP content
+                    let sym_result = {
+                      let mut ss = symspell.lock().unwrap();
+                      let input = new_tmp.trim();
+                      let suggestions = ss.lookup_compound(input, 2, &None, false);
+                      suggestions
+                        .into_iter()
+                        .next()
+                        .map(|s| s.term)
+                        .unwrap_or_default()
+                    };
+                    if !sym_result.is_empty() {
+                      siv.call_on_name(consts::sym_status_unit_view, move |view: &mut TextView| {
+                        view.set_content(sym_result);
+                      });
+                    }
+                  }
                 }
               }
             }
@@ -524,6 +608,19 @@ impl PlayheadArea {
             editor.playhead_ui.playhead_area = area;
           },
         );
+        #[cfg(feature = "symspell")]
+        siv.call_on_name(consts::tmp_status_unit_view, |view: &mut TextView| {
+          let current = view.get_content();
+          let s = current.source();
+          if !s.ends_with(' ') {
+            let new_content = if s == "-" {
+              " ".to_string()
+            } else {
+              format!("{} ", s)
+            };
+            view.set_content(new_content);
+          }
+        });
       }))
       .unwrap();
   }
@@ -876,6 +973,9 @@ impl PlayheadArea {
     queue.push_back(UIUpdate::PlayheadPosAndArea(new_pos, new_area));
     queue.push_back(UIUpdate::ChnStatus(self.compute_chn_str(new_pos)));
 
+    #[cfg(feature = "symspell")]
+    queue.push_back(UIUpdate::TmpAppendSpace);
+
     Vec2::zero()
   }
 
@@ -1206,6 +1306,20 @@ impl PlayheadArea {
             editor.playhead_ui.playhead_pos = pos;
           },
         );
+
+        #[cfg(feature = "symspell")]
+        siv.call_on_name(consts::tmp_status_unit_view, |view: &mut TextView| {
+          let current = view.get_content();
+          let s = current.source();
+          if !s.ends_with(' ') {
+            let new_content = if s == "-" {
+              " ".to_string()
+            } else {
+              format!("{} ", s)
+            };
+            view.set_content(new_content);
+          }
+        });
       }))
       .unwrap();
   }
@@ -1351,6 +1465,11 @@ impl PlayheadArea {
           playhead_pos_y,
           1,
         );
+        #[cfg(feature = "symspell")]
+        let mut queue = self.ui_update_queue.lock().unwrap();
+
+        #[cfg(feature = "symspell")]
+        queue.push_back(UIUpdate::TmpAppend(curr_running_playhead));
       }
 
       if has_match {
@@ -1383,6 +1502,11 @@ impl PlayheadArea {
             playhead_pos_y,
             distance_to_next,
           );
+          #[cfg(feature = "symspell")]
+          let mut queue = self.ui_update_queue.lock().unwrap();
+
+          #[cfg(feature = "symspell")]
+          queue.push_back(UIUpdate::TmpAppend(curr_running_playhead));
         }
         if self.modes.hold_next_note.load(Ordering::Relaxed) {
           self.modes.hold_next_note.store(false, Ordering::Relaxed);
@@ -1406,6 +1530,18 @@ impl PlayheadArea {
         self
           .midi_handler
           .trigger_midi_if_matched_sweep(curr_running_playhead, abs_x, active_pos_y);
+
+        #[cfg(feature = "symspell")]
+        let sweep_indexes = self
+          .midi_handler
+          .sweep_matched_indexes(curr_running_playhead, abs_x);
+        #[cfg(feature = "symspell")]
+        if !sweep_indexes.is_empty() {
+          let mut queue = self.ui_update_queue.lock().unwrap();
+          for idx in sweep_indexes {
+            queue.push_back(UIUpdate::TmpAppend(idx));
+          }
+        }
       }
       self.update_active_pos_ui(active_pos, &cb_sink);
     }

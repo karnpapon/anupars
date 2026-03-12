@@ -171,6 +171,47 @@ impl MidiTriggerHandler {
       }));
   }
 
+  #[cfg(feature = "symspell")]
+  /// Return the flat grid indexes that sweep would trigger (same geometry as trigger_midi_if_matched_sweep).
+  pub fn sweep_matched_indexes(&self, curr_running_playhead: usize, abs_x: usize) -> Vec<usize> {
+    if !self.sweep_mode.load(Ordering::Relaxed) {
+      return Vec::new();
+    }
+    let grid_width = self.grid_width.load(Ordering::Relaxed);
+    let grid_height = self.grid_height.load(Ordering::Relaxed);
+    let tilt_mode = *self.tilt_mode.lock().unwrap();
+    let playhead_pos = *self.playhead_pos.lock().unwrap();
+    let v = self.grid_v_splits.load(Ordering::Relaxed).max(1);
+    let h = self.grid_h_splits.load(Ordering::Relaxed).max(1);
+    let col_w = (grid_width / v).max(1);
+    let row_h = (grid_height / h).max(1);
+    let playhead_col = (playhead_pos.x / col_w).min(v.saturating_sub(1));
+    let playhead_row = (playhead_pos.y / row_h).min(h.saturating_sub(1));
+    let x_offset_in_band = abs_x % col_w.max(1);
+
+    let matcher = self.text_matcher.lock().unwrap();
+    if let Some(ref m) = *matcher {
+      (0..grid_height)
+        .filter_map(|y| {
+          let row_idx = (y / row_h).min(h.saturating_sub(1));
+          let tilt_x = match tilt_mode.sweep_col_for_row(playhead_col, playhead_row, row_idx, v, h)
+          {
+            Some(col_idx) => col_idx * col_w + x_offset_in_band,
+            None => return None,
+          };
+          let crosshair_index = y * grid_width + tilt_x;
+          if crosshair_index != curr_running_playhead && m.contains_key(&crosshair_index) {
+            Some(crosshair_index)
+          } else {
+            None
+          }
+        })
+        .collect()
+    } else {
+      Vec::new()
+    }
+  }
+
   /// Trigger MIDI for sweep mode (vertical crosshair, tilt-adjusted per row)
   pub fn trigger_midi_if_matched_sweep(
     &self,

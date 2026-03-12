@@ -1,7 +1,14 @@
 use std::collections::HashMap;
+#[cfg(feature = "symspell")]
+use std::path::Path;
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::Arc;
+#[cfg(feature = "symspell")]
+use std::sync::Mutex;
 use std::thread;
+
+#[cfg(feature = "symspell")]
+use symspell_rs::SymSpell;
 
 use cursive::{views::Canvas, XY};
 
@@ -89,10 +96,25 @@ impl Playhead {
   pub fn run(self) {
     let playhead_area = Arc::new(PlayheadArea::new(self.midi_tx.clone()));
 
+    #[cfg(feature = "symspell")]
+    // Initialise SymSpell once (max edit distance 2, prefix length 7)
+    let mut symspell_inner = SymSpell::new(2, None, 7, 1);
+    #[cfg(feature = "symspell")]
+    symspell_inner.load_dictionary(
+      Path::new("data/frequency_dictionary_en_82_765.txt"),
+      0,
+      1,
+      " ",
+    );
+    #[cfg(feature = "symspell")]
+    let symspell = Arc::new(Mutex::new(symspell_inner));
+
     // Spawn UI batch processor thread (60 FPS)
     playhead_handler::PlayheadArea::spawn_ui_processor(
       Arc::clone(&playhead_area.ui_update_queue),
       self.cb_sink.clone(),
+      #[cfg(feature = "symspell")]
+      Arc::clone(&symspell),
     );
 
     let playhead_area_tx = playhead_area.run();

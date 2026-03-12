@@ -8,6 +8,8 @@ license = "MIT"
 repository = "https://github.com/karnpapon/anupars"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[features]
+symspell = ["symspell_rs"]
 
 [dependencies]
 cursive = "*"
@@ -27,6 +29,7 @@ rosc = "0.8.1"
 rand = "0.8.5"
 ringbuffer = "0.16.0"
 arrayvec = "0.7.6"
+symspell_rs = { version = "6.8.3", optional = true }
 
 [profile.release]
 panic = "abort"   # Strip expensive panic clean-up logic

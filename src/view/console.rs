@@ -158,7 +158,7 @@ impl Console {
       .max_width(20)
       .min_width(10);
 
-    let protocol_controller_section_view = ListView::new()
+    let playhead_controller_section_view = ListView::new()
       .child(
         "MDE:",
         TextView::new(app.mode.print_modes()).with_name(consts::mode_unit_view),
@@ -188,10 +188,19 @@ impl Console {
       //   "EVQ:",
       //   TextView::new("[]").with_name(consts::ev_queue_status_unit_view),
       // )
-      .fixed_width(100);
+      .full_width();
 
-    let padding_section_1 = DummyView::new().fixed_width(2);
-    let padding_section_2 = DummyView::new().fixed_width(2);
+    #[cfg(feature = "symspell")]
+    let tmp_controller_section_view = ListView::new()
+      .child(
+        "TMP:",
+        TextView::new("-").with_name(consts::tmp_status_unit_view),
+      )
+      .child(
+        "SYM:",
+        TextView::new("-").with_name(consts::sym_status_unit_view),
+      )
+      .fixed_width(100);
 
     LinearLayout::horizontal()
       .child(DummyView.fixed_width(1))
@@ -201,15 +210,16 @@ impl Console {
           .child(
             LinearLayout::horizontal()
               .child(input_controller_section_view.with_name(consts::input_controller_section_view))
-              .child(padding_section_1)
+              .child(DummyView::new().fixed_width(2))
               .child(
                 status_controller_section_view.with_name(consts::status_controller_section_view),
               )
-              .child(padding_section_2)
+              .child(DummyView::new().fixed_width(2))
               .child(
-                protocol_controller_section_view
-                  .with_name(consts::protocol_controller_section_view),
-              ),
+                playhead_controller_section_view
+                  .with_name(consts::playhead_controller_section_view),
+              )
+              .child(DummyView::new().fixed_width(2)), // .child(tmp_controller_section_view.with_name(consts::tmp_controller_section_view)),
           )
           .child(DummyView.fixed_height(1)),
       )
