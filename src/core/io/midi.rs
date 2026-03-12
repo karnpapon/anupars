@@ -37,6 +37,9 @@ pub struct TriggerParams {
   pub distance_to_next: usize,
   pub hold: bool,
   pub is_sweep: bool,
+  /// ratio.1 from the playhead DIV setting (e.g. 8, 16, 32, 64).
+  /// Used to cap note length so it doesn't exceed the step duration.
+  pub div: usize,
 }
 
 #[derive(Clone, Debug)]
@@ -310,9 +313,27 @@ impl Midi {
     vel.max(MIN_VELOCITY as u8)
   }
 
-  /// Calculate note length based on BPM, distance, and DynLength mode
-  fn calculate_note_length(bpm: usize, distance_to_next: usize) -> u8 {
+  /// Calculate note length based on BPM, distance, DynLength mode, and DIV setting.
+  ///
+  /// At high DIV values (32, 64) steps fire very rapidly, so the note must release
+  /// before the next step arrives.  The `div` parameter (ratio.1) is used to derive
+  /// the maximum allowed frames:
+  ///   step_frames = 30 000 / (div * bpm)   [each frame = 8 ms]
+  /// The result is clamped to 85 % of that window so there is always a gap between
+  /// note-off and the next note-on.
+  fn calculate_note_length(bpm: usize, distance_to_next: usize, div: usize) -> u8 {
     let base_bpm = consts::DEFAULT_TEMPO;
+
+    // Maximum frames the note may last before the next step fires.
+    // step_frames = (64/div * tick_ms) / 8ms  where tick_ms = 60000/(bpm*16)
+    //             = 30000 / (div * bpm)
+    // Apply 85 % fill so the note-off arrives before the next note-on.
+    let step_max_frames: u8 = if div > 0 && bpm > 0 {
+      let full_step = 30_000usize / (div.max(1) * bpm.max(1));
+      (full_step * 85 / 100).clamp(1, 127) as u8
+    } else {
+      127
+    };
 
     if distance_to_next == DYNLENGTH_DEFAULT_DISTANCE {
       // DynLength OFF: fixed shorter duration to prevent overlap in fast playback
@@ -321,7 +342,7 @@ impl Midi {
       } else {
         BASE_LENGTH_FIXED
       };
-      (calculated_length as u8).min(127)
+      (calculated_length as u8).min(step_max_frames)
     } else {
       // DynLength ON: dynamic duration based on distance to next trigger
       let calculated_length = if bpm > 0 {
@@ -334,7 +355,8 @@ impl Midi {
       let distance_factor = (distance_to_next.min(16) as f32 / 4.0).clamp(0.25, 4.0);
       let length_with_distance = (calculated_length as f32 * distance_factor).round() as usize;
 
-      (length_with_distance as u8).clamp(MIN_AUDIBLE_LENGTH, 127)
+      let min_len = MIN_AUDIBLE_LENGTH.min(step_max_frames);
+      (length_with_distance as u8).clamp(min_len, step_max_frames)
     }
   }
 
@@ -352,7 +374,7 @@ impl Midi {
     );
 
     let velocity = Self::calculate_velocity(&params);
-    let note_length = Self::calculate_note_length(params.bpm, params.distance_to_next);
+    let note_length = Self::calculate_note_length(params.bpm, params.distance_to_next, params.div);
 
     // Derive MIDI channel from grid position when splits are active
     let channel: u8 = {

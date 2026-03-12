@@ -67,6 +67,8 @@ pub struct MidiTriggerHandler {
   pub arpeggiator_mode: Arc<AtomicBool>,
   pub tilt_mode: Arc<Mutex<TiltMode>>,
   pub playhead_pos: Arc<Mutex<Vec2>>,
+  /// Current DIV ratio (ratio.1, e.g. 8, 16, 32, 64) for note-length capping.
+  pub ratio: Arc<Mutex<(usize, usize)>>,
 }
 
 impl MidiTriggerHandler {
@@ -91,6 +93,7 @@ impl MidiTriggerHandler {
     arpeggiator_mode: Arc<AtomicBool>,
     tilt_mode: Arc<Mutex<TiltMode>>,
     playhead_pos: Arc<Mutex<Vec2>>,
+    ratio: Arc<Mutex<(usize, usize)>>,
   ) -> Self {
     MidiTriggerHandler {
       midi_tx,
@@ -112,6 +115,7 @@ impl MidiTriggerHandler {
       arpeggiator_mode,
       tilt_mode,
       playhead_pos,
+      ratio,
     }
   }
 
@@ -150,6 +154,7 @@ impl MidiTriggerHandler {
     let grid_width = self.grid_width.load(Ordering::Relaxed);
     let current_tempo = self.tempo.load(Ordering::Relaxed);
     let hold_next = self.hold_next_note.load(Ordering::Relaxed);
+    let div = self.ratio.lock().unwrap().1;
 
     let _ = self
       .midi_tx
@@ -168,6 +173,7 @@ impl MidiTriggerHandler {
         distance_to_next,
         hold: hold_next,
         is_sweep: false,
+        div,
       }));
   }
 
@@ -270,6 +276,7 @@ impl MidiTriggerHandler {
     // tilt-adjusted x_position → correct MIDI channel via calculate_channel.
     let default_length = 4;
     let scale_root_offset = self.scale_root_top.lock().unwrap().to_root_offset();
+    let div = self.ratio.lock().unwrap().1;
     for (y, tilt_x) in matched {
       let _ = self
         .midi_tx
@@ -288,6 +295,7 @@ impl MidiTriggerHandler {
           distance_to_next: default_length,
           hold: false,
           is_sweep: true,
+          div,
         }));
     }
   }

@@ -294,6 +294,7 @@ impl PlayheadArea {
       Arc::clone(&modes.arpeggiator_mode),
       Arc::clone(&tilt_mode),
       Arc::clone(&pos),
+      Arc::clone(&music.ratio),
     ));
 
     PlayheadArea {
