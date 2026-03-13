@@ -16,19 +16,19 @@ high DIV values (32, 64).
 
 ### Step 1: Duration of one tick (ms)
 
-$$\text{tick\_ms} = \frac{T}{\text{bpm} \times \tau} = \frac{60{,}000}{\text{bpm} \times 16}$$
+$$\text{tick-ms} = \frac{T}{\text{bpm} \times \tau} = \frac{60{,}000}{\text{bpm} \times 16}$$
 
 ### Step 2: Duration of one playhead step (ms)
 
 The clock handler uses `base_divider` $= 64 / \text{div}$, so the playhead advances every `base_divider` ticks:
 
-$$\text{step\_ms} = \frac{64}{\text{div}} \times \text{tick\_ms} = \frac{64}{\text{div}} \times \frac{60{,}000}{\text{bpm} \times 16} = \frac{240{,}000}{\text{div} \times \text{bpm}}$$
+$$\text{step-ms} = \frac{64}{\text{div}} \times \text{tick-ms} = \frac{64}{\text{div}} \times \frac{60{,}000}{\text{bpm} \times 16} = \frac{240{,}000}{\text{div} \times \text{bpm}}$$
 
 ### Step 3: Convert ms → stack frames
 
 Each stack frame is $F = 8$ ms:
 
-$$\text{step\_frames} = \frac{\text{step\_ms}}{F} = \frac{240{,}000}{\text{div} \times \text{bpm} \times 8} = \boxed{\frac{30{,}000}{\text{div} \times \text{bpm}}}$$
+$$\text{step-frames} = \frac{\text{step-ms}}{F} = \frac{240{,}000}{\text{div} \times \text{bpm} \times 8} = \boxed{\frac{30{,}000}{\text{div} \times \text{bpm}}}$$
 
 The constant $30{,}000$ collapses from $T \times (64/\tau) / F = 60{,}000 \times 4 / 8$.
 
@@ -36,7 +36,7 @@ The constant $30{,}000$ collapses from $T \times (64/\tau) / F = 60{,}000 \times
 
 A fill factor of $85\%$ ensures a gap between note-off and the next note-on, preventing stuck notes:
 
-$$\text{step\_max\_frames} = \left\lfloor \frac{30{,}000}{\text{div} \times \text{bpm}} \times 0.85 \right\rfloor = \left\lfloor \frac{30{,}000 \times 85}{100 \times \text{div} \times \text{bpm}} \right\rfloor$$
+$$\text{step-max-frames} = \left\lfloor \frac{30{,}000}{\text{div} \times \text{bpm}} \times 0.85 \right\rfloor = \left\lfloor \frac{30{,}000 \times 85}{100 \times \text{div} \times \text{bpm}} \right\rfloor$$
 
 ## Sanity Check at 120 BPM
 
