@@ -25,6 +25,7 @@ pub enum Command {
   ToggleDrainQueue,
   ToggleSweep,
   ToggleDynLength,
+  ToggleFreeze,
   ChangeRootNote(Adjustment),
   ChangeScaleMode(Adjustment),
   CycleTilt,
@@ -52,6 +53,7 @@ impl fmt::Display for Command {
       | Self::ChangeRootNote(_)
       | Self::ChangeScaleMode(_)
       | Self::CycleTilt
+      | Self::ToggleFreeze
       | Self::ToggleRandom => vec![],
     };
     repr_tokens.append(&mut extras_args);
@@ -81,6 +83,7 @@ impl Command {
       Self::ChangeRootNote(_) => "changerootnote",
       Self::ChangeScaleMode(_) => "changescale",
       Self::CycleTilt => "cycletilt",
+      Self::ToggleFreeze => "togglefreeze",
     }
   }
 }

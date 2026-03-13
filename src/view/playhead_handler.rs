@@ -129,6 +129,7 @@ pub enum Message {
   ToggleDrainQueueMode(cursive::CbSink),
   ToggleSweepMode(cursive::CbSink),
   ToggleDynLengthMode(cursive::CbSink),
+  ToggleFreezeMode(cursive::CbSink),
   CycleScaleRootTop(cursive::CbSink, types::Adjustment),
   CycleScaleMode(cursive::CbSink, types::Adjustment),
   SetTempo(usize),
@@ -188,6 +189,7 @@ pub struct ModeFlags {
   pub event_operator_mode: Arc<AtomicBool>,
   pub sweep_mode: Arc<AtomicBool>,
   pub dyn_length_mode: Arc<AtomicBool>,
+  pub freeze_mode: Arc<AtomicBool>,
   pub hold_next_note: Arc<AtomicBool>,
   pub is_ratcheting: Arc<AtomicBool>,
 }
@@ -200,6 +202,7 @@ impl ModeFlags {
       event_operator_mode: Arc::new(AtomicBool::new(false)),
       sweep_mode: Arc::new(AtomicBool::new(false)),
       dyn_length_mode: Arc::new(AtomicBool::new(false)),
+      freeze_mode: Arc::new(AtomicBool::new(false)),
       hold_next_note: Arc::new(AtomicBool::new(false)),
       is_ratcheting: Arc::new(AtomicBool::new(false)),
     }
@@ -225,6 +228,8 @@ pub struct PlayheadArea {
   drag_start_y: AtomicUsize,
   /// current running position of the playhead within, relative to the playhead area (0,0)
   actived_pos: Arc<Mutex<Vec2>>,
+  /// position captured when freeze mode was enabled; MIDI retriggers here while frozen
+  frozen_active_pos: Arc<Mutex<Vec2>>,
   prev_active_pos: Arc<Mutex<Vec2>>,
 
   // Consolidated state
@@ -303,6 +308,7 @@ impl PlayheadArea {
       drag_start_x: AtomicUsize::new(0),
       drag_start_y: AtomicUsize::new(0),
       actived_pos: Arc::new(Mutex::new(Vec2::zero())),
+      frozen_active_pos: Arc::new(Mutex::new(Vec2::zero())),
       prev_active_pos,
       grid,
       music,
@@ -1173,6 +1179,35 @@ impl PlayheadArea {
       .unwrap();
   }
 
+  pub fn toggle_freeze_mode(&self, cb_sink: cursive::CbSink) {
+    let is_freeze = !self.modes.freeze_mode.load(Ordering::Relaxed);
+    self.modes.freeze_mode.store(is_freeze, Ordering::Relaxed);
+
+    if is_freeze {
+      // Snap-capture the current active position to freeze at
+      let current_pos = *self.actived_pos.lock().unwrap();
+      *self.frozen_active_pos.lock().unwrap() = current_pos;
+    }
+
+    let mode_status = self.build_mode_status_string();
+
+    cb_sink
+      .send(Box::new(move |siv| {
+        siv.call_on_name(
+          consts::canvas_editor_section_view,
+          |canvas: &mut Canvas<GridEditor>| {
+            let editor = canvas.state_mut();
+            editor.freeze_mode = is_freeze;
+          },
+        );
+
+        siv.call_on_name(consts::mode_unit_view, |view: &mut TextView| {
+          view.set_content(mode_status);
+        });
+      }))
+      .unwrap();
+  }
+
   pub fn cycle_scale_root(&self, cb_sink: cursive::CbSink, dir: types::Adjustment) {
     let mut root = self.music.scale_root_top.lock().unwrap();
     *root = root.cycle(dir);
@@ -1392,6 +1427,53 @@ impl PlayheadArea {
     //   ratio.1=32 → every  2 ticks (DIV 32)   ratio.1=64 → every  1 tick  (DIV 64)
     let base_divider = (64 / ratio.1).max(1);
     drop(ratio);
+
+    if self.modes.freeze_mode.load(Ordering::Relaxed) {
+      if tick.is_multiple_of(base_divider) && !self.modes.is_ratcheting.load(Ordering::Relaxed) {
+        let active_pos = *self.frozen_active_pos.lock().unwrap();
+        let going_forward = self.is_going_forward();
+        let (abs_x, abs_y, curr_running_playhead) = self.calculate_absolute_position(active_pos);
+        let (note_position, scale_mode) = self
+          .midi_handler
+          .determine_note_position_and_scale(active_pos, abs_x, abs_y);
+
+        let matcher_guard = self.text_matcher.lock().unwrap();
+        let match_at_pos = if going_forward {
+          matcher_guard
+            .as_ref()
+            .and_then(|m| m.get(&curr_running_playhead))
+            .cloned()
+        } else {
+          matcher_guard.as_ref().and_then(|m| {
+            m.values()
+              .find(|mv| curr_running_playhead == mv.i + mv.l.max(1) - 1)
+              .cloned()
+          })
+        };
+        drop(matcher_guard);
+        let has_match = match_at_pos.is_some();
+        let match_len = match_at_pos.as_ref().map(|m| m.l).unwrap_or(1).max(1);
+
+        if has_match {
+          let playhead_pos = self.pos.lock().unwrap();
+          let playhead_pos_x = playhead_pos.x;
+          let playhead_pos_y = playhead_pos.y;
+          drop(playhead_pos);
+
+          self.midi_handler.trigger_midi_if_matched(
+            curr_running_playhead,
+            note_position,
+            scale_mode,
+            playhead_pos_x,
+            playhead_pos_y,
+            match_len,
+          );
+        }
+
+        self.update_active_pos_ui(active_pos, &cb_sink);
+      }
+      return;
+    }
 
     let going_forward = self.is_going_forward();
     // Inside a match span: speed up when going forward (halve divider),
@@ -1797,6 +1879,9 @@ impl PlayheadArea {
           }
           Message::ToggleDynLengthMode(cb_sink) => {
             self.toggle_dyn_length_mode(cb_sink);
+          }
+          Message::ToggleFreezeMode(cb_sink) => {
+            self.toggle_freeze_mode(cb_sink);
           }
           Message::CycleScaleRootTop(cb_sink, dir) => {
             self.cycle_scale_root(cb_sink, dir);

@@ -55,6 +55,7 @@ pub enum Message {
   ToggleDrainQueueMode(),
   ToggleSweepMode(),
   ToggleDynLengthMode(),
+  ToggleFreezeMode(),
   SetTempo(usize),
   SetRatio((usize, usize)),
   ClearQueue(),
@@ -324,6 +325,12 @@ impl Playhead {
             let cb_sink = self.cb_sink.clone();
             playhead_area_tx
               .send(playhead_handler::Message::ToggleDynLengthMode(cb_sink))
+              .unwrap();
+          }
+          Message::ToggleFreezeMode() => {
+            let cb_sink = self.cb_sink.clone();
+            playhead_area_tx
+              .send(playhead_handler::Message::ToggleFreezeMode(cb_sink))
               .unwrap();
           }
           Message::CycleScaleRootTop(dir) => {

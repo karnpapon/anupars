@@ -77,3 +77,23 @@ use crate::core::io::midi;
 // wrong: path no longer reflects file location
 use crate::core::midi;
 ```
+
+## Markdown Math (GitHub KaTeX)
+
+### Never use `\_` inside `\text{}` in math blocks
+
+GitHub's Markdown parser strips the backslash from `\_` before passing content to KaTeX, leaving a bare `_` inside `\text{}` — which is only valid as a subscript operator in math mode. This causes the error `'_' allowed only in math mode`.
+
+**Use `-` instead of `_` for word separators inside `\text{}`:**
+
+**Correct:**
+
+```markdown
+$$\text{step-ms} = \frac{240{,}000}{\text{div} \times \text{bpm}}$$
+```
+
+**Wrong: do not do this:**
+
+```markdown
+$$\text{step\_ms} = \frac{240{,}000}{\text{div} \times \text{bpm}}$$
+```

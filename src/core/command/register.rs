@@ -260,6 +260,13 @@ impl CommandManager {
           .unwrap();
         Ok(None)
       }
+      Command::ToggleFreeze => {
+        self
+          .playhead_tx_cloned
+          .send(playhead::Message::ToggleFreezeMode())
+          .unwrap();
+        Ok(None)
+      }
       Command::CycleTilt => {
         self
           .playhead_tx_cloned
