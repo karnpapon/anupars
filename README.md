@@ -122,6 +122,7 @@ That's all you need for a first session. Explore [Features](#features) and [Keyb
   - `l`: Dynamic Length, playhead length adjusts dynamically.
   - `e`: Event Operator, enables event operator triggering from keyboard.
   - `s`: Sweep, sweeps through positions across the playhead range.
+  - `z`: Freeze, locks the active position and retriggers MIDI at that cell each DIV tick (it's quantized to the beat).
 
 - **Sweep Tilt (TLT)**
 Controls the angle of the sweep crosshair. **this mode should be used with "Sweep" mode**, it moves like a "Bishop" movement in chess. Each triggered cell fires on the MIDI channel matching its visual column band
@@ -233,6 +234,7 @@ it comprised of
 | `Ctrl+s` | Toggle Sweep | Enable/disable sweep mode |
 | `Ctrl+t` | Cycle Tilt (TLT) | Cycle sweep crosshair angle: `|` → `/` → `\` |
 | `Ctrl+l` | Toggle Dynamic Length | Enable/disable dynamic length mode |
+| `Ctrl+z` | Toggle Freeze | Lock active position; retrigger matched cell at current DIV rate |
 
 ## Tempo & Timing
 
