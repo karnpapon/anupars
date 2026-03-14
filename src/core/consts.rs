@@ -151,6 +151,8 @@ pub const QUEUE_PLACEHOLDER_SYMBOL: &str = ":";
 
 pub static CLOCK_ENABLED: AtomicBool = AtomicBool::new(false);
 pub static FOCUS_MODE: AtomicBool = AtomicBool::new(false);
+/// Set to true while external MIDI clock input is driving the sequencer.
+pub static EXT_CLOCK_ACTIVE: AtomicBool = AtomicBool::new(false);
 
 pub const PLAYHEAD_CHAR: char = '>';
 pub const TRIGGER_CHAR: char = '*';

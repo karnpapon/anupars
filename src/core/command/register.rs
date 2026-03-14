@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::sync::atomic::Ordering;
 use std::sync::mpsc::Sender;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
@@ -79,6 +80,9 @@ impl CommandManager {
     match cmd {
       Command::Quit => Ok(None),
       Command::TogglePlay => {
+        if consts::EXT_CLOCK_ACTIVE.load(Ordering::Relaxed) {
+          return Ok(None);
+        }
         let _ = self.metronome_sender.send(metronome::Message::StartStop);
         Ok(None)
       }
@@ -126,6 +130,9 @@ impl CommandManager {
         Ok(None)
       }
       Command::AdjustBPM(direction) => {
+        if consts::EXT_CLOCK_ACTIVE.load(Ordering::Relaxed) {
+          return Ok(None);
+        }
         let nudge: isize = match direction {
           Adjustment::Increase => 1,
           Adjustment::Decrease => -1,

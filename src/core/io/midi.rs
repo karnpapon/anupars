@@ -1,6 +1,6 @@
-use midir::{MidiOutput, MidiOutputConnection, MidiOutputPort};
-use std::collections::HashMap;
+use midir::{MidiInput, MidiInputConnection, MidiOutput, MidiOutputConnection, MidiOutputPort};
 use std::error::Error;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -62,6 +62,10 @@ pub enum Message {
   ClockContinue(),          // 0xFB - Continue from pause
   ClockSongPosition(usize), // 0xF2 - Song Position Pointer (in 16th notes)
   EnableClock(bool),        // Enable/disable MIDI clock output
+  ExternalClock(u8),
+  EnableClockInput(bool),
+  ConnectInput(usize),
+  DisconnectOutput(),
 }
 
 #[derive(Clone, Debug)]
@@ -87,7 +91,6 @@ impl MidiMsg {
 
 pub struct Midi {
   pub midi: Mutex<Option<MidiOutput>>,
-  pub devices: Mutex<HashMap<String, String>>,
   pub out_device: Mutex<Option<MidiOutputConnection>>,
   pub out_device_name: Mutex<Option<String>>,
   pub msg_config_list: Arc<Mutex<Vec<MidiMsg>>>,
@@ -99,6 +102,13 @@ pub struct Midi {
 
   /// for tracking last held note for stuck note clearing
   last_held_note: Arc<Mutex<Option<MidiMsg>>>,
+  /// Keeps the MIDI input connection alive, dropping it disconnects
+  pub in_connection: Mutex<Option<MidiInputConnection<()>>>,
+  /// only dispatch clock bytes when true
+  pub clock_input_enabled: Arc<AtomicBool>,
+  #[allow(clippy::type_complexity)]
+  /// calling from run() on every dispatched ExternalClock byte
+  ext_clock_callback: Mutex<Option<Box<dyn Fn(u8) + Send>>>,
 }
 
 impl Midi {
@@ -108,7 +118,6 @@ impl Midi {
     let Ok(midi_out) = MidiOutput::new("client-midi-output") else {
       return Self {
         midi: None.into(),
-        devices: HashMap::new().into(),
         out_device: None.into(),
         out_device_name: None.into(),
         tx,
@@ -117,11 +126,13 @@ impl Midi {
         tempo,
         clock_enabled: Arc::new(Mutex::new(false)),
         last_held_note: Arc::new(Mutex::new(None)),
+        in_connection: Mutex::new(None),
+        clock_input_enabled: Arc::new(AtomicBool::new(false)),
+        ext_clock_callback: Mutex::new(None),
       };
     };
     Midi {
       midi: Some(midi_out).into(),
-      devices: HashMap::new().into(),
       out_device: None.into(),
       out_device_name: None.into(),
       tx,
@@ -130,6 +141,9 @@ impl Midi {
       tempo,
       clock_enabled: Arc::new(Mutex::new(false)),
       last_held_note: Arc::new(Mutex::new(None)),
+      in_connection: Mutex::new(None),
+      clock_input_enabled: Arc::new(AtomicBool::new(false)),
+      ext_clock_callback: Mutex::new(None),
     }
   }
 }
@@ -213,6 +227,11 @@ impl Midi {
               eprintln!("Error switching MIDI device: {}", e);
             }
           }
+          Message::DisconnectOutput() => {
+            self.send_all_notes_off();
+            *self.out_device.lock().unwrap() = None;
+            *self.out_device_name.lock().unwrap() = None;
+          }
           Message::Panic() => {
             self.send_all_notes_off();
             let mut last_held = self.last_held_note.lock().unwrap();
@@ -236,6 +255,45 @@ impl Midi {
           Message::EnableClock(enabled) => {
             self.enable_clock(enabled);
           }
+          Message::ExternalClock(byte) => {
+            let cb = self.ext_clock_callback.lock().unwrap();
+            if let Some(ref f) = *cb {
+              f(byte);
+            }
+          }
+          Message::EnableClockInput(en) => {
+            self.clock_input_enabled.store(en, Ordering::Relaxed);
+          }
+          Message::ConnectInput(port_index) => {
+            // Drop existing connection then reconnect to the requested port
+            *self.in_connection.lock().unwrap() = None;
+            let Ok(new_inp) = MidiInput::new("MIDI Input") else {
+              continue;
+            };
+            let ports = new_inp.ports();
+            let Some(port) = ports.get(port_index) else {
+              continue;
+            };
+            let inp_tx = self.tx.clone();
+            let clock_enabled = Arc::clone(&self.clock_input_enabled);
+            if let Ok(conn) = new_inp.connect(
+              port,
+              "MIDI Input",
+              move |_stamp, msg, _| {
+                if clock_enabled.load(Ordering::Relaxed) && !msg.is_empty() {
+                  match msg[0] {
+                    0xF8 | 0xFA | 0xFB | 0xFC => {
+                      let _ = inp_tx.send(Message::ExternalClock(msg[0]));
+                    }
+                    _ => {}
+                  }
+                }
+              },
+              (),
+            ) {
+              *self.in_connection.lock().unwrap() = Some(conn);
+            }
+          }
         }
       }
     });
@@ -258,6 +316,32 @@ impl Midi {
     } else {
       Vec::new()
     }
+  }
+
+  // #[allow(dead_code)]
+  // pub fn get_available_input_devices(&self) -> Vec<(String, usize)> {
+  //   let Ok(midi_inp) = MidiInput::new("anupars-query") else {
+  //     return Vec::new();
+  //   };
+  //   midi_inp
+  //     .ports()
+  //     .iter()
+  //     .enumerate()
+  //     .map(|(i, p)| {
+  //       let name = midi_inp
+  //         .port_name(p)
+  //         .unwrap_or_else(|_| format!("Port {}", i));
+  //       (name, i)
+  //     })
+  //     .collect()
+  // }
+
+  /// Register a callback that is invoked (from the run thread) for every
+  /// incoming external MIDI clock byte (0xF8/0xFA/0xFB/0xFC).
+  /// to forward clock events to the metronome without a circular
+  /// module dependency between `midi` and `metronome`.
+  pub fn set_ext_clock_handler(&self, cb: impl Fn(u8) + Send + 'static) {
+    *self.ext_clock_callback.lock().unwrap() = Some(Box::new(cb));
   }
 
   pub fn switch_device(&self, port_index: usize) -> Result<(), Box<dyn Error>> {
@@ -475,7 +559,9 @@ impl Midi {
   pub fn trigger(&self, midi_msg: &MidiMsg, down: bool) -> Result<(), &str> {
     match self.out_device.lock() {
       Ok(mut conn_out) => {
-        let connection_out = conn_out.as_mut().unwrap();
+        let Some(connection_out) = conn_out.as_mut() else {
+          return Ok(());
+        };
 
         // Send pitch bend first if needed (only on note-on)
         if down {

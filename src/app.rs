@@ -134,6 +134,14 @@ pub fn initialize_components() -> Application {
   metronome.set_midi_tx(midi.tx.clone());
   midi.enable_clock(false);
 
+  // fwd incoming MIDI clock bytes to the metronome for external sync.
+  // The closure captures only a Sender<metronome::Message> so there is no
+  // circular module dependency between `midi` and `metronome`.
+  let metro_tx_for_midi = metronome.tx.clone();
+  midi.set_ext_clock_handler(move |byte| {
+    let _ = metro_tx_for_midi.send(Message::ExternalClock(byte));
+  });
+
   let midi_tx = midi.tx.clone();
 
   cursive.set_on_pre_event_inner(cursive::event::Event::CtrlChar('c'), move |_| {

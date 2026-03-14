@@ -35,11 +35,16 @@ use cursive::With;
 
 use crate::core::io::midi;
 use crate::core::tonal::scale;
+use midir;
 
 use super::grid_editor::GridEditor;
 use crate::core::{consts, engine::disspress};
 
-type MidiMenuState = (Vec<(String, usize)>, Sender<midi::Message>);
+type MidiMenuState = (
+  Vec<(String, usize)>,
+  Vec<(String, usize)>,
+  Sender<midi::Message>,
+);
 
 // Stored once at startup so any full-menubar rebuild can reconstruct "anupars".
 static MIDI_MENU_STATE: OnceLock<Mutex<MidiMenuState>> = OnceLock::new();
@@ -115,10 +120,35 @@ impl Menubar {
 
   pub fn build_menu_app(midi_devices: &[(String, usize)], midi_tx: Sender<midi::Message>) -> Tree {
     // Persist MIDI state for later full-menubar rebuilds.
-    let state =
-      MIDI_MENU_STATE.get_or_init(|| Mutex::new((midi_devices.to_vec(), midi_tx.clone())));
+    let midi_input_devices = {
+      match midir::MidiInput::new("anupars-query") {
+        Err(_) => Vec::new(),
+        Ok(inp) => inp
+          .ports()
+          .iter()
+          .enumerate()
+          .map(|(i, p)| {
+            (
+              inp.port_name(p).unwrap_or_else(|_| format!("Port {}", i)),
+              i,
+            )
+          })
+          .collect::<Vec<_>>(),
+      }
+    };
+    let state = MIDI_MENU_STATE.get_or_init(|| {
+      Mutex::new((
+        midi_devices.to_vec(),
+        midi_input_devices.clone(),
+        midi_tx.clone(),
+      ))
+    });
     if let Ok(mut guard) = state.lock() {
-      *guard = (midi_devices.to_vec(), midi_tx.clone());
+      *guard = (
+        midi_devices.to_vec(),
+        midi_input_devices.clone(),
+        midi_tx.clone(),
+      );
     }
     let midi_tx_reset = midi_tx.clone();
     let midi_tx_clock = midi_tx.clone();
@@ -138,8 +168,12 @@ impl Menubar {
       .leaf("Insert File", build_file_explorer_view)
       .delimiter()
       .subtree(
-        "MIDI",
-        build_midi_menu(midi_devices.to_vec(), midi_tx.clone()),
+        "MIDI Input",
+        build_midi_input_menu(midi_input_devices, midi_tx.clone()),
+      )
+      .subtree(
+        "MIDI Output",
+        build_midi_output_menu(midi_devices.to_vec(), midi_tx.clone()),
       )
       .leaf(clock_label, move |s| {
         toggle_clock_out(s, &midi_tx_clock, &devices_clone, &midi_tx_menu);
@@ -184,11 +218,20 @@ impl Menubar {
 
 // ------------------------------------------------------------
 
-fn build_midi_menu(
+fn build_midi_output_menu(
   devices: Vec<(String, usize)>,
   midi_tx: Sender<midi::Message>,
 ) -> cursive::menu::Tree {
   menu::Tree::new().with(|tree| {
+    tree.add_item(menu::Item::leaf("None (disconnect)", {
+      let midi_tx = midi_tx.clone();
+      move |s| {
+        let _ = midi_tx.send(midi::Message::DisconnectOutput());
+        s.call_on_name(consts::midi_status_unit_view, |c: &mut TextView| {
+          c.set_content("-");
+        });
+      }
+    }));
     if devices.is_empty() {
       tree.add_item(menu::Item::leaf("No devices found", |_| ()));
     } else {
@@ -205,6 +248,33 @@ fn build_midi_menu(
               c.set_content(&name_clone);
             });
           }
+        }));
+      }
+    }
+  })
+}
+
+fn build_midi_input_menu(
+  devices: Vec<(String, usize)>,
+  midi_tx: Sender<midi::Message>,
+) -> cursive::menu::Tree {
+  menu::Tree::new().with(|tree| {
+    tree.add_item(menu::Item::leaf("None (disconnect)", {
+      let midi_tx = midi_tx.clone();
+      move |_| {
+        let _ = midi_tx.send(midi::Message::EnableClockInput(false));
+      }
+    }));
+    if devices.is_empty() {
+      tree.add_item(menu::Item::leaf("No input devices found", |_| ()));
+    } else {
+      for (name, idx) in devices {
+        let midi_tx_clone = midi_tx.clone();
+        let name_clone = name.clone();
+        tree.add_item(menu::Item::leaf(format!("{}: {}", idx, name), move |s| {
+          let _ = midi_tx_clone.send(midi::Message::ConnectInput(idx));
+          let _ = midi_tx_clone.send(midi::Message::EnableClockInput(true));
+          s.add_layer(Dialog::info(format!("MIDI Clock Input: {}", name_clone)));
         }));
       }
     }
@@ -254,7 +324,7 @@ fn rebuild_menubar(siv: &mut Cursive) {
   // build_menu_app which also locks MIDI_MENU_STATE and would otherwise deadlock.
   let midi_state = MIDI_MENU_STATE
     .get()
-    .and_then(|s| s.lock().ok().map(|g| (g.0.clone(), g.1.clone())));
+    .and_then(|s| s.lock().ok().map(|g| (g.0.clone(), g.2.clone())));
 
   if let Some((devices, midi_tx)) = midi_state {
     let menu_app = Menubar::build_menu_app(&devices, midi_tx);

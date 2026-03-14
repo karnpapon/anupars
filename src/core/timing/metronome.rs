@@ -6,11 +6,13 @@ use std::sync::Arc;
 
 // use cursive::theme::{ColorStyle, ColorType, Style};
 // use cursive::utils::markup::StyledString;
-// use cursive::views::TextView;
+use cursive::views::TextView;
 use num::ToPrimitive;
+use std::time::Instant;
 
 use crate::core::consts;
 use crate::core::io::midi;
+use crate::core::utils;
 use crate::view::playhead;
 
 use super::clock;
@@ -25,6 +27,9 @@ pub enum Message {
   StartStop,
   NudgeTempo(clock::NudgeTempo),
   Tap,
+  /// Raw MIDI clock byte received from an external device:
+  /// 0xF8 = timing clock (24 PPQN), 0xFA = start, 0xFB = continue, 0xFC = stop
+  ExternalClock(u8),
 }
 
 #[derive(Debug)]
@@ -37,6 +42,10 @@ pub struct Metronome {
   is_playing: Arc<AtomicBool>,
   current_position: Arc<AtomicUsize>,
   current_bpm: Arc<AtomicUsize>,
+  /// True while the sequencer is being driven by incoming MIDI clock (external sync)
+  ext_active: Arc<AtomicBool>,
+  /// Total count of received 0xF8 pulses; used to convert 24 PPQN → 16 TPB
+  ext_pulse_count: Arc<AtomicUsize>,
 }
 
 impl Metronome {
@@ -52,6 +61,8 @@ impl Metronome {
       is_playing: Arc::new(AtomicBool::new(false)),
       current_position: Arc::new(AtomicUsize::new(0)),
       current_bpm: Arc::new(AtomicUsize::new(consts::DEFAULT_TEMPO)),
+      ext_active: Arc::new(AtomicBool::new(false)),
+      ext_pulse_count: Arc::new(AtomicUsize::new(0)),
     }
   }
 
@@ -63,6 +74,7 @@ impl Metronome {
     let clock = Arc::new(clock::Clock::new());
     let metronome_tx_cloned = self.tx.clone();
     let clock_tx = clock.run(metronome_tx_cloned);
+    let mut ext_beat_instant: Option<Instant> = None;
 
     for control_message in self.rx {
       match control_message {
@@ -93,6 +105,79 @@ impl Metronome {
         }
         Message::Tap => {
           clock_tx.send(clock::Message::Tap).unwrap();
+        }
+        Message::ExternalClock(byte) => {
+          match byte {
+            0xFA => {
+              // Start: stop internal clock, reset to tick 0, activate external sync
+              let was_playing = self.is_playing.swap(false, Ordering::SeqCst);
+              if was_playing {
+                clock_tx.send(clock::Message::StartStop).unwrap();
+              }
+              self.ext_pulse_count.store(0, Ordering::SeqCst);
+              self.current_position.store(0, Ordering::Relaxed);
+              self.ext_active.store(true, Ordering::SeqCst);
+              consts::EXT_CLOCK_ACTIVE.store(true, Ordering::SeqCst);
+              ext_beat_instant = None;
+            }
+            0xFB => {
+              // Continue: stop internal clock, resume from current position
+              let was_playing = self.is_playing.swap(false, Ordering::SeqCst);
+              if was_playing {
+                clock_tx.send(clock::Message::StartStop).unwrap();
+              }
+              self.ext_active.store(true, Ordering::SeqCst);
+              consts::EXT_CLOCK_ACTIVE.store(true, Ordering::SeqCst);
+            }
+            0xFC => {
+              // Stop: deactivate external sync
+              self.ext_active.store(false, Ordering::SeqCst);
+              consts::EXT_CLOCK_ACTIVE.store(false, Ordering::SeqCst);
+              ext_beat_instant = None;
+              let bpm = self.current_bpm.load(Ordering::Relaxed);
+              let _ = self
+                .cb_sink
+                .send(Box::new(move |siv: &mut cursive::Cursive| {
+                  siv.call_on_name(consts::bpm_status_unit_view, |view: &mut TextView| {
+                    view.set_content(utils::build_bpm_status_str(bpm));
+                  });
+                }));
+            }
+            0xF8 => {
+              // Timing clock: convert 24 PPQN to 16 internal ticks-per-beat
+              // Fire an internal tick whenever (pulse * 16) / 24 increments.
+              if self.ext_active.load(Ordering::Relaxed) {
+                let pulse = self.ext_pulse_count.fetch_add(1, Ordering::SeqCst);
+                // Measure BPM at each beat boundary (every 24 pulses = 1 beat)
+                if pulse.is_multiple_of(24) {
+                  let now = Instant::now();
+                  if let Some(prev) = ext_beat_instant.replace(now) {
+                    let elapsed_ms = now.duration_since(prev).as_millis() as usize;
+                    if elapsed_ms > 0 {
+                      let bpm = (60_000 / elapsed_ms).clamp(20, 999);
+                      self.current_bpm.store(bpm, Ordering::Relaxed);
+                      let _ = self
+                        .cb_sink
+                        .send(Box::new(move |siv: &mut cursive::Cursive| {
+                          siv.call_on_name(consts::bpm_status_unit_view, |view: &mut TextView| {
+                            view.set_content(format!("~{bpm}"));
+                          });
+                        }));
+                    }
+                  }
+                }
+                let prev_tick = (pulse * 16) / 24;
+                let curr_tick = ((pulse + 1) * 16) / 24;
+                if curr_tick > prev_tick {
+                  self.current_position.store(curr_tick, Ordering::Relaxed);
+                  let _ = self
+                    .playhead_tx
+                    .send(playhead::Message::SetActivePos(curr_tick));
+                }
+              }
+            }
+            _ => {}
+          }
         }
         // sent by clock
         Message::Signature(signature) => {
