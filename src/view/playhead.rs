@@ -115,6 +115,8 @@ impl Playhead {
       Arc::clone(&playhead_area.ui_update_queue),
       self.cb_sink.clone(),
       #[cfg(feature = "symspell")]
+      Arc::clone(&playhead_area.tmp_buf),
+      #[cfg(feature = "symspell")]
       Arc::clone(&symspell),
     );
 

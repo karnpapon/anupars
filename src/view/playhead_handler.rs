@@ -9,6 +9,10 @@ use std::sync::Mutex;
 use std::thread;
 use std::time::Duration;
 
+use ringbuffer::AllocRingBuffer;
+#[cfg(feature = "symspell")]
+use ringbuffer::RingBuffer;
+
 #[cfg(feature = "symspell")]
 use symspell_rs::SymSpell;
 #[cfg(feature = "symspell")]
@@ -261,6 +265,8 @@ pub struct PlayheadArea {
   /// Remaining fast-division steps within the current regex match span.
   /// Non-zero → advance at 2× rate (halved divider) until it reaches 0.
   match_span_remaining: Arc<AtomicUsize>,
+  /// Ring buffer of the last 10 triggered characters displayed in TMP:
+  pub tmp_buf: Arc<Mutex<AllocRingBuffer<char>>>,
   // #[cfg(debug_assertions)]
   // timing_stats: Arc<TimingStats>,
 }
@@ -326,6 +332,7 @@ impl PlayheadArea {
       step_index: Arc::new(Mutex::new(0)),
       ratchet_generation,
       match_span_remaining: Arc::new(AtomicUsize::new(0)),
+      tmp_buf: Arc::new(Mutex::new(AllocRingBuffer::new(consts::TMP_BUF_SIZE))),
       // #[cfg(debug_assertions)]
       // timing_stats: Arc::new(TimingStats::new()),
     }
@@ -334,7 +341,7 @@ impl PlayheadArea {
   pub fn spawn_ui_processor(
     ui_queue: Arc<Mutex<VecDeque<UIUpdate>>>,
     cb_sink: cursive::CbSink,
-
+    #[cfg(feature = "symspell")] tmp_buf: Arc<Mutex<AllocRingBuffer<char>>>,
     #[cfg(feature = "symspell")] symspell: Arc<Mutex<SymSpell>>,
   ) {
     thread::Builder::new()
@@ -352,9 +359,13 @@ impl PlayheadArea {
         drop(queue);
 
         #[cfg(feature = "symspell")]
+        let tmp_buf_cb = Arc::clone(&tmp_buf);
+        #[cfg(feature = "symspell")]
         let symspell_cb = Arc::clone(&symspell);
         cb_sink
           .send(Box::new(move |siv| {
+            #[cfg(feature = "symspell")]
+            let tmp_buf = tmp_buf_cb;
             #[cfg(feature = "symspell")]
             let symspell = symspell_cb;
 
@@ -411,17 +422,21 @@ impl PlayheadArea {
                 }
                 #[cfg(feature = "symspell")]
                 UIUpdate::TmpAppendSpace => {
-                  siv.call_on_name(consts::tmp_status_unit_view, |view: &mut TextView| {
-                    let current = view.get_content();
-                    let s = current.source();
-                    if !s.ends_with(' ') {
-                      let new_content = if s == "-" {
-                        " ".to_string()
-                      } else {
-                        format!("{} ", s)
-                      };
-                      view.set_content(new_content);
+                  let display = {
+                    let mut buf = tmp_buf.lock().unwrap();
+                    let last = buf.back().copied();
+                    if last != Some(' ') {
+                      buf.push(' ');
                     }
+                    let s: String = buf.iter().collect();
+                    if s.is_empty() {
+                      "-".to_string()
+                    } else {
+                      s
+                    }
+                  };
+                  siv.call_on_name(consts::tmp_status_unit_view, move |view: &mut TextView| {
+                    view.set_content(display);
                   });
                 }
                 #[cfg(feature = "symspell")]
@@ -441,24 +456,18 @@ impl PlayheadArea {
                     )
                     .unwrap_or('\0');
                   if ch.is_alphabetic() {
-                    let new_tmp = siv
-                      .call_on_name(consts::tmp_status_unit_view, move |view: &mut TextView| {
-                        let current = view.get_content();
-                        let s = current.source();
-                        let new_content = if s == "-" {
-                          ch.to_string()
-                        } else {
-                          format!("{}{}", s, ch)
-                        };
-                        view.set_content(new_content.clone());
-                        new_content
-                      })
-                      .unwrap_or_default();
+                    let new_tmp = {
+                      let mut buf = tmp_buf.lock().unwrap();
+                      buf.push(ch);
+                      buf.iter().collect::<String>()
+                    };
+                    siv.call_on_name(consts::tmp_status_unit_view, |view: &mut TextView| {
+                      view.set_content(new_tmp.clone());
+                    });
                     // Run symspell on the current TMP content
                     let sym_result = {
                       let mut ss = symspell.lock().unwrap();
-                      let input = new_tmp.trim();
-                      let suggestions = ss.lookup_compound(input, 2, &None, false);
+                      let suggestions = ss.lookup_compound(new_tmp.trim(), 2, &None, false);
                       suggestions
                         .into_iter()
                         .next()
@@ -592,6 +601,8 @@ impl PlayheadArea {
     drop(area_mutex);
 
     let chn_str = self.compute_chn_str(pos);
+    #[cfg(feature = "symspell")]
+    let tmp_buf_move = Arc::clone(&self.tmp_buf);
 
     cb_sink
       .send(Box::new(move |siv| {
@@ -616,18 +627,24 @@ impl PlayheadArea {
           },
         );
         #[cfg(feature = "symspell")]
-        siv.call_on_name(consts::tmp_status_unit_view, |view: &mut TextView| {
-          let current = view.get_content();
-          let s = current.source();
-          if !s.ends_with(' ') {
-            let new_content = if s == "-" {
-              " ".to_string()
+        {
+          let display = {
+            let mut buf = tmp_buf_move.lock().unwrap();
+            let last = buf.back().copied();
+            if last != Some(' ') {
+              buf.push(' ');
+            }
+            let s: String = buf.iter().collect();
+            if s.is_empty() {
+              "-".to_string()
             } else {
-              format!("{} ", s)
-            };
-            view.set_content(new_content);
-          }
-        });
+              s
+            }
+          };
+          siv.call_on_name(consts::tmp_status_unit_view, move |view: &mut TextView| {
+            view.set_content(display);
+          });
+        }
       }))
       .unwrap();
   }
@@ -1329,6 +1346,8 @@ impl PlayheadArea {
     let mutex_pos = self.pos.lock().unwrap();
     let pos = *mutex_pos;
     drop(mutex_pos);
+    #[cfg(feature = "symspell")]
+    let tmp_buf_move = Arc::clone(&self.tmp_buf);
     cb_sink
       .send(Box::new(move |siv| {
         siv.call_on_name(consts::input_status_unit_view, |view: &mut TextView| {
@@ -1344,18 +1363,24 @@ impl PlayheadArea {
         );
 
         #[cfg(feature = "symspell")]
-        siv.call_on_name(consts::tmp_status_unit_view, |view: &mut TextView| {
-          let current = view.get_content();
-          let s = current.source();
-          if !s.ends_with(' ') {
-            let new_content = if s == "-" {
-              " ".to_string()
+        {
+          let display = {
+            let mut buf = tmp_buf_move.lock().unwrap();
+            let last = buf.back().copied();
+            if last != Some(' ') {
+              buf.push(' ');
+            }
+            let s: String = buf.iter().collect();
+            if s.is_empty() {
+              "-".to_string()
             } else {
-              format!("{} ", s)
-            };
-            view.set_content(new_content);
-          }
-        });
+              s
+            }
+          };
+          siv.call_on_name(consts::tmp_status_unit_view, move |view: &mut TextView| {
+            view.set_content(display);
+          });
+        }
       }))
       .unwrap();
   }
