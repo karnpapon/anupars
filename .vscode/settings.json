@@ -1,4 +1,7 @@
 {
   "editor.formatOnSave": true,
-  "rust-analyzer.check.extraEnv": {}
+  "rust-analyzer.check.extraEnv": {},
+  "[typst]": {
+    "editor.formatOnSave": true
+  }
 }

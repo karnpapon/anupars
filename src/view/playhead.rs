@@ -133,7 +133,11 @@ impl Playhead {
               .unwrap();
           }
           Message::Leap(direction, canvas_size) => {
-            let leap_steps = 8;
+            let leap_steps = match direction {
+              Direction::Up | Direction::Down => 4,
+              Direction::Left | Direction::Right => 8,
+              Direction::Idle => 0,
+            };
             playhead_area_tx
               .send(playhead_handler::Message::Leap(
                 direction,

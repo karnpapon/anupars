@@ -854,7 +854,7 @@ fn on_event(canvas: &mut GridEditor, event: Event) -> EventResult {
     }
     #[cfg(target_os = "macos")]
     Event::Char('Ô') => {
-      let dir = (0, -8);
+      let dir = (0, -2);
       canvas
         .playhead_tx
         .send(PlayheadMessage::Scale(dir))
@@ -863,7 +863,7 @@ fn on_event(canvas: &mut GridEditor, event: Event) -> EventResult {
     }
     #[cfg(target_os = "macos")]
     Event::Char('\u{f8ff}') => {
-      let dir = (0, 8);
+      let dir = (0, 2);
       canvas
         .playhead_tx
         .send(PlayheadMessage::Scale(dir))
