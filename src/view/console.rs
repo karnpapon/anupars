@@ -200,6 +200,10 @@ impl Console {
         "SYM:",
         TextView::new("-").with_name(consts::sym_status_unit_view),
       )
+      .child(
+        "RPL:",
+        TextView::new("-").with_name(consts::rpl_status_unit_view),
+      )
       .fixed_width(100);
 
     LinearLayout::horizontal()

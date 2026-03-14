@@ -77,9 +77,9 @@ pub const EVENT_OPERATORS: [EventOperator; 3] =
 // ============================================================================
 
 /// Two-stage pending jump position:
-/// - `Waiting` — position was just popped; the *current* jump will still be random,
+/// - `Waiting`, position was just popped; the *current* jump will still be random,
 ///   and it will be promoted to `Armed` afterwards.
-/// - `Armed`   — the *next* jump will land here.
+/// - `Armed`  , the *next* jump will land here.
 #[derive(Clone, Debug)]
 pub enum PendingJumpPosition {
   Empty,

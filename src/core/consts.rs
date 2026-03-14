@@ -99,6 +99,7 @@ pub static playhead_controller_section_view: &str = "playhead_controller_section
 pub static tmp_controller_section_view: &str = "tmp_controller_section_view";
 pub static tmp_status_unit_view: &str = "tmp_status_unit_view";
 pub static sym_status_unit_view: &str = "sym_status_unit_view";
+pub static rpl_status_unit_view: &str = "rpl_status_unit_view";
 
 pub static regex_err_display_unit_view: &str = "regex_err_display_unit_view";
 pub static control_section_view: &str = "control_section_view";

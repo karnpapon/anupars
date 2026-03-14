@@ -245,7 +245,7 @@ impl MidiTriggerHandler {
     let playhead_row = (playhead_pos.y / row_h).min(h.saturating_sub(1));
     let x_offset_in_band = abs_x % col_w.max(1);
 
-    // Collect matched (y, tilt_x) pairs — each row may have a different tilt-adjusted x
+    // Collect matched (y, tilt_x) pairs, each row may have a different tilt-adjusted x
     // and therefore a different MIDI channel, so we trigger once per matched cell.
     let matched: Vec<(usize, usize)> = {
       let matcher = self.text_matcher.lock().unwrap();

@@ -1,3 +1,7 @@
+#[cfg(feature = "symspell")]
+use ringbuffer::AllocRingBuffer;
+#[cfg(feature = "symspell")]
+use ringbuffer::RingBuffer;
 use std::collections::BTreeSet;
 use std::collections::HashMap;
 use std::collections::VecDeque;
@@ -9,10 +13,6 @@ use std::sync::Mutex;
 use std::thread;
 use std::time::Duration;
 
-use ringbuffer::AllocRingBuffer;
-#[cfg(feature = "symspell")]
-use ringbuffer::RingBuffer;
-
 #[cfg(feature = "symspell")]
 use symspell_rs::SymSpell;
 #[cfg(feature = "symspell")]
@@ -22,6 +22,8 @@ use symspell_rs::Verbosity;
 // use std::time::Instant;
 
 use cursive::views::Canvas;
+#[cfg(feature = "symspell")]
+use cursive::views::EditView;
 use cursive::views::TextView;
 use cursive::Vec2;
 use cursive::XY;
@@ -63,6 +65,16 @@ pub enum UIUpdate {
   TmpAppend(usize),
   #[cfg(feature = "symspell")]
   TmpAppendSpace,
+  #[cfg(feature = "symspell")]
+  RplCycle(Rect),
+}
+
+#[cfg(feature = "symspell")]
+#[derive(Clone, Debug)]
+pub enum RplPendingState {
+  Empty,
+  Waiting(String, Rect),
+  Armed(String, Rect),
 }
 
 struct GridParams<'a, R: rand::Rng> {
@@ -265,8 +277,11 @@ pub struct PlayheadArea {
   /// Remaining fast-division steps within the current regex match span.
   /// Non-zero → advance at 2× rate (halved divider) until it reaches 0.
   match_span_remaining: Arc<AtomicUsize>,
-  /// Ring buffer of the last 10 triggered characters displayed in TMP:
+
+  #[cfg(feature = "symspell")]
   pub tmp_buf: Arc<Mutex<AllocRingBuffer<char>>>,
+  #[cfg(feature = "symspell")]
+  pub rpl_state: Arc<Mutex<RplPendingState>>,
   // #[cfg(debug_assertions)]
   // timing_stats: Arc<TimingStats>,
 }
@@ -332,7 +347,10 @@ impl PlayheadArea {
       step_index: Arc::new(Mutex::new(0)),
       ratchet_generation,
       match_span_remaining: Arc::new(AtomicUsize::new(0)),
+      #[cfg(feature = "symspell")]
       tmp_buf: Arc::new(Mutex::new(AllocRingBuffer::new(consts::TMP_BUF_SIZE))),
+      #[cfg(feature = "symspell")]
+      rpl_state: Arc::new(Mutex::new(RplPendingState::Empty)),
       // #[cfg(debug_assertions)]
       // timing_stats: Arc::new(TimingStats::new()),
     }
@@ -343,6 +361,8 @@ impl PlayheadArea {
     cb_sink: cursive::CbSink,
     #[cfg(feature = "symspell")] tmp_buf: Arc<Mutex<AllocRingBuffer<char>>>,
     #[cfg(feature = "symspell")] symspell: Arc<Mutex<SymSpell>>,
+    #[cfg(feature = "symspell")] rpl_state: Arc<Mutex<RplPendingState>>,
+    #[cfg(feature = "symspell")] regex_tx: Sender<regex::Message>,
   ) {
     thread::Builder::new()
       .name("ui-batch-processor".to_string())
@@ -362,12 +382,20 @@ impl PlayheadArea {
         let tmp_buf_cb = Arc::clone(&tmp_buf);
         #[cfg(feature = "symspell")]
         let symspell_cb = Arc::clone(&symspell);
+        #[cfg(feature = "symspell")]
+        let rpl_state_cb = Arc::clone(&rpl_state);
+        #[cfg(feature = "symspell")]
+        let regex_tx_cb = regex_tx.clone();
         cb_sink
           .send(Box::new(move |siv| {
             #[cfg(feature = "symspell")]
             let tmp_buf = tmp_buf_cb;
             #[cfg(feature = "symspell")]
             let symspell = symspell_cb;
+            #[cfg(feature = "symspell")]
+            let rpl_state = rpl_state_cb;
+            #[cfg(feature = "symspell")]
+            let regex_tx = regex_tx_cb;
 
             for update in updates {
               match update {
@@ -478,6 +506,76 @@ impl PlayheadArea {
                       siv.call_on_name(consts::sym_status_unit_view, move |view: &mut TextView| {
                         view.set_content(sym_result);
                       });
+                    }
+                  }
+                }
+                #[cfg(feature = "symspell")]
+                UIUpdate::RplCycle(old_area) => {
+                  let sym = siv
+                    .call_on_name(consts::sym_status_unit_view, |v: &mut TextView| {
+                      v.get_content().source().to_string()
+                    })
+                    .unwrap_or_default();
+                  let mut state = rpl_state.lock().unwrap();
+                  let apply_opt: Option<(String, Rect)> =
+                    match std::mem::replace(&mut *state, RplPendingState::Empty) {
+                      RplPendingState::Armed(armed_sym, armed_area) => {
+                        *state = if !sym.is_empty() && sym != "-" {
+                          RplPendingState::Waiting(sym, old_area)
+                        } else {
+                          RplPendingState::Empty
+                        };
+                        Some((armed_sym, armed_area))
+                      }
+                      RplPendingState::Waiting(w_sym, w_area) => {
+                        *state = RplPendingState::Armed(w_sym, w_area);
+                        None
+                      }
+                      RplPendingState::Empty => {
+                        *state = if !sym.is_empty() && sym != "-" {
+                          RplPendingState::Waiting(sym, old_area)
+                        } else {
+                          RplPendingState::Empty
+                        };
+                        None
+                      }
+                    };
+                  let rpl_display = match &*state {
+                    RplPendingState::Armed(s, _) => format!("[armed] {}", s),
+                    RplPendingState::Waiting(s, _) => s.clone(),
+                    RplPendingState::Empty => "-".to_string(),
+                  };
+                  drop(state);
+                  siv.call_on_name(consts::rpl_status_unit_view, move |v: &mut TextView| {
+                    v.set_content(rpl_display);
+                  });
+                  if let Some((sym_text, area)) = apply_opt {
+                    let result = siv.call_on_name(
+                      consts::canvas_editor_section_view,
+                      move |canvas: &mut Canvas<GridEditor>| {
+                        let editor = canvas.state_mut();
+                        let gw = editor.grid.width;
+                        let old_text = editor.text_contents();
+                        let new_text = splice_text_at_area(&old_text, &area, &sym_text);
+                        editor.update_text_contents(&new_text);
+                        editor.update_grid_src();
+                        (new_text, gw)
+                      },
+                    );
+                    if let Some((new_text, grid_width)) = result {
+                      let pattern = siv
+                        .call_on_name(consts::regex_input_unit_view, |v: &mut EditView| {
+                          v.get_content().as_ref().clone()
+                        })
+                        .unwrap_or_default();
+                      if !pattern.is_empty() {
+                        let _ = regex_tx.send(regex::Message::Solve(regex::EventData {
+                          text: new_text,
+                          pattern,
+                          flags: "i".to_string(),
+                          grid_width,
+                        }));
+                      }
                     }
                   }
                 }
@@ -984,6 +1082,8 @@ impl PlayheadArea {
     drop(pos);
 
     let mut area = self.area.lock().unwrap();
+    #[cfg(feature = "symspell")]
+    let prev_area = *area;
     *area = Rect::from_size((new_x, new_y), (playhead_width, playhead_height));
     let new_area = *area;
     drop(area);
@@ -997,6 +1097,8 @@ impl PlayheadArea {
     queue.push_back(UIUpdate::PlayheadPosAndArea(new_pos, new_area));
     queue.push_back(UIUpdate::ChnStatus(self.compute_chn_str(new_pos)));
 
+    #[cfg(feature = "symspell")]
+    queue.push_back(UIUpdate::RplCycle(prev_area));
     #[cfg(feature = "symspell")]
     queue.push_back(UIUpdate::TmpAppendSpace);
 
@@ -1929,6 +2031,46 @@ impl PlayheadArea {
 
     tx
   }
+}
+
+#[cfg(feature = "symspell")]
+fn splice_text_at_area(text: &str, area: &Rect, sym: &str) -> String {
+  let mut lines: Vec<String> = text.split('\n').map(str::to_string).collect();
+  let sym_chars: Vec<char> = sym.chars().collect();
+  let top = area.top_left.y;
+  let left = area.top_left.x;
+  let h = area.height();
+  let w = area.width();
+  // Only write sym chars that exist; stop early if sym is exhausted.
+  // Cells beyond sym length keep their original content, never overwrite
+  // with spaces or write outside the playhead area.
+  'outer: for row in 0..h {
+    let line_idx = top + row;
+    if line_idx >= lines.len() {
+      lines.resize(line_idx + 1, String::new());
+    }
+    let line = &mut lines[line_idx];
+    // Only pad the line if sym has chars in this row.
+    let row_start = row * w;
+    if row_start >= sym_chars.len() {
+      break 'outer;
+    }
+    // Pad with '\0' (not ' ') so cells beyond the original line end remain
+    // rendered as '.' rather than being overwritten with a visible space.
+    while line.chars().count() < left + w {
+      line.push('\0');
+    }
+    let mut chars: Vec<char> = line.chars().collect();
+    for col in 0..w {
+      let sym_idx = row_start + col;
+      if sym_idx >= sym_chars.len() {
+        break;
+      }
+      chars[left + col] = sym_chars[sym_idx];
+    }
+    *line = chars.into_iter().collect();
+  }
+  lines.join("\n")
 }
 
 #[cfg(test)]

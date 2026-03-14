@@ -123,7 +123,12 @@ pub fn initialize_components() -> Application {
   let current_tempo = Arc::new(Mutex::new(DEFAULT_TEMPO));
   let prog = Program::new();
 
-  let playhead = Playhead::new(cursive.cb_sink().clone(), midi.tx.clone());
+  let playhead = Playhead::new(
+    cursive.cb_sink().clone(),
+    midi.tx.clone(),
+    #[cfg(feature = "symspell")]
+    regex_handler.tx.clone(),
+  );
   let mut metronome = Metronome::new(cursive.cb_sink().clone(), playhead.tx.clone());
 
   metronome.set_midi_tx(midi.tx.clone());
