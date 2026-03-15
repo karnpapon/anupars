@@ -1,7 +1,6 @@
 use cursive::theme::ColorStyle;
 use cursive::theme::ColorType;
 use cursive::theme::Style;
-use cursive::utils::span::SpannedString;
 use cursive::Printer;
 use cursive::Vec2;
 
@@ -129,74 +128,9 @@ fn normal_style(is_match: bool) -> Style {
   }
 }
 
-/// Returns the `Match` whose span `[i, i+l)` covers `cell`, or `None`.
-fn match_covering(matcher: &HashMap<usize, Match>, cell: usize) -> Option<&Match> {
-  matcher
-    .values()
-    .find(|m| cell >= m.i && cell < m.i + m.l.max(1))
-}
-
 impl<T: Printable + Copy> Matrix<T> {
   fn get_display_char(&self, x: usize, y: usize) -> char {
     self.get(x, y).unwrap().display_char((x, y).into())
-  }
-
-  /// Render the active (cursor) playhead cell.
-  fn render_active_playhead(
-    &self,
-    printer: &Printer,
-    pos: (usize, usize),
-    cell_index: usize,
-    text_matcher: &Option<HashMap<usize, Match>>,
-  ) {
-    printer.print_styled(
-      pos,
-      &SpannedString::styled(consts::PLAYHEAD_CHAR, Style::none()),
-    );
-    if let Some(matcher) = text_matcher {
-      if let Some(m) = match_covering(matcher, cell_index) {
-        let symbol = if m.l <= 1 {
-          consts::PLAYHEAD_MATCH_CHAR
-        } else {
-          consts::MATCH_GROUP_CHAR
-        };
-        printer.print_styled(pos, &SpannedString::styled(symbol, Style::none()));
-      }
-    }
-  }
-
-  /// Render a non-cursor cell inside the playhead area.
-  fn render_playhead_area_cell(
-    &self,
-    printer: &Printer,
-    x: usize,
-    y: usize,
-    cell_index: usize,
-    playhead_ui: &PlayheadUI,
-  ) {
-    let ch = self.get_display_char(x, y);
-    printer.print_styled((x, y), &SpannedString::styled(ch, Style::highlight()));
-
-    if let Some(matcher) = &playhead_ui.text_matcher {
-      if let Some(m) = match_covering(matcher, cell_index) {
-        let mut regex_indexes = playhead_ui.regex_indexes.lock().unwrap();
-        regex_indexes.insert(cell_index);
-
-        let playhead_pos = playhead_ui.playhead_pos;
-        let playhead_end = playhead_pos + playhead_ui.playhead_area.size();
-        regex_indexes.retain(|&index| {
-          let p = self.index_to_xy(&index);
-          p.fits(playhead_pos) && p.fits_in(playhead_end)
-        });
-
-        let symbol = if m.l <= 1 {
-          consts::TRIGGER_CHAR
-        } else {
-          consts::MATCH_GROUP_CHAR
-        };
-        printer.print_styled((x, y), &SpannedString::styled(symbol, Style::highlight()));
-      }
-    }
   }
 
   /// Channel-dimming bounds for the active playhead channel.
@@ -329,9 +263,44 @@ impl<T: Printable + Copy> Matrix<T> {
     let active_absolute_pos = playhead_pos.saturating_add(actived_pos);
     let v = (*grid_v_splits).max(1);
     let h = (*grid_h_splits).max(1);
+    let total = self.width * self.height;
 
     let bounds = self.channel_bounds(*playhead_pos, v, h);
     let metrics = self.tilt_metrics(*playhead_pos, v, h);
+
+    let style_dim = dim_style();
+    let style_highlight = Style::highlight();
+    let style_none = Style::none();
+    let style_xhair_dim = Style::from_color_style(ColorStyle::front(ColorType::rgb(80, 80, 80)));
+    let style_aimed_bg = Style::from_color_style(ColorStyle::new(
+      ColorType::rgb(255, 255, 255),
+      ColorType::rgb(50, 50, 50),
+    ));
+
+    let pa_left = playhead_area.left();
+    let pa_right = playhead_area.right();
+    let pa_top = playhead_area.top();
+    let pa_bottom = playhead_area.bottom();
+    let aimed_bounds = aimed_area.map(|r| (r.left(), r.right(), r.top(), r.bottom()));
+
+    // Build a flat match-lookup map: cell_index -> &Match.
+    let match_map: HashMap<usize, &Match> = text_matcher
+      .as_ref()
+      .map(|matcher| {
+        let mut map = HashMap::new();
+        for m in matcher.values() {
+          let end = (m.i + m.l.max(1)).min(total);
+          for idx in m.i..end {
+            map.entry(idx).or_insert(m);
+          }
+        }
+        map
+      })
+      .unwrap_or_default();
+
+    // single str buff reused across all cells
+    let mut tmp = String::with_capacity(4);
+    let mut new_regex_in_area: Vec<usize> = Vec::new();
 
     for y in 0..self.height {
       let sweep = self.row_sweep(&metrics, tilt_mode, active_absolute_pos.x, v, h, y);
@@ -339,16 +308,15 @@ impl<T: Printable + Copy> Matrix<T> {
       for x in 0..self.width {
         let cell_index = x + y * self.width;
         let pos = (x, y);
-        let is_in_playhead_area = playhead_area.contains(pos.into());
-        let is_active_pos = active_absolute_pos.eq(&pos);
-        let is_regex_match = text_matcher
-          .as_ref()
-          .map(|m| match_covering(m, cell_index).is_some())
-          .unwrap_or(false);
-
         let ch = self.get_display_char(x, y);
 
-        let style = self.base_cell_style(&CellStyleContext {
+        let is_in_playhead_area = x >= pa_left && x <= pa_right && y >= pa_top && y <= pa_bottom;
+        let is_active_pos = x == active_absolute_pos.x && y == active_absolute_pos.y;
+        let matched = match_map.get(&cell_index);
+        let is_regex_match = matched.is_some();
+
+        let mut final_ch = ch;
+        let mut final_style = self.base_cell_style(&CellStyleContext {
           x,
           y,
           is_regex_match,
@@ -359,52 +327,79 @@ impl<T: Printable + Copy> Matrix<T> {
           v,
           h,
         });
-        printer.print_styled(pos, &SpannedString::styled(ch, style));
 
-        // sweep mode
+        // crosshair
         if sweep.is_crosshair(x) && !is_active_pos && *sweep_mode {
-          let (crosshair_ch, crosshair_style) = if is_regex_match && !is_in_playhead_area {
-            ('|', Style::highlight())
+          final_ch = '|';
+          final_style = if is_regex_match && !is_in_playhead_area {
+            style_highlight
           } else {
-            (
-              '|',
-              Style::from_color_style(ColorStyle::front(ColorType::rgb(80, 80, 80))),
-            )
+            style_xhair_dim
           };
-          printer.print_styled(pos, &SpannedString::styled(crosshair_ch, crosshair_style));
         }
 
-        // focus mode
-        if *focus_mode && !is_in_playhead_area {
-          let in_x_range = x >= playhead_area.left() && x < playhead_area.right();
-          if !in_x_range {
-            printer.print_styled(pos, &SpannedString::styled(ch, dim_style()));
-          }
+        // Focus dim (only for cells outside the playhead x-band).
+        if *focus_mode && !is_in_playhead_area && (x < pa_left || x >= pa_right) {
+          final_ch = ch;
+          final_style = style_dim;
         }
 
+        // Playhead
         if is_in_playhead_area {
           if is_active_pos {
-            self.render_active_playhead(printer, pos, cell_index, text_matcher);
+            final_ch = matched
+              .map(|m| {
+                if m.l <= 1 {
+                  consts::PLAYHEAD_MATCH_CHAR
+                } else {
+                  consts::MATCH_GROUP_CHAR
+                }
+              })
+              .unwrap_or(consts::PLAYHEAD_CHAR);
+            final_style = style_none;
           } else {
-            self.render_playhead_area_cell(printer, x, y, cell_index, playhead_ui);
+            final_style = style_highlight;
+            if let Some(m) = matched {
+              new_regex_in_area.push(cell_index);
+              final_ch = if m.l <= 1 {
+                consts::TRIGGER_CHAR
+              } else {
+                consts::MATCH_GROUP_CHAR
+              };
+            }
           }
         }
 
-        // aimed area (for Ctrl+hjkl aiming) - render AFTER playhead to show overlay
-        if let Some(aimed_rect) = aimed_area {
-          if aimed_rect.contains(pos.into()) {
-            let aimed_style = if is_regex_match {
-              Style::highlight()
+        // aimed pos
+        if let Some((ax0, ax1, ay0, ay1)) = aimed_bounds {
+          if x >= ax0 && x <= ax1 && y >= ay0 && y <= ay1 {
+            final_ch = ch;
+            final_style = if is_regex_match {
+              style_highlight
             } else {
-              Style::from_color_style(ColorStyle::new(
-                ColorType::rgb(255, 255, 255),
-                ColorType::rgb(50, 50, 50),
-              ))
+              style_aimed_bg
             };
-            printer.print_styled(pos, &SpannedString::styled(ch, aimed_style));
           }
         }
+
+        // Single print per cell
+        tmp.clear();
+        tmp.push(final_ch);
+        printer.with_style(final_style, |p| p.print(pos, &tmp));
       }
+    }
+
+    // Update regex_indexes once per frame .
+    if !new_regex_in_area.is_empty() {
+      let mut regex_indexes = playhead_ui.regex_indexes.lock().unwrap();
+      for idx in new_regex_in_area {
+        regex_indexes.insert(idx);
+      }
+      let playhead_end = *playhead_pos + playhead_area.size();
+      regex_indexes.retain(|&index| {
+        let p = self.index_to_xy(&index);
+        p.fits(*playhead_pos) && p.fits_in(playhead_end)
+      });
     }
   }
 }
