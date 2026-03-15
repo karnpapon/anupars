@@ -393,10 +393,14 @@ impl<T: Printable + Copy> Matrix<T> {
         // aimed area (for Ctrl+hjkl aiming) - render AFTER playhead to show overlay
         if let Some(aimed_rect) = aimed_area {
           if aimed_rect.contains(pos.into()) {
-            let aimed_style = Style::from_color_style(ColorStyle::new(
-              ColorType::rgb(255, 255, 255),
-              ColorType::rgb(50, 50, 50),
-            ));
+            let aimed_style = if is_regex_match {
+              Style::highlight()
+            } else {
+              Style::from_color_style(ColorStyle::new(
+                ColorType::rgb(255, 255, 255),
+                ColorType::rgb(50, 50, 50),
+              ))
+            };
             printer.print_styled(pos, &SpannedString::styled(ch, aimed_style));
           }
         }
