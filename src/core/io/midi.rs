@@ -20,6 +20,49 @@ const DYNLENGTH_DEFAULT_DISTANCE: usize = 4;
 const MAX_VELOCITY: f32 = 100.0;
 const MIN_VELOCITY: f32 = 10.0;
 
+#[repr(u8)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MidiStatusMsg {
+  NoteOff = 0x80,
+  NoteOn = 0x90,
+  Stop = 0xFC,
+  Start = 0xFA,
+  Continue = 0xFB,
+  Clock = 0xF8,
+  SongPositionPointer = 0xF2,
+  BitMask7 = 0x7F,
+  AllNotesOff = 0x7B,
+  AllSoundOff = 0x78,
+  ControlChange = 0xB0,
+  PitchBend = 0xE0,
+}
+
+impl TryFrom<u8> for MidiStatusMsg {
+  type Error = u8;
+  fn try_from(byte: u8) -> Result<Self, Self::Error> {
+    match byte {
+      0x80 => Ok(MidiStatusMsg::NoteOff),
+      0x90 => Ok(MidiStatusMsg::NoteOn),
+      0xFC => Ok(MidiStatusMsg::Stop),
+      0xFA => Ok(MidiStatusMsg::Start),
+      0xFB => Ok(MidiStatusMsg::Continue),
+      0xF8 => Ok(MidiStatusMsg::Clock),
+      0xF2 => Ok(MidiStatusMsg::SongPositionPointer),
+      0x7F => Ok(MidiStatusMsg::BitMask7),
+      0x7B => Ok(MidiStatusMsg::AllNotesOff),
+      0x78 => Ok(MidiStatusMsg::AllSoundOff),
+      0xB0 => Ok(MidiStatusMsg::ControlChange),
+      other => Err(other),
+    }
+  }
+}
+
+impl From<MidiStatusMsg> for u8 {
+  fn from(m: MidiStatusMsg) -> u8 {
+    m as u8
+  }
+}
+
 /// Parameters for MIDI trigger with position information
 #[derive(Clone, Copy, Debug)]
 pub struct TriggerParams {
@@ -56,12 +99,12 @@ pub enum Message {
   SetTempo(usize),
   ReleaseAll(),
   // MIDI Clock messages
-  ClockStart(),             // 0xFA - Start playback
-  ClockStop(),              // 0xFC - Stop playback
-  ClockTick(),              // 0xF8 - Timing clock (24 PPQN)
-  ClockContinue(),          // 0xFB - Continue from pause
-  ClockSongPosition(usize), // 0xF2 - Song Position Pointer (in 16th notes)
-  EnableClock(bool),        // Enable/disable MIDI clock output
+  ClockStart(),
+  ClockStop(),
+  ClockTick(),
+  ClockContinue(),
+  ClockSongPosition(usize),
+  EnableClock(bool),
   ExternalClock(u8),
   EnableClockInput(bool),
   ConnectInput(usize),
@@ -112,191 +155,120 @@ pub struct Midi {
 }
 
 impl Midi {
-  pub fn new() -> Self {
-    let (tx, rx) = channel();
-    let tempo = Arc::new(Mutex::new(consts::DEFAULT_TEMPO));
-    let Ok(midi_out) = MidiOutput::new("client-midi-output") else {
-      return Self {
-        midi: None.into(),
-        out_device: None.into(),
-        out_device_name: None.into(),
-        tx,
-        rx,
-        msg_config_list: Arc::new(Mutex::new(Vec::new())),
-        tempo,
-        clock_enabled: Arc::new(Mutex::new(false)),
-        last_held_note: Arc::new(Mutex::new(None)),
-        in_connection: Mutex::new(None),
-        clock_input_enabled: Arc::new(AtomicBool::new(false)),
-        ext_clock_callback: Mutex::new(None),
-      };
-    };
-    Midi {
-      midi: Some(midi_out).into(),
-      out_device: None.into(),
-      out_device_name: None.into(),
-      tx,
-      rx,
-      msg_config_list: Arc::new(Mutex::new(Vec::new())),
-      tempo,
-      clock_enabled: Arc::new(Mutex::new(false)),
-      last_held_note: Arc::new(Mutex::new(None)),
-      in_connection: Mutex::new(None),
-      clock_input_enabled: Arc::new(AtomicBool::new(false)),
-      ext_clock_callback: Mutex::new(None),
+  fn handle_push(&self, stack_tx: std::sync::mpsc::Sender<stack::Message>, midi_msg: MidiMsg) {
+    let _ = stack_tx.send(stack::Message::Push(midi_msg));
+  }
+
+  fn handle_hold(&self, stack_tx: std::sync::mpsc::Sender<stack::Message>, midi_msg: MidiMsg) {
+    let _ = stack_tx.send(stack::Message::Hold(midi_msg));
+  }
+
+  fn handle_release(&self, stack_tx: std::sync::mpsc::Sender<stack::Message>, midi_msg: MidiMsg) {
+    let _ = stack_tx.send(stack::Message::Release(midi_msg));
+  }
+
+  fn handle_release_all(&self, stack_tx: std::sync::mpsc::Sender<stack::Message>) {
+    let _ = stack_tx.send(stack::Message::ReleaseAll());
+    let mut last_held = self.last_held_note.lock().unwrap();
+    *last_held = None;
+  }
+
+  fn handle_trigger(&self, midi_msg: MidiMsg, is_pressed: bool) {
+    self.trigger(&midi_msg, is_pressed).unwrap();
+  }
+
+  fn handle_trigger_with_position(&self, params: TriggerParams) {
+    self.trigger_w_position(params);
+  }
+
+  fn handle_set_tempo(&self, bpm: usize) {
+    let mut tempo = self.tempo.lock().unwrap();
+    *tempo = bpm;
+  }
+
+  fn handle_switch_device(&self, port_index: usize) {
+    if let Err(e) = self.switch_device(port_index) {
+      eprintln!("Error switching MIDI device: {}", e);
     }
   }
-}
 
-impl Midi {
-  pub fn init(&mut self) -> Result<(), Box<dyn Error>> {
-    let midi_out = MidiOutput::new("MIDI Output")?;
-
-    let out_ports = midi_out.ports();
-    let out_port: &MidiOutputPort = match out_ports.len() {
-      0 => return Err("no output port found".into()),
-      1 => {
-        println!(
-          "Choosing the only available output port: {}",
-          midi_out.port_name(&out_ports[0]).unwrap()
-        );
-        &out_ports[0]
-      }
-      _ => {
-        println!("\nAvailable output ports:");
-        for (i, p) in out_ports.iter().enumerate() {
-          println!("{}: {}", i, midi_out.port_name(p).unwrap());
-        }
-        let input = String::from("0");
-        out_ports
-          .get(input.trim().parse::<usize>()?)
-          .ok_or("invalid output port selected")?
-      }
-    };
-
-    let conn_out_name = &midi_out.port_name(out_port).unwrap();
-    let conn_out = midi_out.connect(out_port, "midir-test")?;
-    self.out_device = Mutex::new(Some(conn_out));
-    self.out_device_name = Mutex::new(Some(conn_out_name.to_string()));
-    Ok(())
+  fn handle_disconnect_output(&self) {
+    self.send_all_notes_off();
+    *self.out_device.lock().unwrap() = None;
+    *self.out_device_name.lock().unwrap() = None;
   }
 
-  pub fn run(self) {
-    let midi_tx_1 = self.tx.clone();
-    let midi_tx_2 = self.tx.clone();
-    let stack = Arc::new(Stack::new());
-    let stack_clone_2 = Arc::clone(&stack);
-    let stack_tx = stack.run(midi_tx_1);
-    stack_clone_2.refresh(midi_tx_2);
+  fn handle_panic(&self) {
+    self.send_all_notes_off();
+    let mut last_held = self.last_held_note.lock().unwrap();
+    *last_held = None;
+  }
 
-    thread::spawn(move || {
-      for control_message in &self.rx {
-        match control_message {
-          Message::Push(midi_msg) => {
-            let _ = stack_tx.send(stack::Message::Push(midi_msg));
-          }
-          Message::Hold(midi_msg) => {
-            let _ = stack_tx.send(stack::Message::Hold(midi_msg));
-          }
-          Message::Release(midi_msg) => {
-            let _ = stack_tx.send(stack::Message::Release(midi_msg));
-          }
-          Message::ReleaseAll() => {
-            let _ = stack_tx.send(stack::Message::ReleaseAll());
-            let mut last_held = self.last_held_note.lock().unwrap();
-            *last_held = None;
-          }
-          Message::Trigger(msg, is_pressed) => {
-            self.trigger(&msg, is_pressed).unwrap();
-          }
-          Message::SetMsgConfig(msg) => {
-            self.set_msg_config_list(msg);
-          }
-          Message::ClearMsgConfig() => {
-            self.clear_msg_config_list();
-          }
-          Message::TriggerWithPosition(params) => {
-            self.trigger_w_position(params);
-          }
-          Message::SetTempo(bpm) => {
-            let mut tempo = self.tempo.lock().unwrap();
-            *tempo = bpm;
-          }
-          Message::SwitchDevice(port_index) => {
-            if let Err(e) = self.switch_device(port_index) {
-              eprintln!("Error switching MIDI device: {}", e);
-            }
-          }
-          Message::DisconnectOutput() => {
-            self.send_all_notes_off();
-            *self.out_device.lock().unwrap() = None;
-            *self.out_device_name.lock().unwrap() = None;
-          }
-          Message::Panic() => {
-            self.send_all_notes_off();
-            let mut last_held = self.last_held_note.lock().unwrap();
-            *last_held = None;
-          }
-          Message::ClockStart() => {
-            self.send_clock_start();
-          }
-          Message::ClockStop() => {
-            self.send_clock_stop();
-          }
-          Message::ClockTick() => {
-            self.send_clock_tick();
-          }
-          Message::ClockContinue() => {
-            self.send_clock_continue();
-          }
-          Message::ClockSongPosition(position) => {
-            self.send_song_position_pointer(position);
-          }
-          Message::EnableClock(enabled) => {
-            self.enable_clock(enabled);
-          }
-          Message::ExternalClock(byte) => {
-            let cb = self.ext_clock_callback.lock().unwrap();
-            if let Some(ref f) = *cb {
-              f(byte);
-            }
-          }
-          Message::EnableClockInput(en) => {
-            self.clock_input_enabled.store(en, Ordering::Relaxed);
-          }
-          Message::ConnectInput(port_index) => {
-            // Drop existing connection then reconnect to the requested port
-            *self.in_connection.lock().unwrap() = None;
-            let Ok(new_inp) = MidiInput::new("MIDI Input") else {
-              continue;
-            };
-            let ports = new_inp.ports();
-            let Some(port) = ports.get(port_index) else {
-              continue;
-            };
-            let inp_tx = self.tx.clone();
-            let clock_enabled = Arc::clone(&self.clock_input_enabled);
-            if let Ok(conn) = new_inp.connect(
-              port,
-              "MIDI Input",
-              move |_stamp, msg, _| {
-                if clock_enabled.load(Ordering::Relaxed) && !msg.is_empty() {
-                  match msg[0] {
-                    0xF8 | 0xFA | 0xFB | 0xFC => {
-                      let _ = inp_tx.send(Message::ExternalClock(msg[0]));
-                    }
-                    _ => {}
-                  }
-                }
-              },
-              (),
-            ) {
-              *self.in_connection.lock().unwrap() = Some(conn);
+  fn handle_clock_start(&self) {
+    self.send_clock_start();
+  }
+
+  fn handle_clock_stop(&self) {
+    self.send_clock_stop();
+  }
+
+  fn handle_clock_tick(&self) {
+    self.send_clock_tick();
+  }
+
+  fn handle_clock_continue(&self) {
+    self.send_clock_continue();
+  }
+
+  fn handle_clock_song_position(&self, position: usize) {
+    self.send_song_position_pointer(position);
+  }
+
+  fn handle_external_clock(&self, byte: u8) {
+    let cb = self.ext_clock_callback.lock().unwrap();
+    if let Some(ref f) = *cb {
+      f(byte);
+    }
+  }
+
+  fn handle_enable_clock_input(&self, en: bool) {
+    self.clock_input_enabled.store(en, Ordering::Relaxed);
+  }
+
+  fn handle_connect_input(&self, port_index: usize) {
+    *self.in_connection.lock().unwrap() = None;
+    let Ok(new_inp) = MidiInput::new("MIDI Input") else {
+      return;
+    };
+    let ports = new_inp.ports();
+    let Some(port) = ports.get(port_index) else {
+      return;
+    };
+    let inp_tx = self.tx.clone();
+    let clock_enabled = Arc::clone(&self.clock_input_enabled);
+    if let Ok(conn) = new_inp.connect(
+      port,
+      "MIDI Input",
+      move |_stamp, msg, _| {
+        if clock_enabled.load(Ordering::Relaxed) && !msg.is_empty() {
+          if let Ok(m) = MidiStatusMsg::try_from(msg[0]) {
+            #[allow(clippy::collapsible_match)]
+            match m {
+              MidiStatusMsg::Clock
+              | MidiStatusMsg::Start
+              | MidiStatusMsg::Continue
+              | MidiStatusMsg::Stop => {
+                let _ = inp_tx.send(Message::ExternalClock(msg[0]));
+              }
+              _ => {}
             }
           }
         }
-      }
-    });
+      },
+      (),
+    ) {
+      *self.in_connection.lock().unwrap() = Some(conn);
+    }
   }
 
   pub fn get_available_devices(&self) -> Vec<(String, usize)> {
@@ -526,9 +498,9 @@ impl Midi {
 
   fn build_midi_msg(&self, midi_msg: &MidiMsg, down: bool) -> [u8; 3] {
     let note_event = if down {
-      0x90 + midi_msg.channel
+      u8::from(MidiStatusMsg::NoteOn) + midi_msg.channel
     } else {
-      0x80 + midi_msg.channel
+      u8::from(MidiStatusMsg::NoteOff) + midi_msg.channel
     };
 
     [
@@ -550,10 +522,14 @@ impl Midi {
     let bend_ratio = pitch_bend / (bend_range_semitones * 100.0);
     let bend_value = (8192.0 + (bend_ratio * 8192.0)).clamp(0.0, 16383.0) as u16;
 
-    let lsb = (bend_value & 0x7F) as u8;
-    let msb = ((bend_value >> 7) & 0x7F) as u8;
+    let lsb = (bend_value & MidiStatusMsg::BitMask7 as u16) as u8;
+    let msb = ((bend_value >> 7) & MidiStatusMsg::BitMask7 as u16) as u8;
 
-    Some([0xE0 + midi_msg.channel, lsb, msb])
+    Some([
+      u8::from(MidiStatusMsg::PitchBend) + midi_msg.channel,
+      lsb,
+      msb,
+    ])
   }
 
   pub fn trigger(&self, midi_msg: &MidiMsg, down: bool) -> Result<(), &str> {
@@ -580,15 +556,20 @@ impl Midi {
   }
 
   fn send_all_notes_off(&self) {
-    // Send All Notes Off (CC 123) on all 16 MIDI channels
     if let Ok(mut conn_out) = self.out_device.lock() {
       if let Some(connection_out) = conn_out.as_mut() {
         for channel in 0..16 {
-          // CC 123: All Notes Off
-          let all_notes_off = [0xB0 + channel, 123, 0];
+          let all_notes_off = [
+            u8::from(MidiStatusMsg::ControlChange) + channel,
+            u8::from(MidiStatusMsg::AllNotesOff),
+            0,
+          ];
           let _ = connection_out.send(&all_notes_off);
-          // CC 120: All Sound Off (for good measure)
-          let all_sound_off = [0xB0 + channel, 120, 0];
+          let all_sound_off = [
+            u8::from(MidiStatusMsg::ControlChange) + channel,
+            u8::from(MidiStatusMsg::AllSoundOff),
+            0,
+          ];
           let _ = connection_out.send(&all_sound_off);
         }
       }
@@ -597,7 +578,7 @@ impl Midi {
   fn send_clock_start(&self) {
     if let Ok(mut conn_out) = self.out_device.lock() {
       if let Some(connection_out) = conn_out.as_mut() {
-        let _ = connection_out.send(&[0xFA]); // 0xFA = Start
+        let _ = connection_out.send(&[u8::from(MidiStatusMsg::Start)]);
       }
     }
   }
@@ -605,7 +586,7 @@ impl Midi {
   fn send_clock_stop(&self) {
     if let Ok(mut conn_out) = self.out_device.lock() {
       if let Some(connection_out) = conn_out.as_mut() {
-        let _ = connection_out.send(&[0xFC]); // 0xFC = Stop
+        let _ = connection_out.send(&[u8::from(MidiStatusMsg::Stop)]);
       }
     }
   }
@@ -614,7 +595,7 @@ impl Midi {
     if *self.clock_enabled.lock().unwrap() {
       if let Ok(mut conn_out) = self.out_device.lock() {
         if let Some(connection_out) = conn_out.as_mut() {
-          let _ = connection_out.send(&[0xF8]); // 0xF8 = Timing Clock (x24 per quarter note (PPQN))
+          let _ = connection_out.send(&[u8::from(MidiStatusMsg::Clock)]);
         }
       }
     }
@@ -623,7 +604,7 @@ impl Midi {
   fn send_clock_continue(&self) {
     if let Ok(mut conn_out) = self.out_device.lock() {
       if let Some(connection_out) = conn_out.as_mut() {
-        let _ = connection_out.send(&[0xFB]); // 0xFB = Continue
+        let _ = connection_out.send(&[u8::from(MidiStatusMsg::Continue)]);
       }
     }
   }
@@ -637,11 +618,10 @@ impl Midi {
         let spp_beats = position_in_ticks;
 
         // SPP is 14-bit value sent as two 7-bit bytes
-        let lsb = (spp_beats & 0x7F) as u8;
-        let msb = ((spp_beats >> 7) & 0x7F) as u8;
+        let lsb = (spp_beats & MidiStatusMsg::BitMask7 as usize) as u8;
+        let msb = ((spp_beats >> 7) & MidiStatusMsg::BitMask7 as usize) as u8;
 
-        // 0xF2 = Song Position Pointer
-        let _ = connection_out.send(&[0xF2, lsb, msb]);
+        let _ = connection_out.send(&[u8::from(MidiStatusMsg::SongPositionPointer), lsb, msb]);
       }
     }
   }
@@ -661,4 +641,152 @@ pub fn convert_to_midi_note_num(octave: u8, note: f32) -> (u8, f32) {
   let pitch_bend_cents = (total_note - midi_note as f32) * 100.0;
 
   (midi_note, pitch_bend_cents)
+}
+
+impl Midi {
+  pub fn init(&mut self) -> Result<(), Box<dyn Error>> {
+    let midi_out = MidiOutput::new("MIDI Output")?;
+
+    let out_ports = midi_out.ports();
+    let out_port: &MidiOutputPort = match out_ports.len() {
+      0 => return Err("no output port found".into()),
+      1 => {
+        println!(
+          "Choosing the only available output port: {}",
+          midi_out.port_name(&out_ports[0]).unwrap()
+        );
+        &out_ports[0]
+      }
+      _ => {
+        println!("\nAvailable output ports:");
+        for (i, p) in out_ports.iter().enumerate() {
+          println!("{}: {}", i, midi_out.port_name(p).unwrap());
+        }
+        let input = String::from("0");
+        out_ports
+          .get(input.trim().parse::<usize>()?)
+          .ok_or("invalid output port selected")?
+      }
+    };
+
+    let conn_out_name = &midi_out.port_name(out_port).unwrap();
+    let conn_out = midi_out.connect(out_port, "midir-test")?;
+    self.out_device = Mutex::new(Some(conn_out));
+    self.out_device_name = Mutex::new(Some(conn_out_name.to_string()));
+    Ok(())
+  }
+
+  pub fn new() -> Self {
+    let (tx, rx) = channel();
+    let tempo = Arc::new(Mutex::new(consts::DEFAULT_TEMPO));
+    let Ok(midi_out) = MidiOutput::new("client-midi-output") else {
+      return Self {
+        midi: None.into(),
+        out_device: None.into(),
+        out_device_name: None.into(),
+        tx,
+        rx,
+        msg_config_list: Arc::new(Mutex::new(Vec::new())),
+        tempo,
+        clock_enabled: Arc::new(Mutex::new(false)),
+        last_held_note: Arc::new(Mutex::new(None)),
+        in_connection: Mutex::new(None),
+        clock_input_enabled: Arc::new(AtomicBool::new(false)),
+        ext_clock_callback: Mutex::new(None),
+      };
+    };
+    Midi {
+      midi: Some(midi_out).into(),
+      out_device: None.into(),
+      out_device_name: None.into(),
+      tx,
+      rx,
+      msg_config_list: Arc::new(Mutex::new(Vec::new())),
+      tempo,
+      clock_enabled: Arc::new(Mutex::new(false)),
+      last_held_note: Arc::new(Mutex::new(None)),
+      in_connection: Mutex::new(None),
+      clock_input_enabled: Arc::new(AtomicBool::new(false)),
+      ext_clock_callback: Mutex::new(None),
+    }
+  }
+
+  pub fn run(self) {
+    let midi_tx_1 = self.tx.clone();
+    let midi_tx_2 = self.tx.clone();
+    let stack = Arc::new(Stack::new());
+    let stack_clone_2 = Arc::clone(&stack);
+    let stack_tx = stack.run(midi_tx_1);
+    stack_clone_2.refresh(midi_tx_2);
+
+    thread::spawn(move || {
+      for control_message in &self.rx {
+        match control_message {
+          Message::Push(midi_msg) => {
+            self.handle_push(stack_tx.clone(), midi_msg);
+          }
+          Message::Hold(midi_msg) => {
+            self.handle_hold(stack_tx.clone(), midi_msg);
+          }
+          Message::Release(midi_msg) => {
+            self.handle_release(stack_tx.clone(), midi_msg);
+          }
+          Message::ReleaseAll() => {
+            self.handle_release_all(stack_tx.clone());
+          }
+          Message::Trigger(msg, is_pressed) => {
+            self.handle_trigger(msg, is_pressed);
+          }
+          Message::SetMsgConfig(msg) => {
+            self.set_msg_config_list(msg);
+          }
+          Message::ClearMsgConfig() => {
+            self.clear_msg_config_list();
+          }
+          Message::TriggerWithPosition(params) => {
+            self.handle_trigger_with_position(params);
+          }
+          Message::SetTempo(bpm) => {
+            self.handle_set_tempo(bpm);
+          }
+          Message::SwitchDevice(port_index) => {
+            self.handle_switch_device(port_index);
+          }
+          Message::DisconnectOutput() => {
+            self.handle_disconnect_output();
+          }
+          Message::Panic() => {
+            self.handle_panic();
+          }
+          Message::ClockStart() => {
+            self.handle_clock_start();
+          }
+          Message::ClockStop() => {
+            self.handle_clock_stop();
+          }
+          Message::ClockTick() => {
+            self.handle_clock_tick();
+          }
+          Message::ClockContinue() => {
+            self.handle_clock_continue();
+          }
+          Message::ClockSongPosition(position) => {
+            self.handle_clock_song_position(position);
+          }
+          Message::EnableClock(enabled) => {
+            self.enable_clock(enabled);
+          }
+          Message::ExternalClock(byte) => {
+            self.handle_external_clock(byte);
+          }
+          Message::EnableClockInput(en) => {
+            self.handle_enable_clock_input(en);
+          }
+          Message::ConnectInput(port_index) => {
+            self.handle_connect_input(port_index);
+          }
+        }
+      }
+    });
+  }
 }
