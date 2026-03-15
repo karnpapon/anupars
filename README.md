@@ -183,6 +183,10 @@ it comprised of
 | `j` | Move Down | Move playhead 1 step down |
 | `k` | Move Up | Move playhead 1 step up |
 | `l` | Move Right | Move playhead 1 step right |
+| `Ctrl+h` | Aim Left (preview) | Hold to preview a left jump, press any movement key to commit |
+| `Ctrl+j` | Aim Down (preview) | Hold to preview a down jump, press any movement key commit |
+| `Ctrl+k` | Aim Up (preview) | Hold to preview an up jump, press any movement key commit |
+| `Ctrl+l` | Aim Right (preview) | Hold to preview a right jump, press any movement key commit |
 | `Option+h` / `Alt+h` | Leap Left | Jump 5 steps left |
 | `Option+j` / `Alt+j` | Leap Down | Jump 5 steps down |
 | `Option+k` / `Alt+k` | Leap Up | Jump 5 steps up |
