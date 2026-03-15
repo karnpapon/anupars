@@ -80,8 +80,12 @@ That's all you need for a first session. Explore [Features](#features) and [Keyb
 - **Tiny Binary Size**
   - Optimized for minimal footprint (~855 KB) - release builds use `opt-level = "z"`, `lto`, and symbol stripping, producing a small self-contained binary suitable for resource-constrained devices.
 
-- **MIDI Out Selector**
-  - Choose from available MIDI output devices for flexible routing to synths, DAWs, or hardware.
+- **MIDI In/Out Selector**
+  - Choose from available MIDI devices for flexible routing to synths, DAWs, or hardware.
+
+- **MIDI In (Clock Sync)**
+  - When MIDI input clock messages are enabled (default: `disabled`), the app will listen for incoming MIDI `Start/Stop/Continue/Clock` messages and synchronize playback to an external master clock.
+  - **Note**: enabling MIDI input clock-sync disables the spacebar `play/pause` control to avoid conflicting local and external transport control. Disable MIDI input if you want to use the spacebar locally.
 
 - **MIDI Out Clock Features**
   - Implements standard MIDI clock transport messages for external device:
