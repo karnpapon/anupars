@@ -56,6 +56,7 @@ pub struct GridEditor {
   pub grid_v_splits: usize,
   pub grid_h_splits: usize,
   pub is_canvas_focused: bool,
+  pub is_aiming: bool,
 }
 
 impl GridEditor {
@@ -79,6 +80,7 @@ impl GridEditor {
       grid_v_splits: 1,
       grid_h_splits: 1,
       is_canvas_focused: false,
+      is_aiming: false,
     }
   }
 
@@ -518,6 +520,150 @@ impl GridEditor {
     }
   }
 
+  fn grid_size_xy(&self) -> cursive::XY<usize> {
+    (self.grid.width, self.grid.height).into()
+  }
+
+  fn start_aim_if_needed(&mut self) {
+    if !self.is_aiming {
+      self.is_aiming = true;
+      let _ = self.playhead_tx.send(PlayheadMessage::StartAim());
+    }
+  }
+
+  fn update_aim(&self, dir: Direction, step: usize) -> EventResult {
+    let grid_size = self.grid_size_xy();
+    let _ = self
+      .playhead_tx
+      .send(PlayheadMessage::UpdateAim(dir, grid_size, step));
+    EventResult::Ignored
+  }
+
+  fn commit_or_move(&mut self, dir: Direction) -> EventResult {
+    if self.is_aiming {
+      let _ = self.playhead_tx.send(PlayheadMessage::CommitAim());
+      return EventResult::Ignored;
+    }
+    let grid_size = self.grid_size_xy();
+    let _ = self.playhead_tx.send(PlayheadMessage::Move(dir, grid_size));
+    EventResult::Ignored
+  }
+
+  fn alt_action(&self, dir: Direction, step: usize) -> EventResult {
+    let grid_size = self.grid_size_xy();
+    if self.is_aiming {
+      let _ = self
+        .playhead_tx
+        .send(PlayheadMessage::UpdateAim(dir, grid_size, step));
+    } else {
+      let _ = self.playhead_tx.send(PlayheadMessage::Leap(dir, grid_size));
+    }
+    EventResult::Ignored
+  }
+
+  fn scale_action(&self, dir: (i32, i32)) -> EventResult {
+    let _ = self.playhead_tx.send(PlayheadMessage::Scale(dir));
+    EventResult::Ignored
+  }
+
+  fn handle_mouse_press(&mut self, offset: Vec2, position: Vec2) -> EventResult {
+    let x_offset = if self.show_keyboard {
+      KEYBOARD_MARGIN_LEFT
+    } else {
+      0
+    };
+    let y_offset = if self.show_keyboard {
+      KEYBOARD_MARGIN_TOP
+    } else {
+      0
+    };
+
+    let adjusted_position = Vec2::new(
+      position.x.saturating_sub(x_offset),
+      position.y.saturating_sub(y_offset),
+    );
+
+    self
+      .playhead_tx
+      .send(PlayheadMessage::SetCurrentPos(adjusted_position, offset))
+      .unwrap();
+    let grid_size = (self.grid.width, self.grid.height).into();
+    self
+      .playhead_tx
+      .send(PlayheadMessage::Move(Direction::Idle, grid_size))
+      .unwrap();
+    self
+      .playhead_tx
+      .send(PlayheadMessage::UpdateInfoStatusView())
+      .unwrap();
+
+    EventResult::consumed()
+  }
+
+  fn handle_mouse_hold(&mut self, offset: Vec2, position: Vec2) -> EventResult {
+    // Adjust position to account for keyboard margins
+    let x_offset = if self.show_keyboard {
+      KEYBOARD_MARGIN_LEFT
+    } else {
+      0
+    };
+    let y_offset = if self.show_keyboard {
+      KEYBOARD_MARGIN_TOP
+    } else {
+      0
+    };
+
+    let pos_x = position.x.saturating_sub(x_offset + 1);
+    let pos_y = position.y.saturating_sub(offset.y + y_offset);
+
+    // prevent dragging above or left of the origin flips the area.
+    let origin = self.playhead_ui.playhead_pos;
+    let clamped_x = pos_x.max(origin.x + 1);
+    let clamped_y = pos_y.max(origin.y + 1);
+
+    self
+      .playhead_tx
+      .send(PlayheadMessage::SetGridArea((clamped_x, clamped_y).into()))
+      .unwrap();
+
+    EventResult::Ignored
+  }
+
+  fn handle_split_char(&mut self, c: char) -> EventResult {
+    let (v, h): (usize, usize) = match c {
+      '0' => (1, 1),
+      '1' => (1, 1),
+      '2' => (2, 1),
+      '3' => (3, 1),
+      '4' => (4, 1),
+      '5' => (4, 2),
+      '6' => (4, 3),
+      '7' => (4, 4),
+      _ => (1, 1),
+    };
+    self.grid_v_splits = v;
+    self.grid_h_splits = h;
+    self.playhead_ui.grid_v_splits = v;
+    self.playhead_ui.grid_h_splits = h;
+    let _ = self.playhead_tx.send(PlayheadMessage::SetGridSplits(v, h));
+
+    let pos = self.playhead_ui.playhead_pos;
+    let gw = self.grid.width.max(1);
+    let gh = self.grid.height.max(1);
+    let col_w = if v > 1 { (gw / v).max(1) } else { gw };
+    let row_h = if h > 1 { (gh / h).max(1) } else { gh };
+    let col_idx = (pos.x / col_w).min(v.saturating_sub(1));
+    let row_idx = (pos.y / row_h).min(h.saturating_sub(1));
+    let ch = row_idx * v + col_idx;
+    let label = format!("{}/{}", ch + 1, v * h);
+
+    EventResult::Consumed(Some(Callback::from_fn(move |s: &mut Cursive| {
+      s.call_on_name(consts::chn_status_unit_view, |view: &mut TextView| {
+        view.set_content(label.clone());
+      });
+    })))
+  }
+
   pub fn resize(&mut self, size: Vec2) {
     let grid_width = if self.show_keyboard {
       size
@@ -705,289 +851,72 @@ fn take_focus(
 fn on_event(canvas: &mut GridEditor, event: Event) -> EventResult {
   match event {
     Event::Refresh => EventResult::consumed(),
+
+    // handle split midi-chan
+    Event::Char(c) if ('0'..='7').contains(&c) => canvas.handle_split_char(c),
+
     // Vim keybindings for movement (h/j/k/l)
-    Event::Char('h') => {
-      let grid_size = (canvas.grid.width, canvas.grid.height).into();
-      canvas
-        .playhead_tx
-        .send(PlayheadMessage::Move(Direction::Left, grid_size))
-        .unwrap();
-      EventResult::Ignored
-    }
-    Event::Char('j') => {
-      let grid_size = (canvas.grid.width, canvas.grid.height).into();
-      canvas
-        .playhead_tx
-        .send(PlayheadMessage::Move(Direction::Down, grid_size))
-        .unwrap();
-      EventResult::Ignored
-    }
-    Event::Char('k') => {
-      let grid_size = (canvas.grid.width, canvas.grid.height).into();
-      canvas
-        .playhead_tx
-        .send(PlayheadMessage::Move(Direction::Up, grid_size))
-        .unwrap();
-      EventResult::Ignored
-    }
-    Event::Char('l') => {
-      let grid_size = (canvas.grid.width, canvas.grid.height).into();
-      canvas
-        .playhead_tx
-        .send(PlayheadMessage::Move(Direction::Right, grid_size))
-        .unwrap();
-      EventResult::Ignored
-    }
-    Event::AltChar('h') => {
-      let grid_size = (canvas.grid.width, canvas.grid.height).into();
-      canvas
-        .playhead_tx
-        .send(PlayheadMessage::Leap(Direction::Left, grid_size))
-        .unwrap();
-      EventResult::Ignored
-    }
-    Event::AltChar('j') => {
-      let grid_size = (canvas.grid.width, canvas.grid.height).into();
-      canvas
-        .playhead_tx
-        .send(PlayheadMessage::Leap(Direction::Down, grid_size))
-        .unwrap();
-      EventResult::Ignored
-    }
-    Event::AltChar('k') => {
-      let grid_size = (canvas.grid.width, canvas.grid.height).into();
-      canvas
-        .playhead_tx
-        .send(PlayheadMessage::Leap(Direction::Up, grid_size))
-        .unwrap();
-      EventResult::Ignored
-    }
-    Event::AltChar('l') => {
-      let grid_size = (canvas.grid.width, canvas.grid.height).into();
-      canvas
-        .playhead_tx
-        .send(PlayheadMessage::Leap(Direction::Right, grid_size))
-        .unwrap();
-      EventResult::Ignored
-    }
+    Event::Char('h') => canvas.commit_or_move(Direction::Left),
+    Event::Char('j') => canvas.commit_or_move(Direction::Down),
+    Event::Char('k') => canvas.commit_or_move(Direction::Up),
+    Event::Char('l') => canvas.commit_or_move(Direction::Right),
+    Event::AltChar('h') => canvas.alt_action(Direction::Left, 8),
+    Event::AltChar('j') => canvas.alt_action(Direction::Down, 4),
+    Event::AltChar('k') => canvas.alt_action(Direction::Up, 4),
+    Event::AltChar('l') => canvas.alt_action(Direction::Right, 8),
+
+    // Option+h
     #[cfg(target_os = "macos")]
-    Event::Char('˙') => {
-      // Option+h on macOS
-      let grid_size = (canvas.grid.width, canvas.grid.height).into();
-      canvas
-        .playhead_tx
-        .send(PlayheadMessage::Leap(Direction::Left, grid_size))
-        .unwrap();
-      EventResult::Ignored
-    }
+    Event::Char('˙') => canvas.alt_action(Direction::Left, 8),
+    // Option+j
     #[cfg(target_os = "macos")]
-    Event::Char('∆') => {
-      // Option+j on macOS
-      let grid_size = (canvas.grid.width, canvas.grid.height).into();
-      canvas
-        .playhead_tx
-        .send(PlayheadMessage::Leap(Direction::Down, grid_size))
-        .unwrap();
-      EventResult::Ignored
-    }
+    Event::Char('∆') => canvas.alt_action(Direction::Down, 4),
+    // Option+k
     #[cfg(target_os = "macos")]
-    Event::Char('˚') => {
-      // Option+k on macOS
-      let grid_size = (canvas.grid.width, canvas.grid.height).into();
-      canvas
-        .playhead_tx
-        .send(PlayheadMessage::Leap(Direction::Up, grid_size))
-        .unwrap();
-      EventResult::Ignored
-    }
+    Event::Char('˚') => canvas.alt_action(Direction::Up, 4),
+    // Option+l
     #[cfg(target_os = "macos")]
-    Event::Char('¬') => {
-      // Option+l on macOS
-      let grid_size = (canvas.grid.width, canvas.grid.height).into();
-      canvas
-        .playhead_tx
-        .send(PlayheadMessage::Leap(Direction::Right, grid_size))
-        .unwrap();
-      EventResult::Ignored
-    }
-    // Vim keybindings - Shift for adjusting playhead area (Shift+h/j/k/l = H/J/K/L)
-    Event::Char('H') => {
-      let dir = (-1, 0);
-      canvas
-        .playhead_tx
-        .send(PlayheadMessage::Scale(dir))
-        .unwrap();
-      EventResult::Ignored
-    }
-    Event::Char('J') => {
-      let dir = (0, -1);
-      canvas
-        .playhead_tx
-        .send(PlayheadMessage::Scale(dir))
-        .unwrap();
-      EventResult::Ignored
-    }
-    Event::Char('K') => {
-      let dir = (0, 1);
-      canvas
-        .playhead_tx
-        .send(PlayheadMessage::Scale(dir))
-        .unwrap();
-      EventResult::Ignored
-    }
-    Event::Char('L') => {
-      let dir = (1, 0);
-      canvas
-        .playhead_tx
-        .send(PlayheadMessage::Scale(dir))
-        .unwrap();
-      EventResult::Ignored
-    }
+    Event::Char('¬') => canvas.alt_action(Direction::Right, 8),
+
+    // Shift + Vim keybindings for movement (h/j/k/l)
+    Event::Char('H') => canvas.scale_action((-1, 0)),
+    Event::Char('J') => canvas.scale_action((0, -1)),
+    Event::Char('K') => canvas.scale_action((0, 1)),
+    Event::Char('L') => canvas.scale_action((1, 0)),
     #[cfg(target_os = "macos")]
-    Event::Char('Ó') => {
-      let dir = (-8, 0);
-      canvas
-        .playhead_tx
-        .send(PlayheadMessage::Scale(dir))
-        .unwrap();
-      EventResult::Ignored
-    }
+    Event::Char('Ó') => canvas.scale_action((-8, 0)),
     #[cfg(target_os = "macos")]
-    Event::Char('Ô') => {
-      let dir = (0, -2);
-      canvas
-        .playhead_tx
-        .send(PlayheadMessage::Scale(dir))
-        .unwrap();
-      EventResult::Ignored
-    }
+    Event::Char('Ô') => canvas.scale_action((0, -2)),
     #[cfg(target_os = "macos")]
-    Event::Char('\u{f8ff}') => {
-      let dir = (0, 2);
-      canvas
-        .playhead_tx
-        .send(PlayheadMessage::Scale(dir))
-        .unwrap();
-      EventResult::Ignored
-    }
+    Event::Char('\u{f8ff}') => canvas.scale_action((0, 2)),
     #[cfg(target_os = "macos")]
-    Event::Char('Ò') => {
-      let dir = (8, 0);
-      canvas
-        .playhead_tx
-        .send(PlayheadMessage::Scale(dir))
-        .unwrap();
-      EventResult::Ignored
+    Event::Char('Ò') => canvas.scale_action((8, 0)),
+    Event::CtrlChar('h') => {
+      canvas.start_aim_if_needed();
+      canvas.update_aim(Direction::Left, 1)
+    }
+    Event::CtrlChar('j') => {
+      canvas.start_aim_if_needed();
+      canvas.update_aim(Direction::Down, 1)
+    }
+    Event::CtrlChar('k') => {
+      canvas.start_aim_if_needed();
+      canvas.update_aim(Direction::Up, 1)
+    }
+    Event::CtrlChar('l') => {
+      canvas.start_aim_if_needed();
+      canvas.update_aim(Direction::Right, 1)
     }
     Event::Mouse {
       offset,
       position,
       event: MouseEvent::Press(_btn),
-    } => {
-      // Adjust position to account for keyboard margins
-      let x_offset = if canvas.show_keyboard {
-        KEYBOARD_MARGIN_LEFT
-      } else {
-        0
-      };
-      let y_offset = if canvas.show_keyboard {
-        KEYBOARD_MARGIN_TOP
-      } else {
-        0
-      };
-
-      let adjusted_position = Vec2::new(
-        position.x.saturating_sub(x_offset),
-        position.y.saturating_sub(y_offset),
-      );
-
-      canvas
-        .playhead_tx
-        .send(PlayheadMessage::SetCurrentPos(adjusted_position, offset))
-        .unwrap();
-      let grid_size = (canvas.grid.width, canvas.grid.height).into();
-      canvas
-        .playhead_tx
-        .send(PlayheadMessage::Move(Direction::Idle, grid_size))
-        .unwrap();
-      canvas
-        .playhead_tx
-        .send(PlayheadMessage::UpdateInfoStatusView())
-        .unwrap();
-
-      EventResult::consumed()
-    }
+    } => canvas.handle_mouse_press(offset, position),
     Event::Mouse {
       offset,
       position,
       event: MouseEvent::Hold(MouseButton::Left),
-    } => {
-      // TODO: not sure why these (`MouseEvent::Hold`) sometimes being called twice (bug?) !?
-      // need more investigate on this
-
-      // Adjust position to account for keyboard margins
-      let x_offset = if canvas.show_keyboard {
-        KEYBOARD_MARGIN_LEFT
-      } else {
-        0
-      };
-      let y_offset = if canvas.show_keyboard {
-        KEYBOARD_MARGIN_TOP
-      } else {
-        0
-      };
-
-      let pos_x = position.x.saturating_sub(x_offset + 1);
-      let pos_y = position.y.saturating_sub(offset.y + y_offset);
-
-      // prevent dragging above or left of the origin flips the area.
-      let origin = canvas.playhead_ui.playhead_pos;
-      let clamped_x = pos_x.max(origin.x + 1);
-      let clamped_y = pos_y.max(origin.y + 1);
-
-      canvas
-        .playhead_tx
-        .send(PlayheadMessage::SetGridArea((clamped_x, clamped_y).into()))
-        .unwrap();
-
-      EventResult::Ignored
-    }
-    Event::Char(c) if ('0'..='7').contains(&c) => {
-      let (v, h): (usize, usize) = match c {
-        '0' => (1, 1),
-        '1' => (1, 1),
-        '2' => (2, 1),
-        '3' => (3, 1),
-        '4' => (4, 1),
-        '5' => (4, 2),
-        '6' => (4, 3),
-        '7' => (4, 4),
-        _ => (1, 1),
-      };
-      canvas.grid_v_splits = v;
-      canvas.grid_h_splits = h;
-      canvas.playhead_ui.grid_v_splits = v;
-      canvas.playhead_ui.grid_h_splits = h;
-      let _ = canvas
-        .playhead_tx
-        .send(PlayheadMessage::SetGridSplits(v, h));
-
-      let pos = canvas.playhead_ui.playhead_pos;
-      let gw = canvas.grid.width.max(1);
-      let gh = canvas.grid.height.max(1);
-      let col_w = if v > 1 { (gw / v).max(1) } else { gw };
-      let row_h = if h > 1 { (gh / h).max(1) } else { gh };
-      let col_idx = (pos.x / col_w).min(v.saturating_sub(1));
-      let row_idx = (pos.y / row_h).min(h.saturating_sub(1));
-      let ch = row_idx * v + col_idx;
-      let label = format!("{}/{}", ch + 1, v * h);
-
-      EventResult::Consumed(Some(Callback::from_fn(move |s: &mut Cursive| {
-        s.call_on_name(consts::chn_status_unit_view, |view: &mut TextView| {
-          view.set_content(label.clone());
-        });
-      })))
-    }
+    } => canvas.handle_mouse_hold(offset, position),
     _ => EventResult::Ignored,
   }
 }

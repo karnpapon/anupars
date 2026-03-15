@@ -317,6 +317,7 @@ impl<T: Printable + Copy> Matrix<T> {
       playhead_pos,
       playhead_area,
       actived_pos,
+      aimed_area,
       sweep_mode,
       tilt_mode,
       grid_v_splits,
@@ -386,6 +387,17 @@ impl<T: Printable + Copy> Matrix<T> {
             self.render_active_playhead(printer, pos, cell_index, text_matcher);
           } else {
             self.render_playhead_area_cell(printer, x, y, cell_index, playhead_ui);
+          }
+        }
+
+        // aimed area (for Ctrl+hjkl aiming) - render AFTER playhead to show overlay
+        if let Some(aimed_rect) = aimed_area {
+          if aimed_rect.contains(pos.into()) {
+            let aimed_style = Style::from_color_style(ColorStyle::new(
+              ColorType::rgb(255, 255, 255),
+              ColorType::rgb(50, 50, 50),
+            ));
+            printer.print_styled(pos, &SpannedString::styled(ch, aimed_style));
           }
         }
       }

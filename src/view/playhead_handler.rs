@@ -60,6 +60,7 @@ pub enum UIUpdate {
   PlayheadPosAndArea(Vec2, Rect),
   ChnStatus(String),
   GridSplits(usize, usize),
+  AimedArea(Option<Rect>),
 
   #[cfg(feature = "symspell")]
   TmpAppend(usize),
@@ -89,6 +90,7 @@ pub struct PlayheadUI {
   pub playhead_area: Rect,
   pub playhead_pos: Vec2,
   pub actived_pos: Vec2,
+  pub aimed_area: Option<Rect>,
   pub text_matcher: Option<HashMap<usize, Match>>,
   pub regex_indexes: Arc<Mutex<BTreeSet<usize>>>,
   pub arpeggiator_mode: bool,
@@ -107,6 +109,7 @@ impl PlayheadUI {
       playhead_area: Rect::from_point(Vec2::zero()),
       playhead_pos: Vec2::zero(),
       actived_pos: Vec2::zero(),
+      aimed_area: None,
       text_matcher: None,
       regex_indexes: Arc::new(Mutex::new(BTreeSet::new())),
       arpeggiator_mode: false,
@@ -153,6 +156,10 @@ pub enum Message {
   ClearQueue(cursive::CbSink),
   SetGridSplits(usize, usize),
   CycleTiltMode(cursive::CbSink),
+  StartAim(),
+  UpdateAim(Direction, XY<usize>, usize),
+  CommitAim(cursive::CbSink),
+  CancelAim(),
 }
 
 /// Grid and layout state shared across playhead subsystems.
@@ -247,6 +254,8 @@ pub struct PlayheadArea {
   /// position captured when freeze mode was enabled; MIDI retriggers here while frozen
   frozen_active_pos: Arc<Mutex<Vec2>>,
   prev_active_pos: Arc<Mutex<Vec2>>,
+  /// aimed area for Ctrl+hjkl aiming feature
+  aimed_area: Arc<Mutex<Option<Rect>>>,
 
   // Consolidated state
   grid: GridState,
@@ -298,6 +307,7 @@ impl PlayheadArea {
     let ratchet_generation = Arc::new(AtomicUsize::new(0));
     let pos = Arc::new(Mutex::new(Vec2::zero()));
     let tilt_mode = Arc::new(Mutex::new(TiltMode::default()));
+    let aimed_area = Arc::new(Mutex::new(None));
 
     // Create MIDI handler with shared state
     let midi_handler = Arc::new(MidiTriggerHandler::new(
@@ -331,6 +341,7 @@ impl PlayheadArea {
       actived_pos: Arc::new(Mutex::new(Vec2::zero())),
       frozen_active_pos: Arc::new(Mutex::new(Vec2::zero())),
       prev_active_pos,
+      aimed_area,
       grid,
       music,
       modes,
@@ -445,6 +456,18 @@ impl PlayheadArea {
                       let editor = canvas.state_mut();
                       editor.playhead_ui.grid_v_splits = v;
                       editor.playhead_ui.grid_h_splits = h;
+                    },
+                  );
+                }
+                UIUpdate::AimedArea(aimed_area) => {
+                  siv.call_on_name(
+                    consts::canvas_editor_section_view,
+                    move |canvas: &mut Canvas<GridEditor>| {
+                      let editor = canvas.state_mut();
+                      editor.playhead_ui.aimed_area = aimed_area;
+                      if aimed_area.is_none() {
+                        editor.is_aiming = false;
+                      }
                     },
                   );
                 }
@@ -1926,6 +1949,116 @@ impl PlayheadArea {
     q.push_back(UIUpdate::ChnStatus(chn_str));
   }
 
+  fn handle_start_aim(&self) {
+    // Use the authoritative playhead `pos` and current area size so the aimed
+    // rectangle always starts at the actual playhead position.
+    let current_pos = *self.pos.lock().unwrap();
+    let area_size = self.area.lock().unwrap().size();
+    let start_area = Rect::from_size(current_pos, area_size);
+
+    *self.aimed_area.lock().unwrap() = Some(start_area);
+    let mut q = self.ui_update_queue.lock().unwrap();
+    q.push_back(UIUpdate::AimedArea(Some(start_area)));
+  }
+
+  fn handle_update_aim(&self, direction: Direction, canvas_size: Vec2, step: usize) {
+    let mut aimed = self.aimed_area.lock().unwrap();
+    let base_area = aimed.unwrap_or_else(|| *self.area.lock().unwrap());
+
+    let (dx, dy) = direction.get_direction();
+    let new_top_left = Vec2::new(
+      (base_area.left() as i32 + dx * (step as i32)).max(0) as usize,
+      (base_area.top() as i32 + dy * (step as i32)).max(0) as usize,
+    );
+
+    // ensure within grid bounds
+    let size = base_area.size();
+    let max_x = canvas_size.x.saturating_sub(size.x);
+    let max_y = canvas_size.y.saturating_sub(size.y);
+
+    let clamped_top_left = Vec2::new(new_top_left.x.min(max_x), new_top_left.y.min(max_y));
+
+    let new_aimed_area = Rect::from_size(clamped_top_left, size);
+
+    *aimed = Some(new_aimed_area);
+    drop(aimed);
+
+    let mut q = self.ui_update_queue.lock().unwrap();
+    q.push_back(UIUpdate::AimedArea(Some(new_aimed_area)));
+  }
+
+  fn handle_commit_aim(&self, cb_sink: cursive::CbSink) {
+    let aimed = self.aimed_area.lock().unwrap();
+    let aimed_area_opt = *aimed;
+    drop(aimed);
+
+    if let Some(aimed_area) = aimed_area_opt {
+      let target_pos = aimed_area.top_left();
+
+      // Update internal state
+      *self.pos.lock().unwrap() = target_pos;
+      *self.aimed_area.lock().unwrap() = None;
+
+      // Reset active position
+      let mut actived = self.actived_pos.lock().unwrap();
+      *actived = Vec2::zero();
+      drop(actived);
+
+      // Immediately update UI via cb_sink to avoid delayed queued update
+      let chn_str = self.compute_chn_str(target_pos);
+      let area_size = aimed_area.size();
+      let pos_status = utils::build_pos_status_str(target_pos);
+      let len_status = utils::build_len_status_str((area_size.x, area_size.y));
+
+      cb_sink
+        .send(Box::new(move |siv| {
+          siv.call_on_name(
+            consts::canvas_editor_section_view,
+            move |canvas: &mut Canvas<GridEditor>| {
+              let editor = canvas.state_mut();
+              editor.playhead_ui.playhead_pos = target_pos;
+              editor.playhead_ui.playhead_area = aimed_area;
+              editor.playhead_ui.aimed_area = None;
+              editor.is_aiming = false;
+            },
+          );
+
+          siv.call_on_name(consts::pos_status_unit_view, move |view: &mut TextView| {
+            view.set_content(pos_status.clone());
+          });
+
+          siv.call_on_name(consts::len_status_unit_view, move |view: &mut TextView| {
+            view.set_content(len_status.clone());
+          });
+
+          siv.call_on_name(consts::chn_status_unit_view, move |view: &mut TextView| {
+            view.set_content(chn_str.clone());
+          });
+        }))
+        .unwrap();
+    } else {
+      // Ensure UI clears aimed overlay immediately
+      cb_sink
+        .send(Box::new(move |siv| {
+          siv.call_on_name(
+            consts::canvas_editor_section_view,
+            move |canvas: &mut Canvas<GridEditor>| {
+              let editor = canvas.state_mut();
+              editor.playhead_ui.aimed_area = None;
+              editor.is_aiming = false;
+            },
+          );
+        }))
+        .unwrap();
+    }
+  }
+
+  fn handle_cancel_aim(&self) {
+    *self.aimed_area.lock().unwrap() = None;
+    let mut q = self.ui_update_queue.lock().unwrap();
+    q.push_back(UIUpdate::AimedArea(None));
+  }
+
   pub fn run(self: Arc<Self>) -> Sender<Message> {
     let (tx, rx) = channel();
 
@@ -2024,6 +2157,18 @@ impl PlayheadArea {
           }
           Message::CycleTiltMode(cb_sink) => {
             self.cycle_tilt_mode(cb_sink);
+          }
+          Message::StartAim() => {
+            self.handle_start_aim();
+          }
+          Message::UpdateAim(direction, canvas_size, step) => {
+            self.handle_update_aim(direction, canvas_size, step);
+          }
+          Message::CommitAim(cb_sink) => {
+            self.handle_commit_aim(cb_sink.clone());
+          }
+          Message::CancelAim() => {
+            self.handle_cancel_aim();
           }
         }
       }

@@ -63,6 +63,10 @@ pub enum Message {
   ClearQueue(),
   SetGridSplits(usize, usize),
   CycleTiltMode(),
+  StartAim(),
+  UpdateAim(Direction, XY<usize>, usize),
+  CommitAim(),
+  CancelAim(),
 }
 
 pub struct Playhead {
@@ -380,6 +384,30 @@ impl Playhead {
             let cb_sink = self.cb_sink.clone();
             playhead_area_tx
               .send(playhead_handler::Message::CycleTiltMode(cb_sink))
+              .unwrap();
+          }
+          Message::StartAim() => {
+            playhead_area_tx
+              .send(playhead_handler::Message::StartAim())
+              .unwrap();
+          }
+          Message::UpdateAim(direction, canvas_size, step) => {
+            playhead_area_tx
+              .send(playhead_handler::Message::UpdateAim(
+                direction,
+                canvas_size,
+                step,
+              ))
+              .unwrap();
+          }
+          Message::CommitAim() => {
+            playhead_area_tx
+              .send(playhead_handler::Message::CommitAim(self.cb_sink.clone()))
+              .unwrap();
+          }
+          Message::CancelAim() => {
+            playhead_area_tx
+              .send(playhead_handler::Message::CancelAim())
               .unwrap();
           }
         }
