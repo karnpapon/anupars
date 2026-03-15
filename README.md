@@ -61,7 +61,7 @@ cargo run
 9. **Leap playhead** similar to how `Orca` leap, you can use modifier key `Alt` (or `Option` in osx) combine with move key and scale key.
 10. **Press `Space`** to start playback, the playhead steps through cells that match your pattern (try increasing beat division by `}` if you want to make it faster).
 11. **Change tempo** with `>` (faster) and `<` (slower).
-12. to enable mode use `Ctrl` along with available mode chars (`a`, `n`, `u`, `l`, `e`, `s` you can easily see theses being displayed on the top of the screen) let's start with `sweep` mode using `Ctrl+s` the active mode with change from lowercase to uppercase mode the crosshair appears and it'll trigger all the trigger point along y-axis (the velocity is based-on the trigger point distance to the playhead (in y-axis), the far from playhead, the lower velocity), all modes is togglable all default to off initially.
+12. to enable mode use `Ctrl` along with available mode chars (`a`, `n`, `u`, `e`, `s`,`y`, `z` you can easily see theses being displayed on the top of the screen) let's start with `sweep` mode using `Ctrl+s` the active mode with change from lowercase to uppercase mode the crosshair appears and it'll trigger all the trigger point along y-axis (the velocity is based-on the trigger point distance to the playhead (in y-axis), the far from playhead, the lower velocity), all modes is togglable all default to off initially.
 13. the top spatial keyboard layout (inspired by Music Mouse - Laurie Spiegel) will hint you what note is being triggered, whre 
   - `#` represent black-key  
   - `━` represent white-key 
@@ -123,9 +123,9 @@ That's all you need for a first session. Explore [Features](#features) and [Keyb
   - `a`: Arpeggiator (see above)
   - `n`: Drain Queue
   - `u`: Accumulation (see above)
-  - `l`: Dynamic Length, playhead length adjusts dynamically.
   - `e`: Event Operator, enables event operator triggering from keyboard.
   - `s`: Sweep, sweeps through positions across the playhead range.
+  - `y`: Dynamic Length, playhead length adjusts dynamically.
   - `z`: Freeze, locks the active position and retriggers MIDI at that cell each DIV tick (it's quantized to the beat).
 
 - **Sweep Tilt (TLT)**
@@ -237,7 +237,7 @@ it comprised of
 | `Ctrl+n` | Toggle Drain Queue | Enable/disable queue draining |
 | `Ctrl+s` | Toggle Sweep | Enable/disable sweep mode |
 | `Ctrl+t` | Cycle Tilt (TLT) | Cycle sweep crosshair angle: `|` → `/` → `\` |
-| `Ctrl+l` | Toggle Dynamic Length | Enable/disable dynamic length mode |
+| `Ctrl+y` | Toggle Dynamic Length | Enable/disable dynamic length mode |
 | `Ctrl+z` | Toggle Freeze | Lock active position; retrigger matched cell at current DIV rate |
 
 ## Tempo & Timing

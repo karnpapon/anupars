@@ -34,9 +34,9 @@ pub enum AppMode {
   Arpeggiator,   // a
   DrainQueue,    // n
   Accumulation,  // u
-  DynLength,     // l
   EventOperator, // e
   Sweep,         // s
+  DynLength,     // y
   Freeze,        // z
   None,
 }
@@ -49,7 +49,7 @@ impl fmt::Display for AppMode {
       AppMode::EventOperator => write!(f, "e"),
       AppMode::DrainQueue => write!(f, "n"),
       AppMode::Sweep => write!(f, "s"),
-      AppMode::DynLength => write!(f, "l"),
+      AppMode::DynLength => write!(f, "y"),
       AppMode::Freeze => write!(f, "z"),
       AppMode::None => write!(f, "-"),
     }
@@ -60,9 +60,9 @@ const APP_MODE_ORDER: [AppMode; 7] = [
   AppMode::Arpeggiator,
   AppMode::DrainQueue,
   AppMode::Accumulation,
-  AppMode::DynLength,
   AppMode::EventOperator,
   AppMode::Sweep,
+  AppMode::DynLength,
   AppMode::Freeze,
 ];
 

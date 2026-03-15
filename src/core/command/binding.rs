@@ -31,7 +31,7 @@ fn default_keybindings() -> HashMap<String, Vec<Command>> {
   kb.insert("Ctrl+e".into(), vec![Command::ToggleEventOperator]);
   kb.insert("Ctrl+n".into(), vec![Command::ToggleDrainQueue]);
   kb.insert("Ctrl+s".into(), vec![Command::ToggleSweep]);
-  kb.insert("Ctrl+l".into(), vec![Command::ToggleDynLength]);
+  kb.insert("Ctrl+y".into(), vec![Command::ToggleDynLength]);
   kb.insert("Ctrl+z".into(), vec![Command::ToggleFreeze]);
   kb.insert("Ctrl+t".into(), vec![Command::CycleTilt]);
   kb.insert("Shift+Plus".into(), vec![Command::ChangeScaleMode(Adjustment::Increase)]);
