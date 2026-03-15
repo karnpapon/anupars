@@ -860,23 +860,23 @@ fn on_event(canvas: &mut GridEditor, event: Event) -> EventResult {
     Event::Char('j') => canvas.commit_or_move(Direction::Down),
     Event::Char('k') => canvas.commit_or_move(Direction::Up),
     Event::Char('l') => canvas.commit_or_move(Direction::Right),
-    Event::AltChar('h') => canvas.alt_action(Direction::Left, 8),
-    Event::AltChar('j') => canvas.alt_action(Direction::Down, 4),
-    Event::AltChar('k') => canvas.alt_action(Direction::Up, 4),
-    Event::AltChar('l') => canvas.alt_action(Direction::Right, 8),
+    Event::AltChar('h') => canvas.alt_action(Direction::Left, consts::MOVE_X_STEP_SIZE),
+    Event::AltChar('j') => canvas.alt_action(Direction::Down, consts::MOVE_Y_STEP_SIZE),
+    Event::AltChar('k') => canvas.alt_action(Direction::Up, consts::MOVE_Y_STEP_SIZE),
+    Event::AltChar('l') => canvas.alt_action(Direction::Right, consts::MOVE_X_STEP_SIZE),
 
     // Option+h
     #[cfg(target_os = "macos")]
-    Event::Char('˙') => canvas.alt_action(Direction::Left, 8),
+    Event::Char('˙') => canvas.alt_action(Direction::Left, consts::MOVE_X_STEP_SIZE),
     // Option+j
     #[cfg(target_os = "macos")]
-    Event::Char('∆') => canvas.alt_action(Direction::Down, 4),
+    Event::Char('∆') => canvas.alt_action(Direction::Down, consts::MOVE_Y_STEP_SIZE),
     // Option+k
     #[cfg(target_os = "macos")]
-    Event::Char('˚') => canvas.alt_action(Direction::Up, 4),
+    Event::Char('˚') => canvas.alt_action(Direction::Up, consts::MOVE_Y_STEP_SIZE),
     // Option+l
     #[cfg(target_os = "macos")]
-    Event::Char('¬') => canvas.alt_action(Direction::Right, 8),
+    Event::Char('¬') => canvas.alt_action(Direction::Right, consts::MOVE_X_STEP_SIZE),
 
     // Shift + Vim keybindings for movement (h/j/k/l)
     Event::Char('H') => canvas.scale_action((-1, 0)),
@@ -884,13 +884,13 @@ fn on_event(canvas: &mut GridEditor, event: Event) -> EventResult {
     Event::Char('K') => canvas.scale_action((0, 1)),
     Event::Char('L') => canvas.scale_action((1, 0)),
     #[cfg(target_os = "macos")]
-    Event::Char('Ó') => canvas.scale_action((-8, 0)),
+    Event::Char('Ó') => canvas.scale_action((-(consts::SCALE_X_STEP_SIZE as i32), 0)),
     #[cfg(target_os = "macos")]
-    Event::Char('Ô') => canvas.scale_action((0, -2)),
+    Event::Char('Ô') => canvas.scale_action((0, -(consts::SCALE_Y_STEP_SIZE as i32))),
     #[cfg(target_os = "macos")]
-    Event::Char('\u{f8ff}') => canvas.scale_action((0, 2)),
+    Event::Char('\u{f8ff}') => canvas.scale_action((0, consts::SCALE_Y_STEP_SIZE as i32)),
     #[cfg(target_os = "macos")]
-    Event::Char('Ò') => canvas.scale_action((8, 0)),
+    Event::Char('Ò') => canvas.scale_action((consts::SCALE_X_STEP_SIZE as i32, 0)),
     Event::CtrlChar('h') => {
       canvas.start_aim_if_needed();
       canvas.update_aim(Direction::Left, 1)

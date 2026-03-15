@@ -89,24 +89,23 @@ pub static movement_unit_view: &str = "movement_unit_view";
 pub static tilt_unit_view: &str = "tilt_unit_view";
 pub static luck_unit_view: &str = "luck_unit_view";
 pub static midi_status_unit_view: &str = "midi_status_unit_view";
-// pub static op_queue_status_unit_view: &str = "op_queue_status_unit_view";
-// pub static ev_queue_status_unit_view: &str = "ev_queue_status_unit_view";
 
 pub static input_controller_section_view: &str = "input_controller_section_view";
 pub static status_controller_section_view: &str = "status_controller_section_view";
 pub static playhead_controller_section_view: &str = "playhead_controller_section_view";
 
+#[cfg(feature = "symspell")]
 pub static tmp_controller_section_view: &str = "tmp_controller_section_view";
+#[cfg(feature = "symspell")]
 pub static tmp_status_unit_view: &str = "tmp_status_unit_view";
+#[cfg(feature = "symspell")]
 pub static sym_status_unit_view: &str = "sym_status_unit_view";
+#[cfg(feature = "symspell")]
 pub static rpl_status_unit_view: &str = "rpl_status_unit_view";
 
 pub static regex_err_display_unit_view: &str = "regex_err_display_unit_view";
 pub static control_section_view: &str = "control_section_view";
-pub static interactive_display_section_view: &str = "interactive_display_section_view";
 
-pub static canvas_base_section_view: &str = "canvas_base_section_view";
-pub static canvas_highlight_section_view: &str = "canvas_highlight_section_view";
 pub static canvas_editor_section_view: &str = "canvas_editor_section_view";
 
 pub static doc_unit_view: &str = "doc_unit_view";
@@ -140,23 +139,27 @@ pub const NOTE_NAMES: [&str; 12] = [
 pub const QUEUE_OP_SPACING: usize = 2;
 pub const EVENT_OP_SPACING: usize = 10;
 
-pub const SYMBOL_DRAIN: &char = &'~';
-
 pub const DEFAULT_RATIO: (usize, usize) = (1, 8); // Default to 1/8 notes
 
 pub const EVENT_QUEUE_CAPACITY: usize = 12;
 pub const OP_QUEUE_CAPACITY: usize = 12;
-
-pub const QUEUE_PLACEHOLDER_SYMBOL: &str = ":";
 
 pub static CLOCK_ENABLED: AtomicBool = AtomicBool::new(false);
 pub static FOCUS_MODE: AtomicBool = AtomicBool::new(false);
 /// Set to true while external MIDI clock input is driving the sequencer.
 pub static EXT_CLOCK_ACTIVE: AtomicBool = AtomicBool::new(false);
 
+pub const QUEUE_PLACEHOLDER_SYMBOL: &str = ":";
+pub const SYMBOL_DRAIN: &char = &'~';
 pub const PLAYHEAD_CHAR: char = '>';
 pub const TRIGGER_CHAR: char = '*';
 pub const PLAYHEAD_MATCH_CHAR: char = '@';
 pub const MATCH_GROUP_CHAR: char = '}';
 
+#[cfg(feature = "symspell")]
 pub const TMP_BUF_SIZE: usize = 6;
+
+pub const MOVE_X_STEP_SIZE: usize = 8;
+pub const MOVE_Y_STEP_SIZE: usize = 4;
+pub const SCALE_X_STEP_SIZE: usize = 8;
+pub const SCALE_Y_STEP_SIZE: usize = 2;
