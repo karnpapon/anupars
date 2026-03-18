@@ -1605,17 +1605,12 @@ impl PlayheadArea {
         let match_len = match_at_pos.as_ref().map(|m| m.l).unwrap_or(1).max(1);
 
         if has_match {
-          let playhead_pos = self.pos.lock().unwrap();
-          let playhead_pos_x = playhead_pos.x;
-          let playhead_pos_y = playhead_pos.y;
-          drop(playhead_pos);
-
           self.midi_handler.trigger_midi_if_matched(
             curr_running_playhead,
             note_position,
             scale_mode,
-            playhead_pos_x,
-            playhead_pos_y,
+            abs_x,
+            abs_y,
             match_len,
           );
         }
@@ -1686,16 +1681,12 @@ impl PlayheadArea {
 
       // Retrigger on every fast step inside a span (cells 2, 3, … of a match word)
       if in_match_span && !has_match && !self.modes.is_ratcheting.load(Ordering::Relaxed) {
-        let playhead_pos = self.pos.lock().unwrap();
-        let playhead_pos_x = playhead_pos.x;
-        let playhead_pos_y = playhead_pos.y;
-        drop(playhead_pos);
         self.midi_handler.trigger_midi_if_matched(
           curr_running_playhead,
           note_position,
           scale_mode,
-          playhead_pos_x,
-          playhead_pos_y,
+          abs_x,
+          abs_y,
           1,
         );
         #[cfg(feature = "symspell")]
@@ -1713,11 +1704,6 @@ impl PlayheadArea {
           }
         }
         if !did_jump && !self.modes.is_ratcheting.load(Ordering::Relaxed) {
-          let playhead_pos = self.pos.lock().unwrap();
-          let playhead_pos_x = playhead_pos.x;
-          let playhead_pos_y = playhead_pos.y;
-          drop(playhead_pos);
-
           // Use match length as note duration; dyn_length_mode overrides with distance-based value
           let distance_to_next = if self.modes.dyn_length_mode.load(Ordering::Relaxed)
             && !self.modes.arpeggiator_mode.load(Ordering::Relaxed)
@@ -1731,8 +1717,8 @@ impl PlayheadArea {
             curr_running_playhead,
             note_position,
             scale_mode,
-            playhead_pos_x,
-            playhead_pos_y,
+            abs_x,
+            abs_y,
             distance_to_next,
           );
           #[cfg(feature = "symspell")]
@@ -1759,15 +1745,20 @@ impl PlayheadArea {
       drop(matcher_guard);
 
       if !did_jump && !self.modes.is_ratcheting.load(Ordering::Relaxed) {
+        let area_right = self.area.lock().unwrap().right();
         let active_pos_y = self.pos.lock().unwrap().y;
-        self
-          .midi_handler
-          .trigger_midi_if_matched_sweep(curr_running_playhead, abs_x, active_pos_y);
+        self.midi_handler.trigger_midi_if_matched_sweep(
+          curr_running_playhead,
+          abs_x,
+          active_pos_y,
+          area_right,
+        );
 
         #[cfg(feature = "symspell")]
-        let sweep_indexes = self
-          .midi_handler
-          .sweep_matched_indexes(curr_running_playhead, abs_x);
+        let sweep_indexes =
+          self
+            .midi_handler
+            .sweep_matched_indexes(curr_running_playhead, abs_x, area_right);
         #[cfg(feature = "symspell")]
         if !sweep_indexes.is_empty() {
           let mut queue = self.ui_update_queue.lock().unwrap();

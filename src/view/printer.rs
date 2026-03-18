@@ -133,20 +133,24 @@ impl<T: Printable + Copy> Matrix<T> {
     self.get(x, y).unwrap().display_char((x, y).into())
   }
 
-  /// Channel-dimming bounds for the active playhead channel.
+  /// Channel-dimming bounds for the active playhead area.
   /// Returns `None` when there is only one channel (no dimming required).
+  /// When the playhead area spans multiple channels the returned bounds are
+  /// the union of every channel the area touches, so all spanned channels
+  /// are rendered at normal brightness.
   //
-  //            x0    x1
-  //            ↓     ↓
+  //            x0         x1
+  //            ↓          ↓
   //  col:  0     1     2     3
   //      ┌─────┬─────┬─────┬─────┐
   //      │  1  │  2  │  3  │  4  │  row 0
-  // y0 → ├─────╔═════╗─────┬─────┤
-  //      │  5  ║  6  ║  7  │  8  │  row 1
-  // y1 → └─────╚═════╝─────┴─────┘
+  // y0 → ├─────╔═════╪═════╗─────┤
+  //      │  5  ║  6  │  7  ║  8  │  row 1
+  // y1 → └─────╚═════╧═════╝─────┘
   fn channel_bounds(
     &self,
     playhead_pos: Vec2,
+    area_end: Vec2,
     v: usize,
     h: usize,
   ) -> Option<(usize, usize, usize, usize)> {
@@ -155,19 +159,31 @@ impl<T: Printable + Copy> Matrix<T> {
     }
     let col_w = (self.width / v).max(1);
     let row_h = (self.height / h).max(1);
-    let curr_col = (playhead_pos.x / col_w).min(v.saturating_sub(1));
-    let curr_row = (playhead_pos.y / row_h).min(h.saturating_sub(1));
-    let x1 = if curr_col + 1 >= v {
+
+    let head_col = (playhead_pos.x / col_w).min(v.saturating_sub(1));
+    let head_row = (playhead_pos.y / row_h).min(h.saturating_sub(1));
+    let tail_col = (area_end.x / col_w).min(v.saturating_sub(1));
+    let tail_row = (area_end.y / row_h).min(h.saturating_sub(1));
+
+    let min_col = head_col.min(tail_col);
+    let max_col = head_col.max(tail_col);
+    let min_row = head_row.min(tail_row);
+    let max_row = head_row.max(tail_row);
+
+    let x0 = min_col * col_w;
+    let x1 = if max_col + 1 >= v {
       self.width
     } else {
-      (curr_col + 1) * col_w
+      (max_col + 1) * col_w
     };
-    let y1 = if curr_row + 1 >= h {
+    let y0 = min_row * row_h;
+    let y1 = if max_row + 1 >= h {
       self.height
     } else {
-      (curr_row + 1) * row_h
+      (max_row + 1) * row_h
     };
-    Some((curr_col * col_w, x1, curr_row * row_h, y1))
+
+    Some((x0, x1, y0, y1))
   }
 
   /// Precompute tilt sweep geometry shared across every row in this print call.
@@ -202,7 +218,10 @@ impl<T: Printable + Copy> Matrix<T> {
     y: usize,
   ) -> RowSweep {
     let row_idx = (y / metrics.row_h).min(h.saturating_sub(1));
-    match tilt_mode.sweep_col_for_row(metrics.playhead_col, metrics.playhead_row, row_idx, v, h) {
+    // Use the column that active_x is currently in (not the area's head column) so the
+    // crosshair follows the active position across channel boundaries instead of wrapping.
+    let active_col = (active_x / metrics.col_w.max(1)).min(v.saturating_sub(1));
+    match tilt_mode.sweep_col_for_row(active_col, metrics.playhead_row, row_idx, v, h) {
       None => RowSweep::INACTIVE,
       Some(col_idx) => {
         let start = col_idx * metrics.col_w;
@@ -223,14 +242,19 @@ impl<T: Printable + Copy> Matrix<T> {
   /// Base display style for a cell, before focus-dimming or playhead overlays are applied.
   fn base_cell_style(&self, ctx: &CellStyleContext) -> Style {
     let in_strip = if ctx.v > 1 || ctx.h > 1 {
-      ctx.sweep.in_band(ctx.x)
+      let in_channel_x = ctx
+        .channel_bounds
+        .map(|(x0, x1, _, _)| ctx.x >= x0 && ctx.x < x1)
+        .unwrap_or(false);
+      ctx.sweep.in_band(ctx.x) || in_channel_x
     } else {
       true
     };
     if !in_strip {
       return dim_style();
     }
-    if ctx.sweep_mode && ctx.is_regex_match && !ctx.is_in_playhead_area {
+    if ctx.sweep_mode && ctx.is_regex_match && !ctx.is_in_playhead_area && ctx.sweep.in_band(ctx.x)
+    {
       return Style::highlight();
     }
     let in_channel = ctx
@@ -265,7 +289,7 @@ impl<T: Printable + Copy> Matrix<T> {
     let h = (*grid_h_splits).max(1);
     let total = self.width * self.height;
 
-    let bounds = self.channel_bounds(*playhead_pos, v, h);
+    let bounds = self.channel_bounds(*playhead_pos, playhead_area.bottom_right, v, h);
     let metrics = self.tilt_metrics(*playhead_pos, v, h);
 
     let style_dim = dim_style();
@@ -328,7 +352,7 @@ impl<T: Printable + Copy> Matrix<T> {
           h,
         });
 
-        // crosshair
+        // crosshair follows active_pos only, even when area spans multiple channels
         if sweep.is_crosshair(x) && !is_active_pos && *sweep_mode {
           final_ch = '|';
           final_style = if is_regex_match && !is_in_playhead_area {

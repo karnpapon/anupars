@@ -146,8 +146,8 @@ impl MidiTriggerHandler {
     _curr_running_playhead: usize,
     note_position: usize,
     scale_mode: scale::ScaleMode,
-    playhead_pos_x: usize,
-    playhead_pos_y: usize,
+    abs_x: usize,
+    abs_y: usize,
     distance_to_next: usize,
   ) {
     let grid_height = self.grid_height.load(Ordering::Relaxed);
@@ -161,15 +161,15 @@ impl MidiTriggerHandler {
       .send(midi::Message::TriggerWithPosition(midi::TriggerParams {
         y_position: note_position,
         grid_height,
-        x_position: playhead_pos_x,
+        x_position: abs_x,
         grid_width,
         grid_v_splits: self.grid_v_splits.load(Ordering::Relaxed),
         grid_h_splits: self.grid_h_splits.load(Ordering::Relaxed),
         scale_mode,
         scale_root_offset: self.scale_root_top.lock().unwrap().to_root_offset(),
         bpm: current_tempo,
-        trigger_pos_y: playhead_pos_y,
-        active_pos_y: playhead_pos_y,
+        trigger_pos_y: abs_y,
+        active_pos_y: abs_y,
         distance_to_next,
         hold: hold_next,
         is_sweep: false,
@@ -179,7 +179,12 @@ impl MidiTriggerHandler {
 
   #[cfg(feature = "symspell")]
   /// Return the flat grid indexes that sweep would trigger (same geometry as trigger_midi_if_matched_sweep).
-  pub fn sweep_matched_indexes(&self, curr_running_playhead: usize, abs_x: usize) -> Vec<usize> {
+  pub fn sweep_matched_indexes(
+    &self,
+    curr_running_playhead: usize,
+    abs_x: usize,
+    area_right: usize,
+  ) -> Vec<usize> {
     if !self.sweep_mode.load(Ordering::Relaxed) {
       return Vec::new();
     }
@@ -195,22 +200,31 @@ impl MidiTriggerHandler {
     let playhead_row = (playhead_pos.y / row_h).min(h.saturating_sub(1));
     let x_offset_in_band = abs_x % col_w.max(1);
 
+    let area_tail_col = (area_right / col_w).min(v.saturating_sub(1));
+    let span_cols = area_tail_col.saturating_sub(playhead_col);
+
     let matcher = self.text_matcher.lock().unwrap();
     if let Some(ref m) = *matcher {
       (0..grid_height)
-        .filter_map(|y| {
+        .flat_map(|y| {
           let row_idx = (y / row_h).min(h.saturating_sub(1));
-          let tilt_x = match tilt_mode.sweep_col_for_row(playhead_col, playhead_row, row_idx, v, h)
-          {
-            Some(col_idx) => col_idx * col_w + x_offset_in_band,
-            None => return None,
-          };
-          let crosshair_index = y * grid_width + tilt_x;
-          if crosshair_index != curr_running_playhead && m.contains_key(&crosshair_index) {
-            Some(crosshair_index)
-          } else {
-            None
-          }
+          let base_col =
+            match tilt_mode.sweep_col_for_row(playhead_col, playhead_row, row_idx, v, h) {
+              Some(c) => c,
+              None => return vec![],
+            };
+          (0..=span_cols)
+            .filter_map(|col_off| {
+              let col = (base_col + col_off).min(v.saturating_sub(1));
+              let tilt_x = col * col_w + x_offset_in_band;
+              let crosshair_index = y * grid_width + tilt_x;
+              if crosshair_index != curr_running_playhead && m.contains_key(&crosshair_index) {
+                Some(crosshair_index)
+              } else {
+                None
+              }
+            })
+            .collect::<Vec<_>>()
         })
         .collect()
     } else {
@@ -224,6 +238,7 @@ impl MidiTriggerHandler {
     curr_running_playhead: usize,
     abs_x: usize,
     active_pos_y: usize,
+    area_right: usize,
   ) {
     if !self.sweep_mode.load(Ordering::Relaxed) {
       return;
@@ -245,26 +260,35 @@ impl MidiTriggerHandler {
     let playhead_row = (playhead_pos.y / row_h).min(h.saturating_sub(1));
     let x_offset_in_band = abs_x % col_w.max(1);
 
-    // Collect matched (y, tilt_x) pairs, each row may have a different tilt-adjusted x
-    // and therefore a different MIDI channel, so we trigger once per matched cell.
+    // Number of extra columns spanned by the playhead area beyond the head column.
+    let area_tail_col = (area_right / col_w).min(v.saturating_sub(1));
+    let span_cols = area_tail_col.saturating_sub(playhead_col);
+
+    // Collect matched (y, tilt_x) pairs. For each row, check every spanned column so
+    // that matches in all channels covered by the playhead area are triggered.
     let matched: Vec<(usize, usize)> = {
       let matcher = self.text_matcher.lock().unwrap();
       if let Some(ref m) = *matcher {
         (0..grid_height)
-          .filter_map(|y| {
+          .flat_map(|y| {
             let row_idx = (y / row_h).min(h.saturating_sub(1));
-            let tilt_x =
+            let base_col =
               match tilt_mode.sweep_col_for_row(playhead_col, playhead_row, row_idx, v, h) {
-                Some(col_idx) => col_idx * col_w + x_offset_in_band,
-                None => return None,
+                Some(c) => c,
+                None => return vec![],
               };
-            let crosshair_index = y * grid_width + tilt_x;
-            // Skip current playhead position to avoid duplicate MIDI trigger
-            if crosshair_index != curr_running_playhead && m.contains_key(&crosshair_index) {
-              Some((y, tilt_x))
-            } else {
-              None
-            }
+            (0..=span_cols)
+              .filter_map(|col_off| {
+                let col = (base_col + col_off).min(v.saturating_sub(1));
+                let tilt_x = col * col_w + x_offset_in_band;
+                let crosshair_index = y * grid_width + tilt_x;
+                if crosshair_index != curr_running_playhead && m.contains_key(&crosshair_index) {
+                  Some((y, tilt_x))
+                } else {
+                  None
+                }
+              })
+              .collect::<Vec<_>>()
           })
           .collect()
       } else {
