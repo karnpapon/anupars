@@ -425,6 +425,11 @@ fn dialog_file_explorer() -> OnEventView<ResizedView<Dialog>> {
   let default_path = get_default_database_path();
   let paths = fs::read_dir(default_path.unwrap())
     .unwrap()
+    .filter(|res| {
+      res
+        .as_ref()
+        .map_or(true, |e| !e.file_name().to_string_lossy().starts_with('.'))
+    })
     .map(|res| res.map(|e| e.file_name().into_string()))
     .collect::<Vec<_>>();
 
@@ -574,18 +579,10 @@ pub fn listed_files_view(dir: Vec<Result<Result<String, OsString>, io::Error>>) 
 }
 
 fn read_file(path: &Path) -> Result<String, Box<dyn Error>> {
-  let mut file = match File::open(path) {
-    Err(why) => panic!("couldn't open: {}", why),
-    Ok(file) => file,
-  };
-
+  let mut file = File::open(path)?;
   let mut s = String::new();
-  let file_contents = match file.read_to_string(&mut s) {
-    Err(why) => panic!("couldn't read :{}", why),
-    Ok(_) => s,
-  };
-
-  Ok(file_contents)
+  file.read_to_string(&mut s)?;
+  Ok(s)
 }
 
 /// Return the path to the default location (~/.anupars/contents)
