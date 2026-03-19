@@ -408,8 +408,13 @@ fn solve_regex(siv: &mut Cursive, texts: &str, regex_tx: Sender<regex::Message>)
     .find_name::<Canvas<GridEditor>>(consts::canvas_editor_section_view)
     .unwrap();
   let state = canvas_editor_section_view.state_mut();
-  let text = state.text_contents();
+
   let grid_width = state.grid.width;
+  if grid_width == 0 || state.text_contents.is_none() {
+    return;
+  }
+
+  let text = state.text_contents();
 
   let flag = siv
     .user_data::<UserData>()

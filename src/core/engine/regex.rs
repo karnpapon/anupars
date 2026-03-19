@@ -96,51 +96,6 @@ impl RegExpHandler {
     Self { tx, rx, cb_sink }
   }
 
-  // example case:
-  // without this conversion,
-  // a matches position will be incorrect for multi-byte char eg. "naïve"
-  // UTF-8 bytes:  [n][a][ï=2bytes][v][e]
-  // Byte indices:   0  1  2   3    4  5
-  // Char indices:   0  1  2        3  4
-  /// Convert byte index to character index for proper Unicode handling
-  fn byte_to_char_index(text: &str, byte_index: usize) -> usize {
-    text
-      .char_indices()
-      .position(|(i, _)| i == byte_index)
-      .unwrap_or(0)
-  }
-
-  /// Convert text character index to grid index, accounting for newlines
-  /// When a newline is encountered, the rest of that row is filled with '\0',
-  /// so we need to skip those positions in the grid index calculation
-  fn text_index_to_grid_index(text: &str, text_index: usize, grid_width: usize) -> usize {
-    let mut grid_index = 0;
-    let mut current_row_position = 0;
-
-    for (idx, ch) in text.chars().enumerate() {
-      if idx >= text_index {
-        break;
-      }
-
-      if ch == '\n' {
-        // Skip to the end of current row (padding with '\0')
-        let padding = grid_width - current_row_position;
-        grid_index += padding;
-        current_row_position = 0;
-      } else {
-        grid_index += 1;
-        current_row_position += 1;
-
-        // If we've reached the end of a row, move to next row
-        if current_row_position >= grid_width {
-          current_row_position = 0;
-        }
-      }
-    }
-
-    grid_index
-  }
-
   fn process_event(
     data: &EventData,
     cache: &mut RegexCache,
@@ -151,7 +106,7 @@ impl RegExpHandler {
         id: "input_too_large".to_string(),
         warning: true,
         name: "InputError".to_string(),
-        message: format!("input exceeds {} bytes", MAX_INPUT_LEN),
+        message: "input too large".to_string(),
       });
     }
 
@@ -170,21 +125,22 @@ impl RegExpHandler {
       id: "regex_error".to_string(),
       warning: true,
       name: "SyntaxError".to_string(),
-      message: "pattern invalid or too short".to_string(),
+      message: "invalid or too short".to_string(),
     })?;
 
     let text = &data.text;
+    let (byte_to_char, char_to_grid) = build_index_tables(text, data.grid_width);
+
     let mut matches = HashMap::new();
     let deadline = Instant::now();
 
     for cap in regex.captures_iter(text) {
-      // Guard 3: timeout, abort if catastrophic backtracking is detected
       if deadline.elapsed() > MATCH_TIMEOUT {
         return Err(RegexError {
           id: "timeout".to_string(),
           warning: true,
           name: "TimeoutError".to_string(),
-          message: "pattern caused catastrophic backtracking".to_string(),
+          message: "matching timed out".to_string(),
         });
       }
 
@@ -203,13 +159,9 @@ impl RegExpHandler {
         .collect();
 
       let byte_start = cap.get(0).unwrap().start();
-      // Convert byte index to character index for multi-byte Unicode support
-      let text_char_index = Self::byte_to_char_index(text, byte_start);
+      let char_idx = byte_to_char[byte_start];
+      let grid_index = char_to_grid[char_idx];
 
-      // Convert text character index to grid index (accounting for newlines)
-      let grid_index = Self::text_index_to_grid_index(text, text_char_index, data.grid_width);
-
-      // Calculate the grid length (excluding newlines from the match)
       let match_str = cap.get(0).unwrap().as_str();
       let grid_length = match_str.chars().filter(|&c| c != '\n').count();
 
@@ -293,7 +245,7 @@ impl RegExpHandler {
                 // })
                 // .unwrap();
                 s.call_on_name(consts::regex_err_display_unit_view, |c: &mut TextView| {
-                  c.set_content("pattern invalid!")
+                  c.set_content(res)
                 })
                 .unwrap()
               } else {
@@ -310,6 +262,43 @@ impl RegExpHandler {
   }
 }
 
+/// Build two lookup tables in one O(n) pass over the text:
+///
+/// - `byte_to_char[byte_offset]  → char_index`
+///   Needed because `regex_lite` returns byte offsets, but the grid is
+///   indexed by character position (multi-byte chars like 'ï' span >1 byte).
+///
+/// - `char_to_grid[char_index]   → grid_cell_index`
+///   Needed because newlines are not stored in the grid; instead the rest
+///   of the row is padded with '\0', so every line after the first shifts
+///   all subsequent char positions forward by the padding amount.
+fn build_index_tables(text: &str, grid_width: usize) -> (Vec<usize>, Vec<usize>) {
+  let mut byte_to_char = vec![0usize; text.len() + 1];
+  let mut char_to_grid: Vec<usize> = Vec::with_capacity(text.len());
+  let mut grid_idx: usize = 0;
+  let mut row_pos: usize = 0;
+  for (char_idx, (byte_idx, ch)) in text.char_indices().enumerate() {
+    byte_to_char[byte_idx] = char_idx;
+    char_to_grid.push(grid_idx);
+    if ch == '\n' {
+      let padding = if grid_width > 0 {
+        grid_width.saturating_sub(row_pos)
+      } else {
+        0
+      };
+      grid_idx += padding;
+      row_pos = 0;
+    } else {
+      grid_idx += 1;
+      row_pos += 1;
+      if grid_width > 0 && row_pos >= grid_width {
+        row_pos = 0;
+      }
+    }
+  }
+  (byte_to_char, char_to_grid)
+}
+
 #[cfg(test)]
 impl Match {
   /// Test-only constructor
@@ -319,5 +308,116 @@ impl Match {
       l,
       groups: vec![],
     }
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::build_index_tables;
+
+  #[test]
+  fn byte_to_char_ascii() {
+    // text: "abcd"  (4 chars, 4 bytes)
+    let (b2c, _) = build_index_tables("abcd", 10);
+    assert_eq!(b2c[0], 0); // 'a' → char 0
+    assert_eq!(b2c[1], 1); // 'b' → char 1
+    assert_eq!(b2c[2], 2); // 'c' → char 2
+    assert_eq!(b2c[3], 3); // 'd' → char 3
+  }
+
+  /// Multi-byte: 'ï' (U+00EF) is 2 bytes (0xC3 0xAF).
+  /// Without this table a regex match on 'v' would use byte offset 4
+  /// as char index and land one cell too far in the grid.
+  ///
+  ///   text:        n  a  ï     v  e
+  ///   byte offset: 0  1  2  3  4  5
+  ///   char index:  0  1  2     3  4
+  #[test]
+  fn byte_to_char_multibyte() {
+    let (b2c, _) = build_index_tables("naïve", 10);
+    assert_eq!(b2c[0], 0); // 'n' starts at byte 0 → char 0
+    assert_eq!(b2c[1], 1); // 'a' starts at byte 1 → char 1
+    assert_eq!(b2c[2], 2); // 'ï' starts at byte 2 → char 2
+                           // byte 3 is the second byte of 'ï'
+    assert_eq!(b2c[4], 3); // 'v' starts at byte 4 → char 3
+    assert_eq!(b2c[5], 4); // 'e' starts at byte 5 → char 4
+  }
+
+  #[test]
+  fn char_to_grid_no_newlines() {
+    // text: "abcd", grid_width: 10 — one row, no wrapping
+    let (_, c2g) = build_index_tables("abcd", 10);
+    assert_eq!(c2g, vec![0, 1, 2, 3]);
+  }
+
+  /// Newline with padding.
+  ///
+  ///   text: "ab\ncd",  grid_width: 4
+  ///
+  ///   grid layout (4 cols):
+  ///     col:   0    1    2    3
+  ///     row 0: 'a'  'b'  '\0' '\0'   ← '\n' pads 2 cells
+  ///     row 1: 'c'  'd'  '\0' '\0'
+  ///
+  ///   char_to_grid should be: a→0, b→1, \n→2, c→4, d→5
+  ///
+  /// The '\n' char maps to grid index 2 (where the newline sits before padding).
+  /// 'c' maps to 4 because the 2 padding cells (indices 2 and 3) are skipped.
+  #[test]
+  fn char_to_grid_newline_padding() {
+    let (_, c2g) = build_index_tables("ab\ncd", 4);
+    assert_eq!(c2g[0], 0); // 'a' → grid 0
+    assert_eq!(c2g[1], 1); // 'b' → grid 1
+    assert_eq!(c2g[2], 2); // '\n' → grid 2  (padding: 4-2=2 cells skipped)
+    assert_eq!(c2g[3], 4); // 'c' → grid 4  (skipped over cells 2 and 3)
+    assert_eq!(c2g[4], 5); // 'd' → grid 5
+  }
+
+  /// Row that fills exactly to grid_width, then a newline follows.
+  ///
+  ///   text: "abcd\nef",  grid_width: 4
+  ///
+  ///   When 'd' (char 3) fills col 3, row_pos wraps to 0 immediately.
+  ///   The '\n' that follows sees row_pos=0 and computes padding = 4-0 = 4,
+  ///   so it occupies grid cell 4 and the next row of text ('e') starts at 8.
+  ///
+  ///   grid layout:
+  ///     row 0 (cells 0-3):  a  b  c  d
+  ///     row 1 (cells 4-7):  \n \0 \0 \0
+  ///     row 2 (cells 8-11): e  f  …
+  #[test]
+  fn char_to_grid_full_row_then_newline() {
+    let (_, c2g) = build_index_tables("abcd\nef", 4);
+    assert_eq!(c2g[0], 0); // 'a' → grid 0
+    assert_eq!(c2g[3], 3); // 'd' → grid 3
+    assert_eq!(c2g[4], 4); // '\n' → grid 4  (row_pos was 0, padding = 4)
+    assert_eq!(c2g[5], 8); // 'e' → grid 8  (skipped cells 5-7)
+    assert_eq!(c2g[6], 9); // 'f' → grid 9
+  }
+
+  /// grid_width == 0: no padding is ever added (safe, no integer underflow).
+  ///
+  ///   text: "ab\ncd",  grid_width: 0
+  ///
+  ///   '\n' adds 0 padding, so grid_idx does not advance after it.
+  ///   'c' therefore maps to the same grid_idx value that '\n' occupied,
+  ///   then advances by 1 as normal.
+  ///
+  ///   char_to_grid: a→0, b→1, \n→2, c→2, d→3
+  #[test]
+  fn char_to_grid_zero_width_no_panic() {
+    let (_, c2g) = build_index_tables("ab\ncd", 0);
+    assert_eq!(c2g[0], 0); // 'a'
+    assert_eq!(c2g[1], 1); // 'b'
+    assert_eq!(c2g[2], 2); // '\n' → grid 2, padding = 0
+    assert_eq!(c2g[3], 2); // 'c' → grid 2 (grid_idx not advanced by '\n')
+    assert_eq!(c2g[4], 3); // 'd' → grid 3
+  }
+
+  #[test]
+  fn empty_text() {
+    let (b2c, c2g) = build_index_tables("", 10);
+    assert_eq!(b2c.len(), 1); // vec![0usize; 0 + 1]
+    assert!(c2g.is_empty());
   }
 }
