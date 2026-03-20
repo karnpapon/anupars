@@ -177,7 +177,6 @@ impl MidiTriggerHandler {
       }));
   }
 
-  #[cfg(feature = "symspell")]
   /// Return the flat grid indexes that sweep would trigger (same geometry as trigger_midi_if_matched_sweep).
   pub fn sweep_matched_indexes(
     &self,

@@ -152,10 +152,11 @@ pub const TRIGGER_CHAR: char = '*';
 pub const PLAYHEAD_MATCH_CHAR: char = '@';
 pub const MATCH_GROUP_CHAR: char = '}';
 
-#[cfg(feature = "symspell")]
 pub const TMP_BUF_SIZE: usize = 6;
 
 pub const MOVE_X_STEP_SIZE: usize = 8;
 pub const MOVE_Y_STEP_SIZE: usize = 4;
 pub const SCALE_X_STEP_SIZE: usize = 8;
 pub const SCALE_Y_STEP_SIZE: usize = 2;
+
+pub const FREQ_DICT_PATH: &str = "data/frequency_dictionary_en_30_000.txt";

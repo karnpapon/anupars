@@ -126,7 +126,6 @@ pub fn initialize_components() -> Application {
   let playhead = Playhead::new(
     cursive.cb_sink().clone(),
     midi.tx.clone(),
-    #[cfg(feature = "symspell")]
     regex_handler.tx.clone(),
   );
   let mut metronome = Metronome::new(cursive.cb_sink().clone(), playhead.tx.clone());

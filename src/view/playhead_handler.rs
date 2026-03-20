@@ -15,8 +15,7 @@ use std::time::Duration;
 use cursive::views::Canvas;
 use cursive::views::TextView;
 
-#[cfg(feature = "symspell")]
-use crate::view::symspell::{AnimTick, RplPendingState, SymSpellState};
+use crate::view::symspell::{AnimTick, SymSpellState};
 use cursive::Vec2;
 use cursive::XY;
 
@@ -54,11 +53,10 @@ pub enum UIUpdate {
   GridSplits(usize, usize),
   AimedArea(Option<Rect>),
 
-  #[cfg(feature = "symspell")]
   TmpAppend(usize),
-  #[cfg(feature = "symspell")]
+
   TmpAppendSpace,
-  #[cfg(feature = "symspell")]
+
   RplCycle(Rect),
 }
 
@@ -271,7 +269,6 @@ pub struct PlayheadArea {
   /// Non-zero → advance at 2× rate (halved divider) until it reaches 0.
   match_span_remaining: Arc<AtomicUsize>,
 
-  #[cfg(feature = "symspell")]
   pub sym_state: Arc<SymSpellState>,
   // #[cfg(debug_assertions)]
   // timing_stats: Arc<TimingStats>,
@@ -340,7 +337,7 @@ impl PlayheadArea {
       step_index: Arc::new(Mutex::new(0)),
       ratchet_generation,
       match_span_remaining: Arc::new(AtomicUsize::new(0)),
-      #[cfg(feature = "symspell")]
+
       sym_state: Arc::new(SymSpellState::new()),
       // #[cfg(debug_assertions)]
       // timing_stats: Arc::new(TimingStats::new()),
@@ -350,15 +347,14 @@ impl PlayheadArea {
   pub fn spawn_ui_processor(
     ui_queue: Arc<Mutex<VecDeque<UIUpdate>>>,
     cb_sink: cursive::CbSink,
-    #[cfg(feature = "symspell")] sym_state: Arc<SymSpellState>,
-    #[cfg(feature = "symspell")] regex_tx: Sender<regex::Message>,
+    sym_state: Arc<SymSpellState>,
+    regex_tx: Sender<regex::Message>,
   ) {
     thread::Builder::new()
       .name("ui-batch-processor".to_string())
       .spawn(move || loop {
         thread::sleep(Duration::from_millis(16)); // ~60 FPS
 
-        #[cfg(feature = "symspell")]
         let anim_tick: Option<AnimTick> = sym_state.advance_anim_frame();
 
         let updates: Vec<UIUpdate> = {
@@ -366,27 +362,22 @@ impl PlayheadArea {
           queue.drain(..).collect()
         };
 
-        #[cfg(feature = "symspell")]
         if updates.is_empty() && anim_tick.is_none() {
           continue;
         }
-        #[cfg(not(feature = "symspell"))]
         if updates.is_empty() {
           continue;
         }
 
-        #[cfg(feature = "symspell")]
         let sym_state_cb = Arc::clone(&sym_state);
-        #[cfg(feature = "symspell")]
+
         let regex_tx_cb = regex_tx.clone();
         cb_sink
           .send(Box::new(move |siv| {
-            #[cfg(feature = "symspell")]
             let sym_state = sym_state_cb;
-            #[cfg(feature = "symspell")]
+
             let regex_tx = regex_tx_cb;
 
-            #[cfg(feature = "symspell")]
             if let Some(tick) = anim_tick {
               sym_state.render_anim_tick(siv, tick, &regex_tx);
             }
@@ -454,11 +445,11 @@ impl PlayheadArea {
                     },
                   );
                 }
-                #[cfg(feature = "symspell")]
+
                 UIUpdate::TmpAppendSpace => sym_state.handle_buf_append_space(siv),
-                #[cfg(feature = "symspell")]
+
                 UIUpdate::TmpAppend(idx) => sym_state.handle_buf_append(siv, idx),
-                #[cfg(feature = "symspell")]
+
                 UIUpdate::RplCycle(old_area) => sym_state.handle_rpl_cycle(siv, old_area),
               }
             }
@@ -473,7 +464,6 @@ impl PlayheadArea {
 
   #[inline]
   fn enqueue_sym_space(&self) {
-    #[cfg(feature = "symspell")]
     self
       .ui_update_queue
       .lock()
@@ -482,8 +472,7 @@ impl PlayheadArea {
   }
 
   #[inline]
-  fn enqueue_sym_buf_append(&self, _idx: usize) {
-    #[cfg(feature = "symspell")]
+  fn enqueue_sym_buf_append(&self, idx: usize) {
     self
       .ui_update_queue
       .lock()
@@ -492,8 +481,7 @@ impl PlayheadArea {
   }
 
   #[inline]
-  fn enqueue_sym_rpl_cycle(&self, _area: Rect) {
-    #[cfg(feature = "symspell")]
+  fn enqueue_sym_rpl_cycle(&self, area: Rect) {
     self
       .ui_update_queue
       .lock()
@@ -972,7 +960,7 @@ impl PlayheadArea {
     drop(pos);
 
     let mut area = self.area.lock().unwrap();
-    #[cfg(feature = "symspell")]
+
     let prev_area = *area;
     *area = Rect::from_size((new_x, new_y), (playhead_width, playhead_height));
     let new_area = *area;
@@ -988,7 +976,6 @@ impl PlayheadArea {
     queue.push_back(UIUpdate::ChnStatus(self.compute_chn_str(new_pos)));
     drop(queue);
 
-    #[cfg(feature = "symspell")]
     self.enqueue_sym_rpl_cycle(prev_area);
     self.enqueue_sym_space();
 
@@ -1591,7 +1578,6 @@ impl PlayheadArea {
           area_right,
         );
 
-        #[cfg(feature = "symspell")]
         for idx in self
           .midi_handler
           .sweep_matched_indexes(curr_running_playhead, abs_x, area_right)

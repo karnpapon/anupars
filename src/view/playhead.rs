@@ -5,7 +5,6 @@ use std::thread;
 
 use cursive::{views::Canvas, XY};
 
-#[cfg(feature = "symspell")]
 use crate::core::engine::regex;
 use crate::core::tonal::scale;
 use crate::core::{consts, engine::regex::Match, io::midi};
@@ -67,7 +66,7 @@ pub struct Playhead {
   pub rx: Receiver<Message>,
   cb_sink: cursive::CbSink,
   midi_tx: Sender<midi::Message>,
-  #[cfg(feature = "symspell")]
+
   regex_tx: Sender<regex::Message>,
 }
 
@@ -87,7 +86,7 @@ impl Playhead {
   pub fn new(
     cb_sink: cursive::CbSink,
     midi_tx: Sender<midi::Message>,
-    #[cfg(feature = "symspell")] regex_tx: Sender<regex::Message>,
+    regex_tx: Sender<regex::Message>,
   ) -> Self {
     let (tx, rx) = channel();
 
@@ -96,7 +95,7 @@ impl Playhead {
       rx,
       cb_sink,
       midi_tx,
-      #[cfg(feature = "symspell")]
+
       regex_tx,
     }
   }
@@ -108,9 +107,7 @@ impl Playhead {
     playhead_handler::PlayheadArea::spawn_ui_processor(
       Arc::clone(&playhead_area.ui_update_queue),
       self.cb_sink.clone(),
-      #[cfg(feature = "symspell")]
       Arc::clone(&playhead_area.sym_state),
-      #[cfg(feature = "symspell")]
       self.regex_tx.clone(),
     );
 

@@ -45,12 +45,7 @@ impl SymSpellState {
   /// bundled frequency dictionary.
   pub fn new() -> Self {
     let mut inner = SymSpell::new(2, None, 7, 1);
-    let _ = inner.load_dictionary(
-      Path::new("data/frequency_dictionary_en_82_765.txt"),
-      0,
-      1,
-      " ",
-    );
+    let _ = inner.load_dictionary(Path::new(consts::FREQ_DICT_PATH), 0, 1, " ");
     SymSpellState {
       buf_buf: Arc::new(Mutex::new(AllocRingBuffer::new(consts::TMP_BUF_SIZE))),
       rpl_state: Arc::new(Mutex::new(RplPendingState::Empty)),
@@ -67,7 +62,7 @@ impl SymSpellState {
     let snap = guard.as_ref().map(|a| {
       (
         a.sym_text.clone(),
-        a.area.clone(),
+        a.area,
         a.base_text.clone(),
         a.frame,
         a.total_frames,
@@ -138,7 +133,7 @@ impl SymSpellState {
       let mut buf = self.buf_buf.lock().unwrap();
       let last = buf.back().copied();
       if last != Some(' ') {
-        buf.push(' ');
+        buf.enqueue(' ');
       }
       let s: String = buf.iter().collect();
       if s.is_empty() {
@@ -173,7 +168,7 @@ impl SymSpellState {
     if ch.is_alphabetic() {
       let new_tmp = {
         let mut buf = self.buf_buf.lock().unwrap();
-        buf.push(ch);
+        buf.enqueue(ch);
         buf.iter().collect::<String>()
       };
       siv.call_on_name(consts::buf_status_unit_view, |view: &mut TextView| {
@@ -253,7 +248,7 @@ impl SymSpellState {
       // of the grid keeps its highlights during the animation.
       // They will be restored for the new text once the last frame fires the
       // regex re-match in render_anim_tick.
-      let area_for_clear = area.clone();
+      let area_for_clear = area;
       siv.call_on_name(
         consts::canvas_editor_section_view,
         move |canvas: &mut Canvas<GridEditor>| {
