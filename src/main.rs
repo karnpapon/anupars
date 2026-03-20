@@ -17,7 +17,6 @@ fn main() {
     components.metronome,
   );
 
-  components.playhead.run();
   components.midi.run();
   components.cursive.run();
 }

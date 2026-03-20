@@ -13,8 +13,8 @@ use serde::Deserialize;
 use serde::Serialize;
 
 use crate::core::consts;
-use crate::view::grid_editor::GridEditor;
-use crate::view::playhead;
+use crate::core::playhead;
+use crate::view::grid::GridEditor;
 
 /// Maximum text length (in bytes) we will attempt to match against.
 const MAX_INPUT_LEN: usize = 10_000;

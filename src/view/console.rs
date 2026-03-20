@@ -26,7 +26,7 @@ use crate::core::io::midi::{self, MidiMsg};
 use crate::core::parser::{self};
 use crate::core::playhead::tilt;
 use crate::core::utils;
-use crate::view::grid_editor::GridEditor;
+use crate::view::grid::GridEditor;
 use cursive::theme::BorderStyle;
 use cursive::theme::Color;
 use cursive::theme::Palette;

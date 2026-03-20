@@ -11,9 +11,10 @@ use std::sync::RwLock;
 use crate::app::AppMode;
 use crate::core::consts;
 use crate::core::engine::regex;
+use crate::core::playhead;
 use crate::core::playhead::movement::Movement;
-use crate::view::grid::GridSection;
-use crate::view::playhead;
+use crate::view::grid::GridEditor;
+use cursive::views::FocusTracker;
 
 use super::console::{Console, RegexFlag, RegexMode};
 
@@ -48,7 +49,7 @@ impl Program {
   ) -> NamedView<LinearLayout> {
     let top_section = Console::build(self, regex_tx);
     let padding_section = DummyView::new().fixed_width(1);
-    let canvas_section = GridSection::build(playhead_tx);
+    let canvas_section = FocusTracker::new(GridEditor::build(playhead_tx));
 
     LinearLayout::vertical()
       .child(top_section)

@@ -12,8 +12,8 @@ use std::time::Instant;
 
 use crate::core::consts;
 use crate::core::io::midi;
+use crate::core::playhead;
 use crate::core::utils;
-use crate::view::playhead;
 
 use super::clock;
 

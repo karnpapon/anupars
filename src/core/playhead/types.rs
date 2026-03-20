@@ -1,0 +1,193 @@
+use std::collections::BTreeSet;
+use std::collections::HashMap;
+use std::sync::atomic::{AtomicBool, AtomicUsize};
+use std::sync::{Arc, Mutex};
+
+use cursive::Vec2;
+use cursive::XY;
+
+use crate::core::command::types;
+use crate::core::consts;
+use crate::core::engine::regex::Match;
+use crate::core::tonal::scale;
+use crate::view::rect::Rect;
+
+use super::queue::QueueManager;
+use super::tilt::TiltMode;
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum Direction {
+  Up,
+  Down,
+  Left,
+  Right,
+  Idle,
+}
+
+impl Direction {
+  pub fn get_direction(&self) -> (i32, i32) {
+    match self {
+      Direction::Right => (1, 0),
+      Direction::Up => (0, -1),
+      Direction::Left => (-1, 0),
+      Direction::Down => (0, 1),
+      Direction::Idle => (0, 0),
+    }
+  }
+}
+
+#[derive(Clone, Debug)]
+pub enum UIUpdate {
+  ActivePos(Vec2),
+  AccumulationCounter(usize, usize),
+  PlayheadPosAndArea(Vec2, Rect),
+  ChnStatus(String),
+  GridSplits(usize, usize),
+  AimedArea(Option<Rect>),
+  TmpAppend(usize),
+  TmpAppendSpace,
+  RplCycle(Rect),
+}
+
+pub struct PlayheadUI {
+  pub playhead_area: Rect,
+  pub playhead_pos: Vec2,
+  pub actived_pos: Vec2,
+  pub aimed_area: Option<Rect>,
+  pub text_matcher: Option<HashMap<usize, Match>>,
+  pub regex_indexes: Arc<Mutex<BTreeSet<usize>>>,
+  pub arpeggiator_mode: bool,
+  pub accumulation_mode: bool,
+  pub sweep_mode: bool,
+  pub tilt_mode: TiltMode,
+  pub queue_manager: Arc<QueueManager>,
+  pub grid_v_splits: usize,
+  pub grid_h_splits: usize,
+  pub focus_mode: bool,
+}
+
+impl PlayheadUI {
+  pub fn new() -> Self {
+    PlayheadUI {
+      playhead_area: Rect::from_point(Vec2::zero()),
+      playhead_pos: Vec2::zero(),
+      actived_pos: Vec2::zero(),
+      aimed_area: None,
+      text_matcher: None,
+      regex_indexes: Arc::new(Mutex::new(BTreeSet::new())),
+      arpeggiator_mode: false,
+      accumulation_mode: false,
+      sweep_mode: false,
+      tilt_mode: TiltMode::default(),
+      queue_manager: Arc::new(QueueManager::new()),
+      grid_v_splits: 1,
+      grid_h_splits: 1,
+      focus_mode: false,
+    }
+  }
+}
+
+#[derive(Clone, Debug)]
+pub enum Message {
+  Move(Direction, XY<usize>),
+  Leap(Direction, XY<usize>),
+  SetCurrentPos(XY<usize>, XY<usize>),
+  UpdateInfoStatusView(),
+  SetGridArea(XY<usize>),
+  SetActivePos(usize),
+  Scale((i32, i32)),
+  SetMatcher(Option<HashMap<usize, Match>>),
+  SetGridSize(usize, usize),
+  SetScaleModeLeft(scale::ScaleMode),
+  SetScaleModeTop(scale::ScaleMode),
+  SetScaleRootTop(scale::ScaleRoot),
+  ToggleAccumulationMode(),
+  ToggleForwardMode(),
+  ToggleReverseMode(),
+  TogglePendulumMode(),
+  ToggleArpeggiatorMode(),
+  ToggleRandomMode(),
+  ToggleEventOperatorMode(),
+  ToggleDrainQueueMode(),
+  ToggleSweepMode(),
+  ToggleDynLengthMode(),
+  ToggleFreezeMode(),
+  CycleScaleRootTop(types::Adjustment),
+  CycleScaleMode(types::Adjustment),
+  SetTempo(usize),
+  SetRatio((usize, usize)),
+  ClearQueue(),
+  SetGridSplits(usize, usize),
+  CycleTiltMode(),
+  StartAim(),
+  UpdateAim(Direction, XY<usize>, usize),
+  CommitAim(),
+  CancelAim(),
+}
+
+/// Grid and layout state shared across playhead subsystems.
+pub struct GridState {
+  pub width: Arc<AtomicUsize>,
+  pub height: Arc<AtomicUsize>,
+  pub v_splits: Arc<AtomicUsize>,
+  pub h_splits: Arc<AtomicUsize>,
+}
+
+impl GridState {
+  pub fn new() -> Self {
+    GridState {
+      width: Arc::new(AtomicUsize::new(0)),
+      height: Arc::new(AtomicUsize::new(0)),
+      v_splits: Arc::new(AtomicUsize::new(1)),
+      h_splits: Arc::new(AtomicUsize::new(1)),
+    }
+  }
+}
+
+/// Musical parameters and scale configuration shared across playhead subsystems.
+pub struct MusicState {
+  pub tempo: Arc<AtomicUsize>,
+  pub scale_mode_left: Arc<Mutex<scale::ScaleMode>>,
+  pub scale_mode_top: Arc<Mutex<scale::ScaleMode>>,
+  pub scale_root_top: Arc<Mutex<scale::ScaleRoot>>,
+  pub ratio: Arc<Mutex<(usize, usize)>>,
+}
+
+impl MusicState {
+  pub fn new() -> Self {
+    MusicState {
+      tempo: Arc::new(AtomicUsize::new(consts::DEFAULT_TEMPO)),
+      scale_mode_left: Arc::new(Mutex::new(scale::ScaleMode::default())),
+      scale_mode_top: Arc::new(Mutex::new(scale::ScaleMode::default())),
+      scale_root_top: Arc::new(Mutex::new(scale::ScaleRoot::default())),
+      ratio: Arc::new(Mutex::new(consts::DEFAULT_RATIO)),
+    }
+  }
+}
+
+/// Boolean operation mode flags shared across playhead subsystems.
+pub struct ModeFlags {
+  pub accumulation_mode: Arc<AtomicBool>,
+  pub arpeggiator_mode: Arc<AtomicBool>,
+  pub event_operator_mode: Arc<AtomicBool>,
+  pub sweep_mode: Arc<AtomicBool>,
+  pub dyn_length_mode: Arc<AtomicBool>,
+  pub freeze_mode: Arc<AtomicBool>,
+  pub hold_next_note: Arc<AtomicBool>,
+  pub is_ratcheting: Arc<AtomicBool>,
+}
+
+impl ModeFlags {
+  pub fn new() -> Self {
+    ModeFlags {
+      accumulation_mode: Arc::new(AtomicBool::new(false)),
+      arpeggiator_mode: Arc::new(AtomicBool::new(false)),
+      event_operator_mode: Arc::new(AtomicBool::new(false)),
+      sweep_mode: Arc::new(AtomicBool::new(false)),
+      dyn_length_mode: Arc::new(AtomicBool::new(false)),
+      freeze_mode: Arc::new(AtomicBool::new(false)),
+      hold_next_note: Arc::new(AtomicBool::new(false)),
+      is_ratcheting: Arc::new(AtomicBool::new(false)),
+    }
+  }
+}

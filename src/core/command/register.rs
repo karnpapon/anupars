@@ -5,7 +5,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 use crate::app::UserData;
-use crate::view::playhead;
+use crate::core::playhead;
 
 use crate::view::layout::Program;
 
@@ -15,7 +15,7 @@ use crate::core::command::types::Adjustment;
 use crate::core::timing::metronome;
 use crate::core::{consts, utils};
 
-use crate::view::grid_editor::GridEditor;
+use crate::view::grid::GridEditor;
 use cursive::event::Event;
 use cursive::views::Canvas;
 use cursive::views::LinearLayout;

@@ -9,7 +9,7 @@ use ringbuffer::{AllocRingBuffer, RingBuffer};
 use symspell_rs::SymSpell;
 
 use crate::core::{consts, engine::regex};
-use crate::view::grid_editor::GridEditor;
+use crate::view::grid::GridEditor;
 use crate::view::rect::Rect;
 
 #[derive(Clone, Debug)]

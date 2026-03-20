@@ -4,10 +4,9 @@ use crate::core::command::register::CommandManager;
 use crate::core::consts;
 use crate::core::engine::regex::RegExpHandler;
 use crate::core::io::midi;
+use crate::core::playhead::{Message as PlayheadMessage, Playhead};
 use crate::core::timing::metronome::{Message, Metronome};
-// use crate::view::console::RegexFlag;
 use crate::view::menubar::Menubar;
-use crate::view::playhead::Playhead;
 use cursive::theme::{BorderStyle, Palette};
 use cursive::views::TextView;
 use cursive::Cursive;
@@ -93,7 +92,7 @@ pub struct Application {
   pub midi: midi::Midi,
   pub regex_handler: RegExpHandler,
   pub program: Program,
-  pub playhead: Playhead,
+  pub playhead_tx: Sender<PlayheadMessage>,
   pub metronome: Metronome,
   /// for tracking holding keypress
   pub last_key_time: Arc<Mutex<Option<Instant>>>,
@@ -123,12 +122,10 @@ pub fn initialize_components() -> Application {
   let current_tempo = Arc::new(Mutex::new(DEFAULT_TEMPO));
   let prog = Program::new();
 
-  let playhead = Playhead::new(
-    cursive.cb_sink().clone(),
-    midi.tx.clone(),
-    regex_handler.tx.clone(),
-  );
-  let mut metronome = Metronome::new(cursive.cb_sink().clone(), playhead.tx.clone());
+  let playhead_area =
+    std::sync::Arc::new(Playhead::new(midi.tx.clone(), cursive.cb_sink().clone()));
+  let playhead_tx = std::sync::Arc::clone(&playhead_area).run(regex_handler.tx.clone());
+  let mut metronome = Metronome::new(cursive.cb_sink().clone(), playhead_tx.clone());
 
   metronome.set_midi_tx(midi.tx.clone());
   midi.enable_clock(false);
@@ -154,7 +151,7 @@ pub fn initialize_components() -> Application {
     midi,
     regex_handler,
     program: prog,
-    playhead,
+    playhead_tx,
     metronome,
     last_key_time,
     current_tempo,
@@ -164,7 +161,7 @@ pub fn initialize_components() -> Application {
 /// Setup the user interface, menus, and views
 pub fn setup_ui(components: &mut Application) {
   let midi_tx = components.midi.tx.clone();
-  let playhead_tx = components.playhead.tx.clone();
+  let playhead_tx = components.playhead_tx.clone();
   let metronome_tx = components.metronome.tx.clone();
 
   let mut command_manager = CommandManager::new(

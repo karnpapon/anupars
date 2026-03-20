@@ -34,10 +34,11 @@ use cursive::Cursive;
 use cursive::With;
 
 use crate::core::io::midi;
+use crate::core::playhead;
 use crate::core::tonal::scale;
 use midir;
 
-use super::grid_editor::GridEditor;
+use super::grid::GridEditor;
 use crate::core::{consts, engine::disspress};
 
 type MidiMenuState = (
@@ -197,7 +198,7 @@ impl Menubar {
             let _ = canvas
               .state_mut()
               .playhead_tx
-              .send(super::playhead::Message::ClearQueue());
+              .send(playhead::Message::ClearQueue());
           },
         );
       })
@@ -372,7 +373,7 @@ fn build_scale_menu_left() -> cursive::menu::Tree {
             canvas
               .state_mut()
               .playhead_tx
-              .send(super::playhead::Message::SetScaleModeLeft(scale_clone))
+              .send(playhead::Message::SetScaleModeLeft(scale_clone))
               .unwrap();
           },
         );
@@ -392,7 +393,7 @@ fn build_scale_menu_top() -> cursive::menu::Tree {
             canvas
               .state_mut()
               .playhead_tx
-              .send(super::playhead::Message::SetScaleModeTop(scale_clone))
+              .send(playhead::Message::SetScaleModeTop(scale_clone))
               .unwrap();
           },
         );
@@ -412,7 +413,7 @@ fn build_scale_root_menu_top() -> cursive::menu::Tree {
             canvas
               .state_mut()
               .playhead_tx
-              .send(super::playhead::Message::SetScaleRootTop(root_clone))
+              .send(playhead::Message::SetScaleRootTop(root_clone))
               .unwrap();
           },
         );
