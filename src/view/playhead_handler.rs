@@ -1,7 +1,3 @@
-#[cfg(feature = "symspell")]
-use ringbuffer::AllocRingBuffer;
-#[cfg(feature = "symspell")]
-use ringbuffer::RingBuffer;
 use std::collections::BTreeSet;
 use std::collections::HashMap;
 use std::collections::VecDeque;
@@ -13,18 +9,14 @@ use std::sync::Mutex;
 use std::thread;
 use std::time::Duration;
 
-#[cfg(feature = "symspell")]
-use symspell_rs::SymSpell;
-#[cfg(feature = "symspell")]
-use symspell_rs::Verbosity;
-
 // #[cfg(debug_assertions)]
 // use std::time::Instant;
 
 use cursive::views::Canvas;
-#[cfg(feature = "symspell")]
-use cursive::views::EditView;
 use cursive::views::TextView;
+
+#[cfg(feature = "symspell")]
+use crate::view::symspell::{AnimTick, RplPendingState, SymSpellState};
 use cursive::Vec2;
 use cursive::XY;
 
@@ -68,26 +60,6 @@ pub enum UIUpdate {
   TmpAppendSpace,
   #[cfg(feature = "symspell")]
   RplCycle(Rect),
-}
-
-#[cfg(feature = "symspell")]
-#[derive(Clone, Debug)]
-pub enum RplPendingState {
-  Empty,
-  Waiting(String, Rect),
-  Armed(String, Rect),
-}
-
-// Each non-space character takes 2 frames: '_' (underscore placeholder) then '▌' (block cursor).
-// total_frames is computed dynamically as sym_text.len() * 2 + 1.
-
-#[cfg(feature = "symspell")]
-pub struct RplAnimState {
-  pub sym_text: String,
-  pub area: Rect,
-  pub base_text: String,
-  pub frame: usize,
-  pub total_frames: usize,
 }
 
 struct GridParams<'a, R: rand::Rng> {
@@ -300,11 +272,7 @@ pub struct PlayheadArea {
   match_span_remaining: Arc<AtomicUsize>,
 
   #[cfg(feature = "symspell")]
-  pub tmp_buf: Arc<Mutex<AllocRingBuffer<char>>>,
-  #[cfg(feature = "symspell")]
-  pub rpl_state: Arc<Mutex<RplPendingState>>,
-  #[cfg(feature = "symspell")]
-  pub rpl_anim: Arc<Mutex<Option<RplAnimState>>>,
+  pub sym_state: Arc<SymSpellState>,
   // #[cfg(debug_assertions)]
   // timing_stats: Arc<TimingStats>,
 }
@@ -373,11 +341,7 @@ impl PlayheadArea {
       ratchet_generation,
       match_span_remaining: Arc::new(AtomicUsize::new(0)),
       #[cfg(feature = "symspell")]
-      tmp_buf: Arc::new(Mutex::new(AllocRingBuffer::new(consts::TMP_BUF_SIZE))),
-      #[cfg(feature = "symspell")]
-      rpl_state: Arc::new(Mutex::new(RplPendingState::Empty)),
-      #[cfg(feature = "symspell")]
-      rpl_anim: Arc::new(Mutex::new(None)),
+      sym_state: Arc::new(SymSpellState::new()),
       // #[cfg(debug_assertions)]
       // timing_stats: Arc::new(TimingStats::new()),
     }
@@ -386,10 +350,7 @@ impl PlayheadArea {
   pub fn spawn_ui_processor(
     ui_queue: Arc<Mutex<VecDeque<UIUpdate>>>,
     cb_sink: cursive::CbSink,
-    #[cfg(feature = "symspell")] tmp_buf: Arc<Mutex<AllocRingBuffer<char>>>,
-    #[cfg(feature = "symspell")] symspell: Arc<Mutex<SymSpell>>,
-    #[cfg(feature = "symspell")] rpl_state: Arc<Mutex<RplPendingState>>,
-    #[cfg(feature = "symspell")] rpl_anim: Arc<Mutex<Option<RplAnimState>>>,
+    #[cfg(feature = "symspell")] sym_state: Arc<SymSpellState>,
     #[cfg(feature = "symspell")] regex_tx: Sender<regex::Message>,
   ) {
     thread::Builder::new()
@@ -397,34 +358,14 @@ impl PlayheadArea {
       .spawn(move || loop {
         thread::sleep(Duration::from_millis(16)); // ~60 FPS
 
-        // Advance animation by one frame, capturing data needed for this tick.
         #[cfg(feature = "symspell")]
-        let anim_tick: Option<(String, Rect, String, usize, usize)> = {
-          let mut guard = rpl_anim.lock().unwrap();
-          let snap = guard.as_ref().map(|a| {
-            (
-              a.sym_text.clone(),
-              a.area.clone(),
-              a.base_text.clone(),
-              a.frame,
-              a.total_frames,
-            )
-          });
-          if let Some(a) = guard.as_mut() {
-            a.frame += 1;
-            if a.frame >= a.total_frames {
-              *guard = None;
-            }
-          }
-          snap
-        };
+        let anim_tick: Option<AnimTick> = sym_state.advance_anim_frame();
 
         let updates: Vec<UIUpdate> = {
           let mut queue = ui_queue.lock().unwrap();
           queue.drain(..).collect()
         };
 
-        // Skip this tick if there is nothing to render.
         #[cfg(feature = "symspell")]
         if updates.is_empty() && anim_tick.is_none() {
           continue;
@@ -435,74 +376,19 @@ impl PlayheadArea {
         }
 
         #[cfg(feature = "symspell")]
-        let tmp_buf_cb = Arc::clone(&tmp_buf);
-        #[cfg(feature = "symspell")]
-        let symspell_cb = Arc::clone(&symspell);
-        #[cfg(feature = "symspell")]
-        let rpl_state_cb = Arc::clone(&rpl_state);
-        #[cfg(feature = "symspell")]
-        let rpl_anim_cb = Arc::clone(&rpl_anim);
+        let sym_state_cb = Arc::clone(&sym_state);
         #[cfg(feature = "symspell")]
         let regex_tx_cb = regex_tx.clone();
         cb_sink
           .send(Box::new(move |siv| {
             #[cfg(feature = "symspell")]
-            let tmp_buf = tmp_buf_cb;
-            #[cfg(feature = "symspell")]
-            let symspell = symspell_cb;
-            #[cfg(feature = "symspell")]
-            let rpl_state = rpl_state_cb;
-            #[cfg(feature = "symspell")]
-            let rpl_anim = rpl_anim_cb;
+            let sym_state = sym_state_cb;
             #[cfg(feature = "symspell")]
             let regex_tx = regex_tx_cb;
 
-            // Render the current animation frame before processing any queued updates.
             #[cfg(feature = "symspell")]
-            if let Some((sym_text_anim, area_anim, base_text_anim, frame_anim, total_frames_anim)) =
-              anim_tick
-            {
-              let is_last = frame_anim + 1 >= total_frames_anim;
-              let intermediate = compute_anim_frame(
-                &base_text_anim,
-                &area_anim,
-                &sym_text_anim,
-                frame_anim,
-                total_frames_anim,
-              );
-              let intermediate_for_regex = if is_last {
-                Some(intermediate.clone())
-              } else {
-                None
-              };
-              let gw = siv
-                .call_on_name(
-                  consts::canvas_editor_section_view,
-                  move |canvas: &mut Canvas<GridEditor>| {
-                    let editor = canvas.state_mut();
-                    editor.update_text_contents(&intermediate);
-                    editor.update_grid_src();
-                    editor.grid.width
-                  },
-                )
-                .unwrap_or(0);
-              if is_last {
-                if let Some(final_text) = intermediate_for_regex {
-                  let pattern = siv
-                    .call_on_name(consts::regex_input_unit_view, |v: &mut EditView| {
-                      v.get_content().as_ref().clone()
-                    })
-                    .unwrap_or_default();
-                  if !pattern.is_empty() {
-                    let _ = regex_tx.send(regex::Message::Solve(regex::EventData {
-                      text: final_text,
-                      pattern,
-                      flags: "i".to_string(),
-                      grid_width: gw,
-                    }));
-                  }
-                }
-              }
+            if let Some(tick) = anim_tick {
+              sym_state.render_anim_tick(siv, tick, &regex_tx);
             }
 
             for update in updates {
@@ -569,132 +455,50 @@ impl PlayheadArea {
                   );
                 }
                 #[cfg(feature = "symspell")]
-                UIUpdate::TmpAppendSpace => {
-                  let display = {
-                    let mut buf = tmp_buf.lock().unwrap();
-                    let last = buf.back().copied();
-                    if last != Some(' ') {
-                      buf.push(' ');
-                    }
-                    let s: String = buf.iter().collect();
-                    if s.is_empty() {
-                      "-".to_string()
-                    } else {
-                      s
-                    }
-                  };
-                  siv.call_on_name(consts::tmp_status_unit_view, move |view: &mut TextView| {
-                    view.set_content(display);
-                  });
-                }
+                UIUpdate::TmpAppendSpace => sym_state.handle_buf_append_space(siv),
                 #[cfg(feature = "symspell")]
-                UIUpdate::TmpAppend(idx) => {
-                  let ch = siv
-                    .call_on_name(
-                      consts::canvas_editor_section_view,
-                      move |canvas: &mut Canvas<GridEditor>| {
-                        canvas
-                          .state_mut()
-                          .grid
-                          .data
-                          .get(idx)
-                          .copied()
-                          .unwrap_or('\0')
-                      },
-                    )
-                    .unwrap_or('\0');
-                  if ch.is_alphabetic() {
-                    let new_tmp = {
-                      let mut buf = tmp_buf.lock().unwrap();
-                      buf.push(ch);
-                      buf.iter().collect::<String>()
-                    };
-                    siv.call_on_name(consts::tmp_status_unit_view, |view: &mut TextView| {
-                      view.set_content(new_tmp.clone());
-                    });
-                    // Run symspell on the current TMP content
-                    let sym_result = {
-                      let mut ss = symspell.lock().unwrap();
-                      let suggestions = ss.lookup_compound(new_tmp.trim(), 2, &None, false);
-                      suggestions
-                        .into_iter()
-                        .next()
-                        .map(|s| s.term)
-                        .unwrap_or_default()
-                    };
-                    if !sym_result.is_empty() {
-                      siv.call_on_name(consts::sym_status_unit_view, move |view: &mut TextView| {
-                        view.set_content(sym_result);
-                      });
-                    }
-                  }
-                }
+                UIUpdate::TmpAppend(idx) => sym_state.handle_buf_append(siv, idx),
                 #[cfg(feature = "symspell")]
-                UIUpdate::RplCycle(old_area) => {
-                  let sym = siv
-                    .call_on_name(consts::sym_status_unit_view, |v: &mut TextView| {
-                      v.get_content().source().to_string()
-                    })
-                    .unwrap_or_default();
-                  let mut state = rpl_state.lock().unwrap();
-                  let apply_opt: Option<(String, Rect)> =
-                    match std::mem::replace(&mut *state, RplPendingState::Empty) {
-                      RplPendingState::Armed(armed_sym, armed_area) => {
-                        *state = if !sym.is_empty() && sym != "-" {
-                          RplPendingState::Waiting(sym, old_area)
-                        } else {
-                          RplPendingState::Empty
-                        };
-                        Some((armed_sym, armed_area))
-                      }
-                      RplPendingState::Waiting(w_sym, w_area) => {
-                        *state = RplPendingState::Armed(w_sym, w_area);
-                        None
-                      }
-                      RplPendingState::Empty => {
-                        *state = if !sym.is_empty() && sym != "-" {
-                          RplPendingState::Waiting(sym, old_area)
-                        } else {
-                          RplPendingState::Empty
-                        };
-                        None
-                      }
-                    };
-                  let rpl_display = match &*state {
-                    RplPendingState::Armed(s, _) => format!("[armed] {}", s),
-                    RplPendingState::Waiting(s, _) => s.clone(),
-                    RplPendingState::Empty => "-".to_string(),
-                  };
-                  drop(state);
-                  siv.call_on_name(consts::rpl_status_unit_view, move |v: &mut TextView| {
-                    v.set_content(rpl_display);
-                  });
-                  if let Some((sym_text, area)) = apply_opt {
-                    // Capture the current text as the animation baseline, then kick off
-                    // the scramble transition instead of applying the replacement instantly.
-                    let base_text = siv
-                      .call_on_name(
-                        consts::canvas_editor_section_view,
-                        |canvas: &mut Canvas<GridEditor>| canvas.state_mut().text_contents(),
-                      )
-                      .unwrap_or_default();
-                    // 5 frames per character (3 for '_', 2 for '▌') plus one final settled frame.
-                    let total_frames = sym_text.chars().count() * 5 + 1;
-                    *rpl_anim.lock().unwrap() = Some(RplAnimState {
-                      sym_text,
-                      area,
-                      base_text,
-                      frame: 0,
-                      total_frames,
-                    });
-                  }
-                }
+                UIUpdate::RplCycle(old_area) => sym_state.handle_rpl_cycle(siv, old_area),
               }
             }
           }))
           .unwrap();
       })
       .expect("Failed to spawn UI batch processor thread");
+  }
+
+  // These compile to no-ops when the symspell feature is disabled, letting all
+  // call sites stay unconditional and free of #[cfg] noise.
+
+  #[inline]
+  fn enqueue_sym_space(&self) {
+    #[cfg(feature = "symspell")]
+    self
+      .ui_update_queue
+      .lock()
+      .unwrap()
+      .push_back(UIUpdate::TmpAppendSpace);
+  }
+
+  #[inline]
+  fn enqueue_sym_buf_append(&self, _idx: usize) {
+    #[cfg(feature = "symspell")]
+    self
+      .ui_update_queue
+      .lock()
+      .unwrap()
+      .push_back(UIUpdate::TmpAppend(idx));
+  }
+
+  #[inline]
+  fn enqueue_sym_rpl_cycle(&self, _area: Rect) {
+    #[cfg(feature = "symspell")]
+    self
+      .ui_update_queue
+      .lock()
+      .unwrap()
+      .push_back(UIUpdate::RplCycle(area));
   }
 
   fn compute_chn_str(&self, pos: Vec2) -> String {
@@ -809,23 +613,17 @@ impl PlayheadArea {
     drop(area_mutex);
 
     let chn_str = self.compute_chn_str(pos);
-    #[cfg(feature = "symspell")]
-    let tmp_buf_move = Arc::clone(&self.tmp_buf);
-
     cb_sink
       .send(Box::new(move |siv| {
         siv.call_on_name(consts::pos_status_unit_view, move |view: &mut TextView| {
           view.set_content(utils::build_pos_status_str(pos));
         });
-
         siv.call_on_name(consts::input_status_unit_view, |view: &mut TextView| {
           view.set_content("-");
         });
-
         siv.call_on_name(consts::chn_status_unit_view, |view: &mut TextView| {
           view.set_content(chn_str);
         });
-
         siv.call_on_name(
           consts::canvas_editor_section_view,
           move |canvas: &mut Canvas<GridEditor>| {
@@ -834,27 +632,9 @@ impl PlayheadArea {
             editor.playhead_ui.playhead_area = area;
           },
         );
-        #[cfg(feature = "symspell")]
-        {
-          let display = {
-            let mut buf = tmp_buf_move.lock().unwrap();
-            let last = buf.back().copied();
-            if last != Some(' ') {
-              buf.push(' ');
-            }
-            let s: String = buf.iter().collect();
-            if s.is_empty() {
-              "-".to_string()
-            } else {
-              s
-            }
-          };
-          siv.call_on_name(consts::tmp_status_unit_view, move |view: &mut TextView| {
-            view.set_content(display);
-          });
-        }
       }))
       .unwrap();
+    self.enqueue_sym_space();
   }
 
   fn set_move(&self, direction: Direction, canvas_size: Vec2) {
@@ -1206,11 +986,11 @@ impl PlayheadArea {
     let mut queue = self.ui_update_queue.lock().unwrap();
     queue.push_back(UIUpdate::PlayheadPosAndArea(new_pos, new_area));
     queue.push_back(UIUpdate::ChnStatus(self.compute_chn_str(new_pos)));
+    drop(queue);
 
     #[cfg(feature = "symspell")]
-    queue.push_back(UIUpdate::RplCycle(prev_area));
-    #[cfg(feature = "symspell")]
-    queue.push_back(UIUpdate::TmpAppendSpace);
+    self.enqueue_sym_rpl_cycle(prev_area);
+    self.enqueue_sym_space();
 
     Vec2::zero()
   }
@@ -1558,14 +1338,11 @@ impl PlayheadArea {
     let mutex_pos = self.pos.lock().unwrap();
     let pos = *mutex_pos;
     drop(mutex_pos);
-    #[cfg(feature = "symspell")]
-    let tmp_buf_move = Arc::clone(&self.tmp_buf);
     cb_sink
       .send(Box::new(move |siv| {
         siv.call_on_name(consts::input_status_unit_view, |view: &mut TextView| {
           view.set_content("-");
         });
-
         siv.call_on_name(
           consts::canvas_editor_section_view,
           move |canvas: &mut Canvas<GridEditor>| {
@@ -1573,28 +1350,9 @@ impl PlayheadArea {
             editor.playhead_ui.playhead_pos = pos;
           },
         );
-
-        #[cfg(feature = "symspell")]
-        {
-          let display = {
-            let mut buf = tmp_buf_move.lock().unwrap();
-            let last = buf.back().copied();
-            if last != Some(' ') {
-              buf.push(' ');
-            }
-            let s: String = buf.iter().collect();
-            if s.is_empty() {
-              "-".to_string()
-            } else {
-              s
-            }
-          };
-          siv.call_on_name(consts::tmp_status_unit_view, move |view: &mut TextView| {
-            view.set_content(display);
-          });
-        }
       }))
       .unwrap();
+    self.enqueue_sym_space();
   }
 
   fn handle_update_info_status_view(&self, cb_sink: cursive::CbSink) {
@@ -1776,11 +1534,7 @@ impl PlayheadArea {
           abs_y,
           1,
         );
-        #[cfg(feature = "symspell")]
-        let mut queue = self.ui_update_queue.lock().unwrap();
-
-        #[cfg(feature = "symspell")]
-        queue.push_back(UIUpdate::TmpAppend(curr_running_playhead));
+        self.enqueue_sym_buf_append(curr_running_playhead);
       }
 
       if has_match {
@@ -1808,11 +1562,7 @@ impl PlayheadArea {
             abs_y,
             distance_to_next,
           );
-          #[cfg(feature = "symspell")]
-          let mut queue = self.ui_update_queue.lock().unwrap();
-
-          #[cfg(feature = "symspell")]
-          queue.push_back(UIUpdate::TmpAppend(curr_running_playhead));
+          self.enqueue_sym_buf_append(curr_running_playhead);
         }
         if self.modes.hold_next_note.load(Ordering::Relaxed) {
           self.modes.hold_next_note.store(false, Ordering::Relaxed);
@@ -1842,16 +1592,11 @@ impl PlayheadArea {
         );
 
         #[cfg(feature = "symspell")]
-        let sweep_indexes =
-          self
-            .midi_handler
-            .sweep_matched_indexes(curr_running_playhead, abs_x, area_right);
-        #[cfg(feature = "symspell")]
-        if !sweep_indexes.is_empty() {
-          let mut queue = self.ui_update_queue.lock().unwrap();
-          for idx in sweep_indexes {
-            queue.push_back(UIUpdate::TmpAppend(idx));
-          }
+        for idx in self
+          .midi_handler
+          .sweep_matched_indexes(curr_running_playhead, abs_x, area_right)
+        {
+          self.enqueue_sym_buf_append(idx);
         }
       }
       self.update_active_pos_ui(active_pos, &cb_sink);
@@ -2254,90 +1999,6 @@ impl PlayheadArea {
 
     tx
   }
-}
-
-#[cfg(feature = "symspell")]
-fn compute_anim_frame(
-  base_text: &str,
-  area: &Rect,
-  sym_text: &str,
-  frame: usize,
-  _total_frames: usize,
-) -> String {
-  let sym_chars: Vec<char> = sym_text.chars().collect();
-  let n = sym_chars.len();
-
-  // Determine which character is currently being animated.
-  // Each character occupies 5 frames at 16 ms each = ~80 ms per character.
-  //   frames 0-2 → '_', frames 3-4 → '▌', then settled.
-  // Spaces skip animation and are settled immediately when their turn arrives.
-  let char_idx = frame / 5;
-  let sub_phase = (frame % 5) / 3; // 0 = '_' (frames 0-2), 1 = '▌' (frames 3-4)
-
-  if char_idx >= n {
-    // All characters have settled — return the final splice.
-    return splice_text_at_area(base_text, area, sym_text);
-  }
-
-  // Build the intermediate sym up to and including the currently-animating character.
-  // Characters before char_idx are already settled (show final char).
-  // The character at char_idx shows '_' or '▌' depending on sub_phase, unless it is a space.
-  // Characters beyond char_idx are omitted so splice_text_at_area keeps the original text there.
-  let intermediate: String = sym_chars[..=char_idx]
-    .iter()
-    .enumerate()
-    .map(|(i, &c)| {
-      if i < char_idx || c == ' ' {
-        c // already settled, or space (no visible animation needed)
-      } else if sub_phase == 0 {
-        '_'
-      } else {
-        '▌'
-      }
-    })
-    .collect();
-
-  splice_text_at_area(base_text, area, &intermediate)
-}
-
-#[cfg(feature = "symspell")]
-fn splice_text_at_area(text: &str, area: &Rect, sym: &str) -> String {
-  let mut lines: Vec<String> = text.split('\n').map(str::to_string).collect();
-  let sym_chars: Vec<char> = sym.chars().collect();
-  let top = area.top_left.y;
-  let left = area.top_left.x;
-  let h = area.height();
-  let w = area.width();
-  // Only write sym chars that exist; stop early if sym is exhausted.
-  // Cells beyond sym length keep their original content, never overwrite
-  // with spaces or write outside the playhead area.
-  'outer: for row in 0..h {
-    let line_idx = top + row;
-    if line_idx >= lines.len() {
-      lines.resize(line_idx + 1, String::new());
-    }
-    let line = &mut lines[line_idx];
-    // Only pad the line if sym has chars in this row.
-    let row_start = row * w;
-    if row_start >= sym_chars.len() {
-      break 'outer;
-    }
-    // Pad with '\0' (not ' ') so cells beyond the original line end remain
-    // rendered as '.' rather than being overwritten with a visible space.
-    while line.chars().count() < left + w {
-      line.push('\0');
-    }
-    let mut chars: Vec<char> = line.chars().collect();
-    for col in 0..w {
-      let sym_idx = row_start + col;
-      if sym_idx >= sym_chars.len() {
-        break;
-      }
-      chars[left + col] = sym_chars[sym_idx];
-    }
-    *line = chars.into_iter().collect();
-  }
-  lines.join("\n")
 }
 
 #[cfg(test)]

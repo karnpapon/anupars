@@ -7,3 +7,5 @@ pub mod playhead;
 pub mod playhead_handler;
 pub mod printer;
 pub mod rect;
+#[cfg(feature = "symspell")]
+pub mod symspell;

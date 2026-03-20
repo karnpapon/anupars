@@ -190,10 +190,10 @@ impl Console {
       // )
       .full_width();
 
-    let tmp_controller_section_view = ListView::new()
+    let buf_controller_section_view = ListView::new()
       .child(
-        "TMP:",
-        TextView::new("-").with_name(consts::tmp_status_unit_view),
+        "BUF:",
+        TextView::new("-").with_name(consts::buf_status_unit_view),
       )
       .child(
         "SYM:",
@@ -223,7 +223,7 @@ impl Console {
                   .with_name(consts::playhead_controller_section_view),
               )
               .child(DummyView::new().fixed_width(2))
-              .child(tmp_controller_section_view.with_name(consts::tmp_controller_section_view)),
+              .child(buf_controller_section_view.with_name(consts::buf_controller_section_view)),
           )
           .child(DummyView.fixed_height(1)),
       )
