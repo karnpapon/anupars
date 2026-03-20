@@ -135,6 +135,14 @@ Cycles through three modes displayed in the status bar:
     - `\` DiagDown: crosshair shifts one column right per row below the playhead, left per row above (like a `\` diagonal).
     - `/` DiagUp: crosshair shifts one column left per row below the playhead, right per row above (like a `/` diagonal).
 
+- **Sweep Row Mode (SWP)**
+Filters which rows the sweep crosshair draws on and triggers MIDI from. **requires Sweep mode to be active**. The active sub-mode is shown inline in the mode status bar after the `S` character (e.g. `S(O)`).
+Cycles through four modes with `Shift+|`:
+    - `Nrm` Normal (default): every row is active — identical to previous sweep behaviour.
+    - `Odd` Odd rows only (rows 1, 3, 5 …): even rows are silenced and not rendered.
+    - `Even` Even rows only (rows 0, 2, 4 …): odd rows are silenced and not rendered.
+    - `Rnd` Random: each row is independently gated by a deterministic hash of its index, producing a fixed sparse pattern.
+
 - **Scale Selection**
   - Scale root selectable across all 12 chromatic pitches (C–B).
 
@@ -240,7 +248,8 @@ it comprised of
 | `Ctrl+e` | Toggle Event Operator | Enable/disable event operators |
 | `Ctrl+n` | Toggle Drain Queue | Enable/disable queue draining |
 | `Ctrl+s` | Toggle Sweep | Enable/disable sweep mode |
-| `Ctrl+t` | Cycle Tilt (TLT) | Cycle sweep crosshair angle: `|` → `/` → `\` |
+| `Shift+\|` | Cycle Sweep Row Mode (SWP) | Cycle sweep row filter: `Nrm` → `Odd` → `Even` → `Rnd` |
+| `Ctrl+t` | Cycle Tilt (TLT) | Cycle sweep crosshair angle: `\|` → `/` → `\` |
 | `Ctrl+y` | Toggle Dynamic Length | Enable/disable dynamic length mode |
 | `Ctrl+z` | Toggle Freeze | Lock active position; retrigger matched cell at current DIV rate |
 
