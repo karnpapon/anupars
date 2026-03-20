@@ -7,6 +7,7 @@ use cursive::Vec2;
 use crate::core::consts;
 use crate::core::engine::regex::Match;
 use crate::core::playhead::tilt::TiltMode;
+use crate::core::playhead::types::SweepRowMode;
 use crate::core::playhead::PlayheadUI;
 use std::collections::HashMap;
 
@@ -112,6 +113,7 @@ struct CellStyleContext<'a> {
   channel_bounds: Option<(usize, usize, usize, usize)>,
   is_in_playhead_area: bool,
   sweep_mode: bool,
+  sweep_row_mode: SweepRowMode,
   v: usize,
   h: usize,
 }
@@ -253,7 +255,11 @@ impl<T: Printable + Copy> Matrix<T> {
     if !in_strip {
       return dim_style();
     }
-    if ctx.sweep_mode && ctx.is_regex_match && !ctx.is_in_playhead_area && ctx.sweep.in_band(ctx.x)
+    if ctx.sweep_mode
+      && ctx.is_regex_match
+      && !ctx.is_in_playhead_area
+      && ctx.sweep.in_band(ctx.x)
+      && ctx.sweep_row_mode.is_row_active(ctx.y)
     {
       return Style::highlight();
     }
@@ -277,6 +283,7 @@ impl<T: Printable + Copy> Matrix<T> {
       actived_pos,
       aimed_area,
       sweep_mode,
+      sweep_row_mode,
       tilt_mode,
       grid_v_splits,
       grid_h_splits,
@@ -348,12 +355,14 @@ impl<T: Printable + Copy> Matrix<T> {
           channel_bounds: bounds,
           is_in_playhead_area,
           sweep_mode: *sweep_mode,
+          sweep_row_mode: *sweep_row_mode,
           v,
           h,
         });
 
         // crosshair follows active_pos only, even when area spans multiple channels
-        if sweep.is_crosshair(x) && !is_active_pos && *sweep_mode {
+        if sweep.is_crosshair(x) && !is_active_pos && *sweep_mode && sweep_row_mode.is_row_active(y)
+        {
           final_ch = '|';
           final_style = if is_regex_match && !is_in_playhead_area {
             style_highlight

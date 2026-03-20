@@ -302,6 +302,13 @@ impl CommandManager {
           .unwrap();
         Ok(None)
       }
+      Command::CycleSweepMode => {
+        self
+          .playhead_tx_cloned
+          .send(playhead::Message::CycleSweepRowMode())
+          .unwrap();
+        Ok(None)
+      }
     }
   }
 

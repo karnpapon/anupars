@@ -29,6 +29,7 @@ pub enum Command {
   ChangeRootNote(Adjustment),
   ChangeScaleMode(Adjustment),
   CycleTilt,
+  CycleSweepMode,
 }
 
 impl fmt::Display for Command {
@@ -53,6 +54,7 @@ impl fmt::Display for Command {
       | Self::ChangeRootNote(_)
       | Self::ChangeScaleMode(_)
       | Self::CycleTilt
+      | Self::CycleSweepMode
       | Self::ToggleFreeze
       | Self::ToggleRandom => vec![],
     };
@@ -83,6 +85,7 @@ impl Command {
       Self::ChangeRootNote(_) => "changerootnote",
       Self::ChangeScaleMode(_) => "changescale",
       Self::CycleTilt => "cycletilt",
+      Self::CycleSweepMode => "cyclesweepmode",
       Self::ToggleFreeze => "togglefreeze",
     }
   }

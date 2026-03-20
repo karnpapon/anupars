@@ -7,6 +7,7 @@ use std::thread;
 use std::time::Duration;
 
 use crate::core::playhead::tilt::TiltMode;
+use crate::core::playhead::types::SweepRowMode;
 use crate::core::{consts, engine::regex::Match, io::midi, tonal::scale};
 
 // ============================================================================
@@ -69,6 +70,7 @@ pub struct MidiTriggerHandler {
   pub playhead_pos: Arc<Mutex<Vec2>>,
   /// Current DIV ratio (ratio.1, e.g. 8, 16, 32, 64) for note-length capping.
   pub ratio: Arc<Mutex<(usize, usize)>>,
+  pub sweep_row_mode: Arc<Mutex<SweepRowMode>>,
 }
 
 impl MidiTriggerHandler {
@@ -94,6 +96,7 @@ impl MidiTriggerHandler {
     tilt_mode: Arc<Mutex<TiltMode>>,
     playhead_pos: Arc<Mutex<Vec2>>,
     ratio: Arc<Mutex<(usize, usize)>>,
+    sweep_row_mode: Arc<Mutex<SweepRowMode>>,
   ) -> Self {
     MidiTriggerHandler {
       midi_tx,
@@ -116,6 +119,7 @@ impl MidiTriggerHandler {
       tilt_mode,
       playhead_pos,
       ratio,
+      sweep_row_mode,
     }
   }
 
@@ -203,9 +207,13 @@ impl MidiTriggerHandler {
     let span_cols = area_tail_col.saturating_sub(playhead_col);
 
     let matcher = self.text_matcher.lock().unwrap();
+    let sweep_row = *self.sweep_row_mode.lock().unwrap();
     if let Some(ref m) = *matcher {
       (0..grid_height)
         .flat_map(|y| {
+          if !sweep_row.is_row_active(y) {
+            return vec![];
+          }
           let row_idx = (y / row_h).min(h.saturating_sub(1));
           let base_col =
             match tilt_mode.sweep_col_for_row(playhead_col, playhead_row, row_idx, v, h) {
@@ -265,11 +273,15 @@ impl MidiTriggerHandler {
 
     // Collect matched (y, tilt_x) pairs. For each row, check every spanned column so
     // that matches in all channels covered by the playhead area are triggered.
+    let sweep_row = *self.sweep_row_mode.lock().unwrap();
     let matched: Vec<(usize, usize)> = {
       let matcher = self.text_matcher.lock().unwrap();
       if let Some(ref m) = *matcher {
         (0..grid_height)
           .flat_map(|y| {
+            if !sweep_row.is_row_active(y) {
+              return vec![];
+            }
             let row_idx = (y / row_h).min(h.saturating_sub(1));
             let base_col =
               match tilt_mode.sweep_col_for_row(playhead_col, playhead_row, row_idx, v, h) {

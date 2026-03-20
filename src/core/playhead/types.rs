@@ -15,6 +15,54 @@ use crate::view::rect::Rect;
 use super::queue::QueueManager;
 use super::tilt::TiltMode;
 
+/// Sweep row filter mode: which rows the vertical crosshair draws on and triggers MIDI from.
+#[derive(Clone, Copy, Debug, PartialEq, Default)]
+pub enum SweepRowMode {
+  #[default]
+  Normal,
+  Odd,
+  Even,
+  Random,
+}
+
+impl SweepRowMode {
+  pub fn cycle_next(self) -> Self {
+    match self {
+      SweepRowMode::Normal => SweepRowMode::Odd,
+      SweepRowMode::Odd => SweepRowMode::Even,
+      SweepRowMode::Even => SweepRowMode::Random,
+      SweepRowMode::Random => SweepRowMode::Normal,
+    }
+  }
+
+  pub fn label(&self) -> &'static str {
+    match self {
+      SweepRowMode::Normal => "Nrm",
+      SweepRowMode::Odd => "Odd",
+      SweepRowMode::Even => "Evn",
+      SweepRowMode::Random => "Rnd",
+    }
+  }
+
+  /// Returns true if the given row `y` is active under this mode.
+  /// For Random mode this returns a deterministic pseudo-random per-y value.
+  pub fn is_row_active(self, y: usize) -> bool {
+    match self {
+      SweepRowMode::Normal => true,
+      SweepRowMode::Odd => y % 2 == 1,
+      SweepRowMode::Even => y.is_multiple_of(2),
+      SweepRowMode::Random => {
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::Hash;
+        use std::hash::Hasher;
+        let mut hasher = DefaultHasher::new();
+        y.hash(&mut hasher);
+        hasher.finish().is_multiple_of(2)
+      }
+    }
+  }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum Direction {
   Up,
@@ -59,6 +107,7 @@ pub struct PlayheadUI {
   pub arpeggiator_mode: bool,
   pub accumulation_mode: bool,
   pub sweep_mode: bool,
+  pub sweep_row_mode: SweepRowMode,
   pub tilt_mode: TiltMode,
   pub queue_manager: Arc<QueueManager>,
   pub grid_v_splits: usize,
@@ -78,6 +127,7 @@ impl PlayheadUI {
       arpeggiator_mode: false,
       accumulation_mode: false,
       sweep_mode: false,
+      sweep_row_mode: SweepRowMode::default(),
       tilt_mode: TiltMode::default(),
       queue_manager: Arc::new(QueueManager::new()),
       grid_v_splits: 1,
@@ -119,6 +169,7 @@ pub enum Message {
   ClearQueue(),
   SetGridSplits(usize, usize),
   CycleTiltMode(),
+  CycleSweepRowMode(),
   StartAim(),
   UpdateAim(Direction, XY<usize>, usize),
   CommitAim(),

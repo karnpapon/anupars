@@ -1,8 +1,10 @@
 use std::sync::atomic::Ordering;
 
-use cursive::views::{Canvas, TextView};
+use cursive::views::Canvas;
+use cursive::views::TextView;
 
 use super::movement::Movement;
+use super::types::SweepRowMode;
 use crate::app::AppMode;
 use crate::core::consts;
 use crate::view::grid::GridEditor;
@@ -37,6 +39,7 @@ impl Playhead {
     let drain_queue = self.queue_manager.is_drain_queue_mode();
     let sweep = self.modes.sweep_mode.load(Ordering::Relaxed);
     let dyn_length = self.modes.dyn_length_mode.load(Ordering::Relaxed);
+    let freeze = self.modes.freeze_mode.load(Ordering::Relaxed);
 
     let mut active_modes = Vec::new();
     if arpeggiator {
@@ -57,8 +60,28 @@ impl Playhead {
     if sweep {
       active_modes.push(AppMode::Sweep);
     }
+    if freeze {
+      active_modes.push(AppMode::Freeze);
+    }
 
-    AppMode::print_activated_modes_from_vec(&active_modes)
+    let base = AppMode::print_activated_modes_from_vec(&active_modes);
+
+    if sweep {
+      let sweep_row = *self.sweep_row_mode.lock().unwrap();
+      let suffix = match sweep_row {
+        SweepRowMode::Normal => "",
+        SweepRowMode::Odd => "<O>",
+        SweepRowMode::Even => "<E>",
+        SweepRowMode::Random => "<R>",
+      };
+      if suffix.is_empty() {
+        base
+      } else {
+        base.replace('S', &format!("S{}", suffix))
+      }
+    } else {
+      base
+    }
   }
 
   pub(super) fn build_movement_status_string(&self) -> String {
@@ -212,6 +235,35 @@ impl Playhead {
         );
         siv.call_on_name(consts::tilt_unit_view, |view: &mut TextView| {
           view.set_content(tilt_status);
+        });
+      }))
+      .unwrap();
+  }
+
+  pub fn cycle_sweep_row_mode(&self) {
+    let mut mode = self.sweep_row_mode.lock().unwrap();
+    *mode = mode.cycle_next();
+    let new_mode = *mode;
+    drop(mode);
+
+    let mode_status = self.build_mode_status_string();
+    let cb_sink = self.cb_sink.clone();
+
+    cb_sink
+      .send(Box::new(move |siv| {
+        siv.call_on_name(
+          consts::canvas_editor_section_view,
+          |canvas: &mut Canvas<GridEditor>| {
+            let editor = canvas.state_mut();
+            editor.sweep_row_mode = new_mode;
+            editor.playhead_ui.sweep_row_mode = new_mode;
+          },
+        );
+        siv.call_on_name(consts::sweep_row_unit_view, |view: &mut TextView| {
+          view.set_content(new_mode.label());
+        });
+        siv.call_on_name(consts::mode_unit_view, |view: &mut TextView| {
+          view.set_content(mode_status);
         });
       }))
       .unwrap();

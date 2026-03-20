@@ -23,6 +23,7 @@ use ringbuffer::RingBuffer;
 
 use crate::core::playhead::queue::EVENT_OPERATORS;
 use crate::core::playhead::queue::QUEUE_OPERATORS;
+use crate::core::playhead::types::SweepRowMode;
 use crate::core::playhead::PlayheadUI;
 use crate::core::tonal::scale;
 use crate::core::{consts, playhead::queue::PendingJumpPosition};
@@ -52,6 +53,7 @@ pub struct GridEditor {
   pub event_operator_mode: bool,
   pub drain_queue_mode: bool,
   pub sweep_mode: bool,
+  pub sweep_row_mode: SweepRowMode,
   pub freeze_mode: bool,
   pub grid_v_splits: usize,
   pub grid_h_splits: usize,
@@ -76,6 +78,7 @@ impl GridEditor {
       event_operator_mode: false,
       drain_queue_mode: false,
       sweep_mode: false,
+      sweep_row_mode: SweepRowMode::default(),
       freeze_mode: false,
       grid_v_splits: 1,
       grid_h_splits: 1,

@@ -40,6 +40,7 @@ use self::movement::Movement;
 use self::position::PositionCalculator;
 use self::queue::QueueManager;
 use self::tilt::TiltMode;
+use super::playhead::types::SweepRowMode;
 
 /// The main playhead controller managing movement, MIDI triggering, and queue operations.
 ///
@@ -83,6 +84,7 @@ pub struct Playhead {
   accumulation_counter: Arc<Mutex<usize>>,
   movement: Arc<Mutex<Movement>>,
   tilt_mode: Arc<Mutex<TiltMode>>,
+  sweep_row_mode: Arc<Mutex<SweepRowMode>>,
 
   // Threading/sync state
   pub ui_update_queue: Arc<Mutex<VecDeque<UIUpdate>>>,
@@ -107,6 +109,7 @@ impl Playhead {
     let ratchet_generation = Arc::new(AtomicUsize::new(0));
     let pos = Arc::new(Mutex::new(Vec2::zero()));
     let tilt_mode = Arc::new(Mutex::new(TiltMode::default()));
+    let sweep_row_mode = Arc::new(Mutex::new(SweepRowMode::default()));
     let aimed_area = Arc::new(Mutex::new(None));
 
     let midi_handler = Arc::new(MidiTriggerHandler::new(
@@ -130,6 +133,7 @@ impl Playhead {
       Arc::clone(&tilt_mode),
       Arc::clone(&pos),
       Arc::clone(&music.ratio),
+      Arc::clone(&sweep_row_mode),
     ));
 
     Playhead {
@@ -147,6 +151,7 @@ impl Playhead {
       text_matcher: Arc::clone(&position_calc.text_matcher),
       movement: Arc::clone(&position_calc.movement),
       tilt_mode,
+      sweep_row_mode,
       queue_manager: Arc::new(QueueManager::new()),
       position_calc,
       midi_handler,
@@ -424,6 +429,9 @@ impl Playhead {
           }
           Message::CycleTiltMode() => {
             self.cycle_tilt_mode();
+          }
+          Message::CycleSweepRowMode() => {
+            self.cycle_sweep_row_mode();
           }
           Message::StartAim() => {
             self.handle_start_aim();

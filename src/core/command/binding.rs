@@ -34,6 +34,7 @@ fn default_keybindings() -> HashMap<String, Vec<Command>> {
   kb.insert("Ctrl+y".into(), vec![Command::ToggleDynLength]);
   kb.insert("Ctrl+z".into(), vec![Command::ToggleFreeze]);
   kb.insert("Ctrl+t".into(), vec![Command::CycleTilt]);
+  kb.insert("Shift+|".into(), vec![Command::CycleSweepMode]);
   kb.insert("Shift+Plus".into(), vec![Command::ChangeScaleMode(Adjustment::Increase)]);
   kb.insert("Shift+Underscore".into(), vec![Command::ChangeScaleMode(Adjustment::Decrease)]);
   kb.insert("Equal".into(), vec![Command::ChangeRootNote(Adjustment::Increase)]);
@@ -62,6 +63,8 @@ fn parse_key(key: &str) -> Event {
     "NumpadCenter" => Event::Key(Key::NumpadCenter),
     "Plus" => Event::Char('+'),
     "Underscore" => Event::Char('_'),
+    "Pipe" => Event::Char('|'),
+    "Backslash" => Event::Char('\\'),
     "Equal" => Event::Char('='),
     "Minus" => Event::Char('-'),
     "F0" => Event::Key(Key::F0),
