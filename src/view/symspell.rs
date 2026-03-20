@@ -248,24 +248,24 @@ impl SymSpellState {
       // of the grid keeps its highlights during the animation.
       // They will be restored for the new text once the last frame fires the
       // regex re-match in render_anim_tick.
-      let area_for_clear = area;
-      siv.call_on_name(
-        consts::canvas_editor_section_view,
-        move |canvas: &mut Canvas<GridEditor>| {
-          let editor = canvas.state_mut();
-          let gw = editor.grid.width;
-          if let Some(ref mut matcher) = editor.playhead_ui.text_matcher {
-            matcher.retain(|&idx, _| {
-              let x = idx % gw;
-              let y = idx / gw;
-              x < area_for_clear.top_left.x
-                || x >= area_for_clear.top_left.x + area_for_clear.width()
-                || y < area_for_clear.top_left.y
-                || y >= area_for_clear.top_left.y + area_for_clear.height()
-            });
-          }
-        },
-      );
+      // let area_for_clear = area;
+      // siv.call_on_name(
+      //   consts::canvas_editor_section_view,
+      //   move |canvas: &mut Canvas<GridEditor>| {
+      //     let editor = canvas.state_mut();
+      //     let gw = editor.grid.width;
+      //     if let Some(ref mut matcher) = editor.playhead_ui.text_matcher {
+      //       matcher.retain(|&idx, _| {
+      //         let x = idx % gw;
+      //         let y = idx / gw;
+      //         x < area_for_clear.top_left.x
+      //           || x >= area_for_clear.top_left.x + area_for_clear.width()
+      //           || y < area_for_clear.top_left.y
+      //           || y >= area_for_clear.top_left.y + area_for_clear.height()
+      //       });
+      //     }
+      //   },
+      // );
 
       // 5 frames per character (3 × '_', 2 × '▌') at 16 ms ≈ 80 ms per char.
       let total_frames = sym_text.chars().count() * 5 + 1;
