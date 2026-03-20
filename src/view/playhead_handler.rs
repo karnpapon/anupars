@@ -78,6 +78,18 @@ pub enum RplPendingState {
   Armed(String, Rect),
 }
 
+// Each non-space character takes 2 frames: '_' (underscore placeholder) then '▌' (block cursor).
+// total_frames is computed dynamically as sym_text.len() * 2 + 1.
+
+#[cfg(feature = "symspell")]
+pub struct RplAnimState {
+  pub sym_text: String,
+  pub area: Rect,
+  pub base_text: String,
+  pub frame: usize,
+  pub total_frames: usize,
+}
+
 struct GridParams<'a, R: rand::Rng> {
   pub playhead_width: usize,
   pub playhead_height: usize,
@@ -291,6 +303,8 @@ pub struct PlayheadArea {
   pub tmp_buf: Arc<Mutex<AllocRingBuffer<char>>>,
   #[cfg(feature = "symspell")]
   pub rpl_state: Arc<Mutex<RplPendingState>>,
+  #[cfg(feature = "symspell")]
+  pub rpl_anim: Arc<Mutex<Option<RplAnimState>>>,
   // #[cfg(debug_assertions)]
   // timing_stats: Arc<TimingStats>,
 }
@@ -362,6 +376,8 @@ impl PlayheadArea {
       tmp_buf: Arc::new(Mutex::new(AllocRingBuffer::new(consts::TMP_BUF_SIZE))),
       #[cfg(feature = "symspell")]
       rpl_state: Arc::new(Mutex::new(RplPendingState::Empty)),
+      #[cfg(feature = "symspell")]
+      rpl_anim: Arc::new(Mutex::new(None)),
       // #[cfg(debug_assertions)]
       // timing_stats: Arc::new(TimingStats::new()),
     }
@@ -373,6 +389,7 @@ impl PlayheadArea {
     #[cfg(feature = "symspell")] tmp_buf: Arc<Mutex<AllocRingBuffer<char>>>,
     #[cfg(feature = "symspell")] symspell: Arc<Mutex<SymSpell>>,
     #[cfg(feature = "symspell")] rpl_state: Arc<Mutex<RplPendingState>>,
+    #[cfg(feature = "symspell")] rpl_anim: Arc<Mutex<Option<RplAnimState>>>,
     #[cfg(feature = "symspell")] regex_tx: Sender<regex::Message>,
   ) {
     thread::Builder::new()
@@ -380,14 +397,42 @@ impl PlayheadArea {
       .spawn(move || loop {
         thread::sleep(Duration::from_millis(16)); // ~60 FPS
 
-        let mut queue = ui_queue.lock().unwrap();
-        if queue.is_empty() {
-          drop(queue);
+        // Advance animation by one frame, capturing data needed for this tick.
+        #[cfg(feature = "symspell")]
+        let anim_tick: Option<(String, Rect, String, usize, usize)> = {
+          let mut guard = rpl_anim.lock().unwrap();
+          let snap = guard.as_ref().map(|a| {
+            (
+              a.sym_text.clone(),
+              a.area.clone(),
+              a.base_text.clone(),
+              a.frame,
+              a.total_frames,
+            )
+          });
+          if let Some(a) = guard.as_mut() {
+            a.frame += 1;
+            if a.frame >= a.total_frames {
+              *guard = None;
+            }
+          }
+          snap
+        };
+
+        let updates: Vec<UIUpdate> = {
+          let mut queue = ui_queue.lock().unwrap();
+          queue.drain(..).collect()
+        };
+
+        // Skip this tick if there is nothing to render.
+        #[cfg(feature = "symspell")]
+        if updates.is_empty() && anim_tick.is_none() {
           continue;
         }
-
-        let updates: Vec<UIUpdate> = queue.drain(..).collect();
-        drop(queue);
+        #[cfg(not(feature = "symspell"))]
+        if updates.is_empty() {
+          continue;
+        }
 
         #[cfg(feature = "symspell")]
         let tmp_buf_cb = Arc::clone(&tmp_buf);
@@ -395,6 +440,8 @@ impl PlayheadArea {
         let symspell_cb = Arc::clone(&symspell);
         #[cfg(feature = "symspell")]
         let rpl_state_cb = Arc::clone(&rpl_state);
+        #[cfg(feature = "symspell")]
+        let rpl_anim_cb = Arc::clone(&rpl_anim);
         #[cfg(feature = "symspell")]
         let regex_tx_cb = regex_tx.clone();
         cb_sink
@@ -406,7 +453,57 @@ impl PlayheadArea {
             #[cfg(feature = "symspell")]
             let rpl_state = rpl_state_cb;
             #[cfg(feature = "symspell")]
+            let rpl_anim = rpl_anim_cb;
+            #[cfg(feature = "symspell")]
             let regex_tx = regex_tx_cb;
+
+            // Render the current animation frame before processing any queued updates.
+            #[cfg(feature = "symspell")]
+            if let Some((sym_text_anim, area_anim, base_text_anim, frame_anim, total_frames_anim)) =
+              anim_tick
+            {
+              let is_last = frame_anim + 1 >= total_frames_anim;
+              let intermediate = compute_anim_frame(
+                &base_text_anim,
+                &area_anim,
+                &sym_text_anim,
+                frame_anim,
+                total_frames_anim,
+              );
+              let intermediate_for_regex = if is_last {
+                Some(intermediate.clone())
+              } else {
+                None
+              };
+              let gw = siv
+                .call_on_name(
+                  consts::canvas_editor_section_view,
+                  move |canvas: &mut Canvas<GridEditor>| {
+                    let editor = canvas.state_mut();
+                    editor.update_text_contents(&intermediate);
+                    editor.update_grid_src();
+                    editor.grid.width
+                  },
+                )
+                .unwrap_or(0);
+              if is_last {
+                if let Some(final_text) = intermediate_for_regex {
+                  let pattern = siv
+                    .call_on_name(consts::regex_input_unit_view, |v: &mut EditView| {
+                      v.get_content().as_ref().clone()
+                    })
+                    .unwrap_or_default();
+                  if !pattern.is_empty() {
+                    let _ = regex_tx.send(regex::Message::Solve(regex::EventData {
+                      text: final_text,
+                      pattern,
+                      flags: "i".to_string(),
+                      grid_width: gw,
+                    }));
+                  }
+                }
+              }
+            }
 
             for update in updates {
               match update {
@@ -573,33 +670,23 @@ impl PlayheadArea {
                     v.set_content(rpl_display);
                   });
                   if let Some((sym_text, area)) = apply_opt {
-                    let result = siv.call_on_name(
-                      consts::canvas_editor_section_view,
-                      move |canvas: &mut Canvas<GridEditor>| {
-                        let editor = canvas.state_mut();
-                        let gw = editor.grid.width;
-                        let old_text = editor.text_contents();
-                        let new_text = splice_text_at_area(&old_text, &area, &sym_text);
-                        editor.update_text_contents(&new_text);
-                        editor.update_grid_src();
-                        (new_text, gw)
-                      },
-                    );
-                    if let Some((new_text, grid_width)) = result {
-                      let pattern = siv
-                        .call_on_name(consts::regex_input_unit_view, |v: &mut EditView| {
-                          v.get_content().as_ref().clone()
-                        })
-                        .unwrap_or_default();
-                      if !pattern.is_empty() {
-                        let _ = regex_tx.send(regex::Message::Solve(regex::EventData {
-                          text: new_text,
-                          pattern,
-                          flags: "i".to_string(),
-                          grid_width,
-                        }));
-                      }
-                    }
+                    // Capture the current text as the animation baseline, then kick off
+                    // the scramble transition instead of applying the replacement instantly.
+                    let base_text = siv
+                      .call_on_name(
+                        consts::canvas_editor_section_view,
+                        |canvas: &mut Canvas<GridEditor>| canvas.state_mut().text_contents(),
+                      )
+                      .unwrap_or_default();
+                    // 5 frames per character (3 for '_', 2 for '▌') plus one final settled frame.
+                    let total_frames = sym_text.chars().count() * 5 + 1;
+                    *rpl_anim.lock().unwrap() = Some(RplAnimState {
+                      sym_text,
+                      area,
+                      base_text,
+                      frame: 0,
+                      total_frames,
+                    });
                   }
                 }
               }
@@ -2167,6 +2254,50 @@ impl PlayheadArea {
 
     tx
   }
+}
+
+#[cfg(feature = "symspell")]
+fn compute_anim_frame(
+  base_text: &str,
+  area: &Rect,
+  sym_text: &str,
+  frame: usize,
+  _total_frames: usize,
+) -> String {
+  let sym_chars: Vec<char> = sym_text.chars().collect();
+  let n = sym_chars.len();
+
+  // Determine which character is currently being animated.
+  // Each character occupies 5 frames at 16 ms each = ~80 ms per character.
+  //   frames 0-2 → '_', frames 3-4 → '▌', then settled.
+  // Spaces skip animation and are settled immediately when their turn arrives.
+  let char_idx = frame / 5;
+  let sub_phase = (frame % 5) / 3; // 0 = '_' (frames 0-2), 1 = '▌' (frames 3-4)
+
+  if char_idx >= n {
+    // All characters have settled — return the final splice.
+    return splice_text_at_area(base_text, area, sym_text);
+  }
+
+  // Build the intermediate sym up to and including the currently-animating character.
+  // Characters before char_idx are already settled (show final char).
+  // The character at char_idx shows '_' or '▌' depending on sub_phase, unless it is a space.
+  // Characters beyond char_idx are omitted so splice_text_at_area keeps the original text there.
+  let intermediate: String = sym_chars[..=char_idx]
+    .iter()
+    .enumerate()
+    .map(|(i, &c)| {
+      if i < char_idx || c == ' ' {
+        c // already settled, or space (no visible animation needed)
+      } else if sub_phase == 0 {
+        '_'
+      } else {
+        '▌'
+      }
+    })
+    .collect();
+
+  splice_text_at_area(base_text, area, &intermediate)
 }
 
 #[cfg(feature = "symspell")]

@@ -135,6 +135,8 @@ impl Playhead {
       #[cfg(feature = "symspell")]
       Arc::clone(&playhead_area.rpl_state),
       #[cfg(feature = "symspell")]
+      Arc::clone(&playhead_area.rpl_anim),
+      #[cfg(feature = "symspell")]
       self.regex_tx.clone(),
     );
 

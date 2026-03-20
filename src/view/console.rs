@@ -190,7 +190,6 @@ impl Console {
       // )
       .full_width();
 
-    #[cfg(feature = "symspell")]
     let tmp_controller_section_view = ListView::new()
       .child(
         "TMP:",
@@ -223,7 +222,8 @@ impl Console {
                 playhead_controller_section_view
                   .with_name(consts::playhead_controller_section_view),
               )
-              .child(DummyView::new().fixed_width(2)), // .child(tmp_controller_section_view.with_name(consts::tmp_controller_section_view)),
+              .child(DummyView::new().fixed_width(2))
+              .child(tmp_controller_section_view.with_name(consts::tmp_controller_section_view)),
           )
           .child(DummyView.fixed_height(1)),
       )
