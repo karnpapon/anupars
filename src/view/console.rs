@@ -25,7 +25,6 @@ use crate::core::consts;
 use crate::core::io::midi::{self, MidiMsg};
 use crate::core::parser::{self};
 use crate::core::playhead::tilt;
-use crate::core::playhead::types::SweepRowMode;
 use crate::core::utils;
 use crate::view::grid::GridEditor;
 use cursive::theme::BorderStyle;
@@ -41,9 +40,9 @@ use cursive::Cursive;
 pub enum RegexFlag {
   CaseSensitive,
   Multiline,
-  Newline,
-  IgnoreWhiteSpace,
-  Lazy,
+  // Newline,
+  // IgnoreWhiteSpace,
+  // Lazy,
 }
 
 #[derive(Clone, Copy)]
@@ -176,10 +175,6 @@ impl Console {
       .child(
         "TLT:",
         TextView::new(tilt::TiltMode::default().print_tilts()).with_name(consts::tilt_unit_view),
-      )
-      .child(
-        "SWP:",
-        TextView::new(SweepRowMode::default().label()).with_name(consts::sweep_row_unit_view),
       )
       // .child(
       //   "MIDI:",
@@ -429,9 +424,9 @@ fn solve_regex(siv: &mut Cursive, texts: &str, regex_tx: Sender<regex::Message>)
   let flag_str = match flag {
     RegexFlag::CaseSensitive => "i",
     RegexFlag::Multiline => "m",
-    RegexFlag::Newline => "s",
-    RegexFlag::IgnoreWhiteSpace => "x",
-    RegexFlag::Lazy => "U",
+    // RegexFlag::Newline => "s",
+    // RegexFlag::IgnoreWhiteSpace => "x",
+    // RegexFlag::Lazy => "U",
   };
 
   let input_regex = regex::EventData {

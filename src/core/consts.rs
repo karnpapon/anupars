@@ -87,7 +87,6 @@ pub static pos_status_unit_view: &str = "pos_status_unit_view";
 pub static mode_unit_view: &str = "mode_unit_view";
 pub static movement_unit_view: &str = "movement_unit_view";
 pub static tilt_unit_view: &str = "tilt_unit_view";
-pub static sweep_row_unit_view: &str = "sweep_row_unit_view";
 pub static luck_unit_view: &str = "luck_unit_view";
 pub static midi_status_unit_view: &str = "midi_status_unit_view";
 

@@ -68,16 +68,11 @@ impl Playhead {
 
     if sweep {
       let sweep_row = *self.sweep_row_mode.lock().unwrap();
-      let suffix = match sweep_row {
-        SweepRowMode::Normal => "",
-        SweepRowMode::Odd => "<O>",
-        SweepRowMode::Even => "<E>",
-        SweepRowMode::Random => "<R>",
-      };
-      if suffix.is_empty() {
+      if sweep_row == SweepRowMode::Normal {
         base
       } else {
-        base.replace('S', &format!("S{}", suffix))
+        let sweep = &format!("{}", AppMode::Sweep).to_uppercase();
+        base.replace(sweep.as_str(), &format!("{}<{}>", sweep, sweep_row.label()))
       }
     } else {
       base
@@ -259,9 +254,6 @@ impl Playhead {
             editor.playhead_ui.sweep_row_mode = new_mode;
           },
         );
-        siv.call_on_name(consts::sweep_row_unit_view, |view: &mut TextView| {
-          view.set_content(new_mode.label());
-        });
         siv.call_on_name(consts::mode_unit_view, |view: &mut TextView| {
           view.set_content(mode_status);
         });

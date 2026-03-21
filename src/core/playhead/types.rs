@@ -12,6 +12,10 @@ use crate::core::engine::regex::Match;
 use crate::core::tonal::scale;
 use crate::view::rect::Rect;
 
+use std::collections::hash_map::DefaultHasher;
+use std::hash::Hash;
+use std::hash::Hasher;
+
 use super::queue::QueueManager;
 use super::tilt::TiltMode;
 
@@ -22,7 +26,7 @@ pub enum SweepRowMode {
   Normal,
   Odd,
   Even,
-  Random,
+  Random(u64),
 }
 
 impl SweepRowMode {
@@ -30,33 +34,32 @@ impl SweepRowMode {
     match self {
       SweepRowMode::Normal => SweepRowMode::Odd,
       SweepRowMode::Odd => SweepRowMode::Even,
-      SweepRowMode::Even => SweepRowMode::Random,
-      SweepRowMode::Random => SweepRowMode::Normal,
+      SweepRowMode::Even => SweepRowMode::Random(rand::random()),
+      SweepRowMode::Random(_) => SweepRowMode::Normal,
     }
   }
 
   pub fn label(&self) -> &'static str {
     match self {
-      SweepRowMode::Normal => "Nrm",
-      SweepRowMode::Odd => "Odd",
-      SweepRowMode::Even => "Evn",
-      SweepRowMode::Random => "Rnd",
+      SweepRowMode::Normal => "",
+      SweepRowMode::Odd => "O",
+      SweepRowMode::Even => "E",
+      SweepRowMode::Random(_) => "R",
     }
   }
 
   /// Returns true if the given row `y` is active under this mode.
-  /// For Random mode this returns a deterministic pseudo-random per-y value.
+  /// For Random mode the seed (stored in the variant) is mixed into the hash
+  /// so a fresh seed → a fresh pattern of active rows.
   pub fn is_row_active(self, y: usize) -> bool {
     match self {
       SweepRowMode::Normal => true,
       SweepRowMode::Odd => y % 2 == 1,
       SweepRowMode::Even => y.is_multiple_of(2),
-      SweepRowMode::Random => {
-        use std::collections::hash_map::DefaultHasher;
-        use std::hash::Hash;
-        use std::hash::Hasher;
+      SweepRowMode::Random(seed) => {
         let mut hasher = DefaultHasher::new();
         y.hash(&mut hasher);
+        seed.hash(&mut hasher);
         hasher.finish().is_multiple_of(2)
       }
     }
