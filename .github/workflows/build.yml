@@ -20,6 +20,8 @@ jobs:
 
       - name: Run cargo check
         run: cargo check
+        env:
+          RUSTFLAGS: "-C target-feature=+aes,+sse2"
 
   test:
     name: Test Suite
@@ -45,6 +47,8 @@ jobs:
 
       - name: Run cargo test
         run: cargo test
+        env:
+          RUSTFLAGS: "-C target-feature=+aes,+sse2"
 
   lints:
     name: Lints
@@ -67,6 +71,8 @@ jobs:
 
       - name: Run cargo fmt
         run: cargo fmt --all -- --check
+        env:
+          RUSTFLAGS: "-C target-feature=+aes,+sse2"
 
       # - name: Run cargo clippy
       #   uses: actions-rs/cargo@v1
