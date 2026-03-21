@@ -36,9 +36,6 @@ impl Playhead {
         if updates.is_empty() && anim_tick.is_none() {
           continue;
         }
-        if updates.is_empty() {
-          continue;
-        }
 
         let sym_state_cb = Arc::clone(&sym_state);
         let regex_tx_cb = regex_tx.clone();
