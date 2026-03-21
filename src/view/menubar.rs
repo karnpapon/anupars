@@ -165,7 +165,7 @@ impl Menubar {
     let midi_tx_menu = midi_tx.clone();
 
     menu::Tree::new()
-      .leaf("Generate Text", generate_contents)
+      // .leaf("Generate Text", generate_contents)
       .leaf("Insert File", build_file_explorer_view)
       .delimiter()
       .subtree(
