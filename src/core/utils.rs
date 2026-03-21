@@ -92,3 +92,48 @@ pub fn bresenham(x0: isize, y0: isize, x1: isize, y1: isize) -> Vec<(usize, usiz
   }
   pts
 }
+
+/// Rescales the whitespace in `text` so the layout fills `target_width` columns
+/// proportionally. Each run of spaces in a line is scaled by the ratio
+/// `target_width / original_max_line_width`, preserving at least one space
+/// wherever a gap existed in the source. Non-space characters are kept as-is.
+pub fn scale_to_width(text: &str, target_width: usize) -> String {
+  if target_width == 0 {
+    return text.to_string();
+  }
+
+  let original_max = text.lines().map(|l| l.len()).max().unwrap_or(0);
+
+  if original_max == 0 || original_max == target_width {
+    return text.to_string();
+  }
+
+  text
+    .lines()
+    .map(|line| scale_line(line, original_max, target_width))
+    .collect::<Vec<_>>()
+    .join("\n")
+}
+
+fn scale_line(line: &str, original_max: usize, target: usize) -> String {
+  let mut result = String::new();
+  let mut chars = line.chars().peekable();
+
+  while chars.peek().is_some() {
+    if chars.peek() == Some(&' ') {
+      let mut count = 0usize;
+      while chars.peek() == Some(&' ') {
+        chars.next();
+        count += 1;
+      }
+      // Scale proportionally, keeping at least 1 space so words don't merge.
+      let scaled = ((count * target) as f64 / original_max as f64).round() as usize;
+      let scaled = scaled.max(1);
+      result.extend(std::iter::repeat_n(' ', scaled));
+    } else {
+      result.push(chars.next().unwrap());
+    }
+  }
+
+  result
+}

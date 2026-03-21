@@ -36,6 +36,7 @@ use cursive::With;
 use crate::core::io::midi;
 use crate::core::playhead;
 use crate::core::tonal::scale;
+use crate::core::utils;
 use midir;
 
 use super::grid::GridEditor;
@@ -511,14 +512,15 @@ pub(crate) fn set_contents(siv: &mut Cursive, contents: String) {
         let h = editor.grid.height;
         // Clip to the renderable grid area,
         let clipped = if w > 0 && h > 0 {
+          let contents = utils::scale_to_width(&contents, w);
           let lines: Vec<&str> = contents.split('\n').collect();
-          // let total = lines.len();
-          let start = 0;
-          // let start = if total > 1 {
-          //   rand::random::<usize>() % total
-          // } else {
-          //   0
-          // };
+          let total = lines.len();
+          // let start = 0;
+          let start = if total > 1 {
+            rand::random::<usize>() % total
+          } else {
+            0
+          };
           lines
             .iter()
             .cycle()

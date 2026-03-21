@@ -20,31 +20,26 @@ pub enum RplPendingState {
   Armed(String, Rect),
 }
 
-pub struct RplAnimState {
+pub struct TextRevealAnimState {
   pub sym_text: String,
   pub area: Rect,
-  /// Text content captured before the replacement began used as the base for
-  /// each intermediate frame so scrambled characters never compound.
   pub base_text: String,
   pub frame: usize,
   pub total_frames: usize,
 }
 
 /// Snapshot tuple passed from the loop thread into the cb_sink closure.
-/// Fields: (sym_text, area, base_text, frame, total_frames)
+/// (sym_text, area, base_text, frame, total_frames)
 pub type AnimTick = (String, Rect, String, usize, usize);
 
 pub struct SymSpellState {
   buf_buf: Arc<Mutex<AllocRingBuffer<char>>>,
   rpl_state: Arc<Mutex<RplPendingState>>,
-  rpl_anim: Arc<Mutex<Option<RplAnimState>>>,
-  /// `None` while the dictionary is still loading in the background
+  text_reveal_anim: Arc<Mutex<Option<TextRevealAnimState>>>,
   symspell: Arc<Mutex<Option<SymSpell>>>,
 }
 
 impl SymSpellState {
-  /// Create the state immediately and load the frequency dictionary in a
-  /// background thread. Lookups return nothing until the thread finishes.
   pub fn new() -> Self {
     let symspell: Arc<Mutex<Option<SymSpell>>> = Arc::new(Mutex::new(None));
     let symspell_bg = Arc::clone(&symspell);
@@ -60,7 +55,7 @@ impl SymSpellState {
     SymSpellState {
       buf_buf: Arc::new(Mutex::new(AllocRingBuffer::new(consts::TMP_BUF_SIZE))),
       rpl_state: Arc::new(Mutex::new(RplPendingState::Empty)),
-      rpl_anim: Arc::new(Mutex::new(None)),
+      text_reveal_anim: Arc::new(Mutex::new(None)),
       symspell,
     }
   }
@@ -69,7 +64,7 @@ impl SymSpellState {
   /// rendered this tick, or `None` if the animation is idle.
   /// Called from the UI batch-processor loop thread each 16 ms tick.
   pub fn advance_anim_frame(&self) -> Option<AnimTick> {
-    let mut guard = self.rpl_anim.lock().unwrap();
+    let mut guard = self.text_reveal_anim.lock().unwrap();
     let snap = guard.as_ref().map(|a| {
       (
         a.sym_text.clone(),
@@ -99,7 +94,7 @@ impl SymSpellState {
   ) {
     let (sym_text, area, base_text, frame, total_frames) = tick;
     let is_last = frame + 1 >= total_frames;
-    let intermediate = compute_anim_frame(&base_text, &area, &sym_text, frame, total_frames);
+    let intermediate = compute_anim_frame(&base_text, &area, &sym_text, frame);
     let intermediate_for_regex = if is_last {
       Some(intermediate.clone())
     } else {
@@ -137,7 +132,7 @@ impl SymSpellState {
     }
   }
 
-  /// Append a space to the tmp buffer and refresh the TMP status view.
+  /// Append a space to the buffer and refresh the status view.
   /// Used by both `TmpAppendSpace` and the direct cb_sink path in move handlers.
   pub fn handle_buf_append_space(&self, siv: &mut Cursive) {
     let display = {
@@ -158,8 +153,8 @@ impl SymSpellState {
     });
   }
 
-  /// Append the character at grid index `idx` to the tmp buffer, then run
-  /// SymSpell on the accumulated word and update the SYM status view.
+  /// Append the character at grid index `idx` to the buffer, then run
+  /// SymSpell on the accumulated word and update the status view.
   pub fn handle_buf_append(&self, siv: &mut Cursive, idx: usize) {
     let ch = siv
       .call_on_name(
@@ -206,7 +201,7 @@ impl SymSpellState {
   }
 
   /// Advance the replacement state machine and, when a suggestion becomes
-  /// armed, kick off the Claude-style character-by-character animation.
+  /// armed, kick off character-by-character animation.
   pub fn handle_rpl_cycle(&self, siv: &mut Cursive, old_area: Rect) {
     let sym = siv
       .call_on_name(consts::sym_status_unit_view, |v: &mut TextView| {
@@ -283,7 +278,7 @@ impl SymSpellState {
 
       // 5 frames per character (3 × '_', 2 × '▌') at 16 ms ≈ 80 ms per char.
       let total_frames = sym_text.chars().count() * 5 + 1;
-      *self.rpl_anim.lock().unwrap() = Some(RplAnimState {
+      *self.text_reveal_anim.lock().unwrap() = Some(TextRevealAnimState {
         sym_text,
         area,
         base_text,
@@ -294,7 +289,7 @@ impl SymSpellState {
   }
 }
 
-/// Build one intermediate frame of the Claude-style reveal animation.
+/// Build one intermediate frame of the animation.
 ///
 /// Each character occupies 5 frames at 16 ms each (~80 ms per char):
 ///   frames 0-2 → '_'   (placeholder)
@@ -304,13 +299,7 @@ impl SymSpellState {
 /// Characters reveal strictly left-to-right. Characters not yet reached keep
 /// the original content from `base_text` (via `splice_text_at_area`'s early-stop
 /// behaviour). Spaces skip the animation phases and settle immediately.
-fn compute_anim_frame(
-  base_text: &str,
-  area: &Rect,
-  sym_text: &str,
-  frame: usize,
-  _total_frames: usize,
-) -> String {
+fn compute_anim_frame(base_text: &str, area: &Rect, sym_text: &str, frame: usize) -> String {
   let sym_chars: Vec<char> = sym_text.chars().collect();
   let n = sym_chars.len();
   let char_idx = frame / 5;
