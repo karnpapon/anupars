@@ -139,7 +139,6 @@ pub struct Midi {
   pub msg_config_list: Arc<Mutex<Vec<MidiMsg>>>,
   pub tx: Sender<Message>,
   pub rx: Receiver<Message>,
-  // throttler: Arc<Mutex<Throttler>>,
   tempo: Arc<Mutex<usize>>,
   clock_enabled: Arc<Mutex<bool>>,
 
@@ -712,12 +711,9 @@ impl Midi {
   }
 
   pub fn run(self) {
-    let midi_tx_1 = self.tx.clone();
-    let midi_tx_2 = self.tx.clone();
     let stack = Arc::new(Stack::new());
-    let stack_clone_2 = Arc::clone(&stack);
-    let stack_tx = stack.run(midi_tx_1);
-    stack_clone_2.refresh(midi_tx_2);
+    let stack_tx = Arc::clone(&stack).run(self.tx.clone());
+    Arc::clone(&stack).refresh(self.tx.clone());
 
     thread::Builder::new()
       .name("midi-processor".to_string())
