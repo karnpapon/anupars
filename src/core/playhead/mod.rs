@@ -11,11 +11,11 @@ use cursive::views::{Canvas, TextView};
 use cursive::Vec2;
 
 use crate::core::engine::regex;
+use crate::core::engine::symspell::SymSpellState;
 use crate::core::io::midi as io_midi;
 use crate::core::{consts, engine::regex::Match, utils};
 use crate::view::grid::GridEditor;
 use crate::view::rect::Rect;
-use crate::view::symspell::SymSpellState;
 
 // Existing core submodules
 pub mod midi;

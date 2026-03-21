@@ -7,10 +7,10 @@ use std::time::Duration;
 use cursive::views::{Canvas, TextView};
 
 use crate::core::engine::regex;
+use crate::core::engine::symspell::{AnimTick, SymSpellState};
 use crate::core::{consts, utils};
 use crate::view::grid::GridEditor;
 use crate::view::rect::Rect;
-use crate::view::symspell::{AnimTick, SymSpellState};
 
 use crate::core::playhead::{Playhead, UIUpdate};
 
