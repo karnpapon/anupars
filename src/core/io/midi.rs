@@ -719,74 +719,77 @@ impl Midi {
     let stack_tx = stack.run(midi_tx_1);
     stack_clone_2.refresh(midi_tx_2);
 
-    thread::spawn(move || {
-      for control_message in &self.rx {
-        match control_message {
-          Message::Push(midi_msg) => {
-            self.handle_push(stack_tx.clone(), midi_msg);
-          }
-          Message::Hold(midi_msg) => {
-            self.handle_hold(stack_tx.clone(), midi_msg);
-          }
-          Message::Release(midi_msg) => {
-            self.handle_release(stack_tx.clone(), midi_msg);
-          }
-          Message::ReleaseAll() => {
-            self.handle_release_all(stack_tx.clone());
-          }
-          Message::Trigger(msg, is_pressed) => {
-            self.handle_trigger(msg, is_pressed);
-          }
-          Message::SetMsgConfig(msg) => {
-            self.set_msg_config_list(msg);
-          }
-          Message::ClearMsgConfig() => {
-            self.clear_msg_config_list();
-          }
-          Message::TriggerWithPosition(params) => {
-            self.handle_trigger_with_position(params);
-          }
-          Message::SetTempo(bpm) => {
-            self.handle_set_tempo(bpm);
-          }
-          Message::SwitchDevice(port_index) => {
-            self.handle_switch_device(port_index);
-          }
-          Message::DisconnectOutput() => {
-            self.handle_disconnect_output();
-          }
-          Message::Panic() => {
-            self.handle_panic();
-          }
-          Message::ClockStart() => {
-            self.handle_clock_start();
-          }
-          Message::ClockStop() => {
-            self.handle_clock_stop();
-          }
-          Message::ClockTick() => {
-            self.handle_clock_tick();
-          }
-          Message::ClockContinue() => {
-            self.handle_clock_continue();
-          }
-          Message::ClockSongPosition(position) => {
-            self.handle_clock_song_position(position);
-          }
-          Message::EnableClock(enabled) => {
-            self.enable_clock(enabled);
-          }
-          Message::ExternalClock(byte) => {
-            self.handle_external_clock(byte);
-          }
-          Message::EnableClockInput(en) => {
-            self.handle_enable_clock_input(en);
-          }
-          Message::ConnectInput(port_index) => {
-            self.handle_connect_input(port_index);
+    thread::Builder::new()
+      .name("midi-processor".to_string())
+      .spawn(move || {
+        for control_message in &self.rx {
+          match control_message {
+            Message::Push(midi_msg) => {
+              self.handle_push(stack_tx.clone(), midi_msg);
+            }
+            Message::Hold(midi_msg) => {
+              self.handle_hold(stack_tx.clone(), midi_msg);
+            }
+            Message::Release(midi_msg) => {
+              self.handle_release(stack_tx.clone(), midi_msg);
+            }
+            Message::ReleaseAll() => {
+              self.handle_release_all(stack_tx.clone());
+            }
+            Message::Trigger(msg, is_pressed) => {
+              self.handle_trigger(msg, is_pressed);
+            }
+            Message::SetMsgConfig(msg) => {
+              self.set_msg_config_list(msg);
+            }
+            Message::ClearMsgConfig() => {
+              self.clear_msg_config_list();
+            }
+            Message::TriggerWithPosition(params) => {
+              self.handle_trigger_with_position(params);
+            }
+            Message::SetTempo(bpm) => {
+              self.handle_set_tempo(bpm);
+            }
+            Message::SwitchDevice(port_index) => {
+              self.handle_switch_device(port_index);
+            }
+            Message::DisconnectOutput() => {
+              self.handle_disconnect_output();
+            }
+            Message::Panic() => {
+              self.handle_panic();
+            }
+            Message::ClockStart() => {
+              self.handle_clock_start();
+            }
+            Message::ClockStop() => {
+              self.handle_clock_stop();
+            }
+            Message::ClockTick() => {
+              self.handle_clock_tick();
+            }
+            Message::ClockContinue() => {
+              self.handle_clock_continue();
+            }
+            Message::ClockSongPosition(position) => {
+              self.handle_clock_song_position(position);
+            }
+            Message::EnableClock(enabled) => {
+              self.enable_clock(enabled);
+            }
+            Message::ExternalClock(byte) => {
+              self.handle_external_clock(byte);
+            }
+            Message::EnableClockInput(en) => {
+              self.handle_enable_clock_input(en);
+            }
+            Message::ConnectInput(port_index) => {
+              self.handle_connect_input(port_index);
+            }
           }
         }
-      }
-    });
+      })
+      .expect("Failed to spawn midi-processor thread");
   }
 }

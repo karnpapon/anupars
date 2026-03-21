@@ -332,122 +332,125 @@ impl Playhead {
       regex_tx,
     );
 
-    thread::spawn(move || {
-      for control_message in &rx {
-        match control_message {
-          Message::Move(direction, canvas_size) => {
-            self.handle_movement(direction, 1, canvas_size);
-          }
-          Message::Leap(direction, canvas_size) => {
-            let leap_steps = match direction {
-              Direction::Up | Direction::Down => 4,
-              Direction::Left | Direction::Right => 8,
-              Direction::Idle => 0,
-            };
-            self.handle_movement(direction, leap_steps, canvas_size);
-          }
-          Message::SetCurrentPos(position, offset) => {
-            self.handle_set_current_pos(position, offset);
-          }
-          Message::UpdateInfoStatusView() => {
-            self.handle_update_info_status_view();
-          }
-          Message::SetGridArea(current_pos) => {
-            self.handle_set_grid_area(current_pos);
-          }
-          Message::SetActivePos(tick) => {
-            self.handle_set_active_pos(tick);
-          }
-          Message::Scale(dir) => {
-            self.handle_scale(dir);
-          }
-          Message::SetMatcher(matcher) => {
-            self.handle_set_matcher(matcher);
-          }
-          Message::SetGridSize(width, height) => {
-            self.handle_set_grid_size(width, height);
-          }
-          Message::SetScaleModeLeft(scale_mode) => {
-            self.handle_set_scale_mode_left(scale_mode);
-          }
-          Message::SetScaleRootTop(scale_root) => {
-            self.handle_set_scale_root_top(scale_root);
-          }
-          Message::SetScaleModeTop(scale_mode) => {
-            self.handle_set_scale_mode_top(scale_mode);
-          }
-          Message::ToggleAccumulationMode() => {
-            self.handle_toggle_accumulation_mode();
-          }
-          Message::SetTempo(bpm) => {
-            self.handle_set_tempo(bpm);
-          }
-          Message::SetRatio(new_ratio) => {
-            self.handle_set_ratio(new_ratio);
-          }
-          Message::ToggleForwardMode() => {
-            self.switch_movement(Movement::Forward);
-          }
-          Message::ToggleReverseMode() => {
-            self.switch_movement(Movement::Reverse);
-          }
-          Message::ToggleArpeggiatorMode() => {
-            self.toggle_arpeggiator_mode();
-          }
-          Message::ToggleRandomMode() => {
-            self.switch_movement(Movement::Random);
-          }
-          Message::TogglePendulumMode() => {
-            self.switch_movement(Movement::Pendulum);
-          }
-          Message::ToggleEventOperatorMode() => {
-            self.toggle_event_operator_mode();
-          }
-          Message::ToggleDrainQueueMode() => {
-            self.toggle_drain_queue_mode();
-          }
-          Message::ToggleSweepMode() => {
-            self.toggle_sweep_mode();
-          }
-          Message::ToggleDynLengthMode() => {
-            self.toggle_dyn_length_mode();
-          }
-          Message::ToggleFreezeMode() => {
-            self.toggle_freeze_mode();
-          }
-          Message::CycleScaleRootTop(dir) => {
-            self.cycle_scale_root(dir);
-          }
-          Message::CycleScaleMode(dir) => {
-            self.cycle_scale_mode(dir);
-          }
-          Message::ClearQueue() => {
-            self.handle_clear_queue();
-          }
-          Message::SetGridSplits(v, h) => {
-            self.handle_set_grid_splits(v, h);
-          }
-          Message::CycleTiltMode() => {
-            self.cycle_tilt_mode();
-          }
-          Message::CycleSweepRowMode() => {
-            self.cycle_sweep_row_mode();
-          }
-          Message::StartAim() => {
-            self.handle_start_aim();
-          }
-          Message::UpdateAim(direction, canvas_size, step) => {
-            self.handle_update_aim(direction, canvas_size, step);
-          }
-          Message::CommitAim() => {
-            self.handle_commit_aim();
-          }
-          Message::CancelAim() => {
-            self.handle_cancel_aim();
+    thread::Builder::new()
+      .name("playhead".to_string())
+      .spawn(move || {
+        for control_message in &rx {
+          match control_message {
+            Message::Move(direction, canvas_size) => {
+              self.handle_movement(direction, 1, canvas_size);
+            }
+            Message::Leap(direction, canvas_size) => {
+              let leap_steps = match direction {
+                Direction::Up | Direction::Down => 4,
+                Direction::Left | Direction::Right => 8,
+                Direction::Idle => 0,
+              };
+              self.handle_movement(direction, leap_steps, canvas_size);
+            }
+            Message::SetCurrentPos(position, offset) => {
+              self.handle_set_current_pos(position, offset);
+            }
+            Message::UpdateInfoStatusView() => {
+              self.handle_update_info_status_view();
+            }
+            Message::SetGridArea(current_pos) => {
+              self.handle_set_grid_area(current_pos);
+            }
+            Message::SetActivePos(tick) => {
+              self.handle_set_active_pos(tick);
+            }
+            Message::Scale(dir) => {
+              self.handle_scale(dir);
+            }
+            Message::SetMatcher(matcher) => {
+              self.handle_set_matcher(matcher);
+            }
+            Message::SetGridSize(width, height) => {
+              self.handle_set_grid_size(width, height);
+            }
+            Message::SetScaleModeLeft(scale_mode) => {
+              self.handle_set_scale_mode_left(scale_mode);
+            }
+            Message::SetScaleRootTop(scale_root) => {
+              self.handle_set_scale_root_top(scale_root);
+            }
+            Message::SetScaleModeTop(scale_mode) => {
+              self.handle_set_scale_mode_top(scale_mode);
+            }
+            Message::ToggleAccumulationMode() => {
+              self.handle_toggle_accumulation_mode();
+            }
+            Message::SetTempo(bpm) => {
+              self.handle_set_tempo(bpm);
+            }
+            Message::SetRatio(new_ratio) => {
+              self.handle_set_ratio(new_ratio);
+            }
+            Message::ToggleForwardMode() => {
+              self.switch_movement(Movement::Forward);
+            }
+            Message::ToggleReverseMode() => {
+              self.switch_movement(Movement::Reverse);
+            }
+            Message::ToggleArpeggiatorMode() => {
+              self.toggle_arpeggiator_mode();
+            }
+            Message::ToggleRandomMode() => {
+              self.switch_movement(Movement::Random);
+            }
+            Message::TogglePendulumMode() => {
+              self.switch_movement(Movement::Pendulum);
+            }
+            Message::ToggleEventOperatorMode() => {
+              self.toggle_event_operator_mode();
+            }
+            Message::ToggleDrainQueueMode() => {
+              self.toggle_drain_queue_mode();
+            }
+            Message::ToggleSweepMode() => {
+              self.toggle_sweep_mode();
+            }
+            Message::ToggleDynLengthMode() => {
+              self.toggle_dyn_length_mode();
+            }
+            Message::ToggleFreezeMode() => {
+              self.toggle_freeze_mode();
+            }
+            Message::CycleScaleRootTop(dir) => {
+              self.cycle_scale_root(dir);
+            }
+            Message::CycleScaleMode(dir) => {
+              self.cycle_scale_mode(dir);
+            }
+            Message::ClearQueue() => {
+              self.handle_clear_queue();
+            }
+            Message::SetGridSplits(v, h) => {
+              self.handle_set_grid_splits(v, h);
+            }
+            Message::CycleTiltMode() => {
+              self.cycle_tilt_mode();
+            }
+            Message::CycleSweepRowMode() => {
+              self.cycle_sweep_row_mode();
+            }
+            Message::StartAim() => {
+              self.handle_start_aim();
+            }
+            Message::UpdateAim(direction, canvas_size, step) => {
+              self.handle_update_aim(direction, canvas_size, step);
+            }
+            Message::CommitAim() => {
+              self.handle_commit_aim();
+            }
+            Message::CancelAim() => {
+              self.handle_cancel_aim();
+            }
           }
         }
-      }
-    });
+      })
+      .expect("Failed to spawn playhead thread");
 
     tx
   }

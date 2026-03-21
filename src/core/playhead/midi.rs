@@ -405,12 +405,15 @@ impl MidiTriggerHandler {
             let tx_off = midi_tx.clone();
             let gen_off = my_gen;
             let gen_arc = Arc::clone(&ratchet_generation);
-            thread::spawn(move || {
-              thread::sleep(Duration::from_millis(note_duration_ms));
-              if gen_arc.load(Ordering::SeqCst) == gen_off {
-                let _ = tx_off.send(midi::Message::Trigger(midi_msg, false));
-              }
-            });
+            thread::Builder::new()
+              .name("ratchet-note-off".to_string())
+              .spawn(move || {
+                thread::sleep(Duration::from_millis(note_duration_ms));
+                if gen_arc.load(Ordering::SeqCst) == gen_off {
+                  let _ = tx_off.send(midi::Message::Trigger(midi_msg, false));
+                }
+              })
+              .expect("Failed to spawn ratchet-note-off thread");
           }
 
           thread::sleep(Duration::from_millis(INTERVAL_MS));
@@ -501,11 +504,14 @@ impl MidiTriggerHandler {
     let chord_duration_ms = (note_length as u64 * 8).max(50);
 
     let midi_tx_clone = self.midi_tx.clone();
-    thread::spawn(move || {
-      thread::sleep(Duration::from_millis(chord_duration_ms));
-      for midi_msg in chord_notes {
-        let _ = midi_tx_clone.send(midi::Message::Trigger(midi_msg, false));
-      }
-    });
+    thread::Builder::new()
+      .name("chord-note-off".to_string())
+      .spawn(move || {
+        thread::sleep(Duration::from_millis(chord_duration_ms));
+        for midi_msg in chord_notes {
+          let _ = midi_tx_clone.send(midi::Message::Trigger(midi_msg, false));
+        }
+      })
+      .expect("Failed to spawn chord-note-off thread");
   }
 }
