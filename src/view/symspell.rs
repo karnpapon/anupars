@@ -2,6 +2,7 @@ use std::mem;
 use std::path::Path;
 use std::sync::mpsc::Sender;
 use std::sync::{Arc, Mutex};
+use std::thread;
 
 use cursive::views::{Canvas, EditView, TextView};
 use cursive::Cursive;
@@ -37,20 +38,30 @@ pub struct SymSpellState {
   buf_buf: Arc<Mutex<AllocRingBuffer<char>>>,
   rpl_state: Arc<Mutex<RplPendingState>>,
   rpl_anim: Arc<Mutex<Option<RplAnimState>>>,
-  symspell: Arc<Mutex<SymSpell>>,
+  /// `None` while the dictionary is still loading in the background
+  symspell: Arc<Mutex<Option<SymSpell>>>,
 }
 
 impl SymSpellState {
-  /// Initialise SymSpell (max edit distance 2, prefix length 7) and load the
-  /// bundled frequency dictionary.
+  /// Create the state immediately and load the frequency dictionary in a
+  /// background thread. Lookups return nothing until the thread finishes.
   pub fn new() -> Self {
-    let mut inner = SymSpell::new(2, None, 7, 1);
-    let _ = inner.load_dictionary(Path::new(consts::FREQ_DICT_PATH), 0, 1, " ");
+    let symspell: Arc<Mutex<Option<SymSpell>>> = Arc::new(Mutex::new(None));
+    let symspell_bg = Arc::clone(&symspell);
+    thread::Builder::new()
+      .name("symspell-loader".to_string())
+      .spawn(move || {
+        let mut inner = SymSpell::new(2, None, 7, 1);
+        let _ = inner.load_dictionary(Path::new(consts::FREQ_DICT_PATH), 0, 1, " ");
+        *symspell_bg.lock().unwrap() = Some(inner);
+      })
+      .expect("Failed to spawn symspell loader thread");
+
     SymSpellState {
       buf_buf: Arc::new(Mutex::new(AllocRingBuffer::new(consts::TMP_BUF_SIZE))),
       rpl_state: Arc::new(Mutex::new(RplPendingState::Empty)),
       rpl_anim: Arc::new(Mutex::new(None)),
-      symspell: Arc::new(Mutex::new(inner)),
+      symspell,
     }
   }
 
@@ -176,12 +187,15 @@ impl SymSpellState {
       });
       let sym_result = {
         let ss = self.symspell.lock().unwrap();
-        let suggestions = ss.lookup_compound(new_tmp.trim(), 2, &None, false);
-        suggestions
-          .into_iter()
-          .next()
-          .map(|s| s.term)
-          .unwrap_or_default()
+        match ss.as_ref() {
+          None => String::new(), // loading
+          Some(ss) => ss
+            .lookup_compound(new_tmp.trim(), 2, &None, false)
+            .into_iter()
+            .next()
+            .map(|s| s.term)
+            .unwrap_or_default(),
+        }
       };
       if !sym_result.is_empty() {
         siv.call_on_name(consts::sym_status_unit_view, move |view: &mut TextView| {
