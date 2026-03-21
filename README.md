@@ -301,6 +301,11 @@ it comprised of
 - Minimum playhead area size is enforced (1×1) to prevent overflow errors
 
 
+# Credits
+
+- *Un coup de dés jamais n'abolira le hasard* (A Throw of the Dice Will Never Abolish Chance) — Stéphane Mallarmé (1897)
+  English translation by Peter G. Doyle, via [Wikisource](https://en.wikisource.org/wiki/Un_coup_de_d%C3%A9s_jamais_n%27abolira_le_hasard)
+
 # Building
 - Docker must be installed before proceeding
 - Execute: `sh ./build`

@@ -508,9 +508,12 @@ impl GridEditor {
         x = 0;
         y += 1;
       } else {
-        // Place character at current position
+        // Place character at current position.
+        // Spaces are treated as empty cells ('\0') so they render as '.'
+        // rather than an invisible blank, consistent with padding cells.
+        let cell = if ch == ' ' { '\0' } else { ch };
         if x < cols {
-          self.grid.set(x, y, ch);
+          self.grid.set(x, y, cell);
           x += 1;
 
           // If we've reached end of row, move to next row

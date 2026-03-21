@@ -2,11 +2,12 @@ use std::fmt;
 
 use crate::core::command::register::CommandManager;
 use crate::core::consts;
+use crate::core::engine::disspress::MANIFESTO_TEXT;
 use crate::core::engine::regex::RegExpHandler;
 use crate::core::io::midi;
 use crate::core::playhead::{Message as PlayheadMessage, Playhead};
 use crate::core::timing::metronome::{Message, Metronome};
-use crate::view::menubar::Menubar;
+use crate::view::menubar::{set_contents, Menubar};
 use cursive::theme::{BorderStyle, Palette};
 use cursive::views::TextView;
 use cursive::Cursive;
@@ -203,6 +204,16 @@ pub fn setup_ui(components: &mut Application) {
     .add_leaf("quit", |s| s.quit());
 
   components.cursive.add_layer(main_view);
+
+  // Load the manifesto text automatically on startup. Queued via cb_sink so
+  // it runs after the first layout pass, when grid dimensions are known.
+  components
+    .cursive
+    .cb_sink()
+    .send(Box::new(|siv| {
+      set_contents(siv, MANIFESTO_TEXT.to_string());
+    }))
+    .unwrap();
 
   components
     .cursive

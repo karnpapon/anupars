@@ -501,14 +501,38 @@ pub fn generate_contents(siv: &mut Cursive) {
   );
 }
 
-fn set_contents(siv: &mut Cursive, contents: String) {
+pub(crate) fn set_contents(siv: &mut Cursive, contents: String) {
   siv
     .call_on_name(
       consts::canvas_editor_section_view,
       move |c: &mut Canvas<GridEditor>| {
-        c.state_mut().clear_contents();
-        c.state_mut().update_text_contents(&contents);
-        c.state_mut().update_grid_src();
+        let editor = c.state_mut();
+        let w = editor.grid.width;
+        let h = editor.grid.height;
+        // Clip to the renderable grid area,
+        let clipped = if w > 0 && h > 0 {
+          let lines: Vec<&str> = contents.split('\n').collect();
+          // let total = lines.len();
+          let start = 0;
+          // let start = if total > 1 {
+          //   rand::random::<usize>() % total
+          // } else {
+          //   0
+          // };
+          lines
+            .iter()
+            .cycle()
+            .skip(start)
+            .take(h)
+            .map(|line| line.chars().take(w).collect::<String>())
+            .collect::<Vec<_>>()
+            .join("\n")
+        } else {
+          contents
+        };
+        editor.clear_contents();
+        editor.update_text_contents(&clipped);
+        editor.update_grid_src();
       },
     )
     .unwrap();

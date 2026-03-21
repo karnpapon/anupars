@@ -2,10 +2,9 @@ use rand::seq::IteratorRandom;
 use std::collections::HashMap;
 
 const DISSPRESS_LENGTH: usize = 200;
-const INITIALIZER_TEXT: &str = include_str!(concat!(
-  env!("CARGO_MANIFEST_DIR"),
-  "/data/_initializer.txt"
-));
+const INITIALIZER_TEXT: &str = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/data/texts.txt"));
+pub(crate) const MANIFESTO_TEXT: &str =
+  include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/data/manifesto.txt"));
 
 pub fn dissociated() -> HashMap<String, HashMap<String, usize>> {
   let mut dissociated: HashMap<String, HashMap<String, usize>> = HashMap::new();

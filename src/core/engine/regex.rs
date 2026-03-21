@@ -100,8 +100,13 @@ impl RegExpHandler {
     data: &EventData,
     cache: &mut RegexCache,
   ) -> Result<HashMap<usize, Match>, RegexError> {
-    // Guard 1: skip matching on oversized input to avoid UI freeze
-    if data.text.len() > MAX_INPUT_LEN {
+    // count only non-whitespace bytes
+    let meaningful_len = data
+      .text
+      .bytes()
+      .filter(|&b| b != b' ' && b != b'\0' && b != b'\n')
+      .count();
+    if meaningful_len > MAX_INPUT_LEN {
       return Err(RegexError {
         id: "input_too_large".to_string(),
         warning: true,
