@@ -62,13 +62,14 @@ cargo run
 10. **Press `Space`** to start playback, the playhead steps through cells that match your pattern (try increasing beat division by `}` if you want to make it faster).
 11. **Change tempo** with `>` (faster) and `<` (slower).
 12. to enable mode use `Ctrl` along with available mode chars (`a`, `n`, `u`, `e`, `s`,`y`, `z` you can easily see theses being displayed on the top of the screen) let's start with `sweep` mode using `Ctrl+s` the active mode with change from lowercase to uppercase mode the crosshair appears and it'll trigger all the trigger point along y-axis (the velocity is based-on the trigger point distance to the playhead (in y-axis), the far from playhead, the lower velocity), all modes is togglable all default to off initially.
-13. the top spatial keyboard layout (inspired by Music Mouse - Laurie Spiegel) will hint you what note is being triggered, whre 
-  - `#` represent black-key  
-  - `━` represent white-key 
-  - long-vertical represent natural C 
+13. the top spatial keyboard layout (inspired by Music Mouse - Laurie Spiegel) will hint you what note is being triggered, where
+  - `#` represent black-key
+  - `━` represent white-key
+  - long-vertical represent natural C
   - the number in long-vertical key is an octave
-14. try changing scale by `Shift+Plus` (scale up) or `Shift+Underscore` (scale down)
-15. changing root note by `=` (root note up) or `-` (down)
+14. a **left keyboard** (vertical layout) is also available — press `~` to toggle between top keyboard (`[  ∧  ]`) and left keyboard (`[  ∨  ]`). When the left keyboard is active, notes vary along the y-axis (each row is a pitch) instead of the x-axis.
+15. try changing scale by `Shift+Plus` (scale up) or `Shift+Underscore` (scale down)
+16. changing root note by `=` (root note up) or `-` (down)
 
 
 That's all you need for a first session. Explore [Features](#features) and [Keybindings](#keybindings-reference) whenever you're ready to go deeper.
@@ -95,8 +96,13 @@ That's all you need for a first session. Explore [Features](#features) and [Keyb
     - `Continue` Sends MIDI Continue (`0xFB`) to resume playback from the current position.
     - `Song Position Pointer` (SPP) Sends MIDI Song Position Pointer (`0xF2`) to set the playback position in beats.
 
-- **Keyboard MIDI Layout**
-  - The on-screen keyboard uses a spatial layout similar to Laurie Spiegel's [Music Mouse](https://en.wikipedia.org/wiki/Music_Mouse), enabling expressive, algorithmic play.
+- **Dual Spatial Keyboard Layout**
+  - Two independent on-screen keyboards inspired by Laurie Spiegel's [Music Mouse](https://en.wikipedia.org/wiki/Music_Mouse), enabling expressive, algorithmic play.
+  - **Top keyboard** (horizontal layout): notes vary along the **x-axis** — each column is a distinct pitch. The keyboard strip is drawn across the top of the grid.
+  - **Left keyboard** (vertical layout): notes vary along the **y-axis** — each row is a distinct pitch. The keyboard strip is drawn along the left edge of the grid.
+  - Press `~` to toggle between the two keyboards. The active keyboard is shown as `[  ∧  ]` (top) or `[  ∨  ]` (left) at the top-left of the canvas.
+  - Scale mode and root note changes (`Shift++`, `Shift+_`, `=`, `-`) apply to whichever keyboard is currently active.
+  - Sweep mode always uses the top keyboard regardless of the active selection.
 
 - **Separated Scale Change for Vertical/Horizontal Steps**
   - Independently assign musical scales for vertical (Y-axis) and horizontal (X-axis) movement, allowing complex modal and harmonic explorations.
@@ -266,10 +272,11 @@ it comprised of
 
 | Key | Action | Description |
 |-----|--------|-------------|
-| `Shift++` / `Shift+Plus` | Cycle Scale Mode Up | Next musical scale |
-| `Shift+_` / `Shift+Underscore` | Cycle Scale Mode Down | Previous musical scale |
-| `=` / `Equal` | Increase Root Note | Next root note |
-| `-` / `Minus` | Decrease Root Note | Previous root note |
+| `Shift++` / `Shift+Plus` | Cycle Scale Mode Up | Next musical scale (applies to active keyboard) |
+| `Shift+_` / `Shift+Underscore` | Cycle Scale Mode Down | Previous musical scale (applies to active keyboard) |
+| `=` / `Equal` | Increase Root Note | Next root note (applies to active keyboard) |
+| `-` / `Minus` | Decrease Root Note | Previous root note (applies to active keyboard) |
+| `~` | Toggle Spatial Keyboard | Switch between top keyboard `[  ∧  ]` (x-axis, horizontal) and left keyboard `[  ∨  ]` (y-axis, vertical) |
 
 ## UI & Navigation
 

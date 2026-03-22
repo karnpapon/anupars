@@ -22,6 +22,7 @@ fn default_keybindings() -> HashMap<String, Vec<Command>> {
   kb.insert("<".into(), vec![Command::AdjustBPM(Adjustment::Decrease)]);
   kb.insert("}".into(), vec![Command::AdjustRatio(Adjustment::Increase)]);
   kb.insert("{".into(), vec![Command::AdjustRatio(Adjustment::Decrease)]);
+  kb.insert("~".into(), vec![Command::ToggleSpatialKeyboard]);
   kb.insert("Ctrl+f".into(), vec![Command::ToggleForward]);
   kb.insert("Ctrl+r".into(), vec![Command::ToggleReverse]);
   kb.insert("Ctrl+d".into(), vec![Command::ToggleRandom]);
@@ -39,7 +40,6 @@ fn default_keybindings() -> HashMap<String, Vec<Command>> {
   kb.insert("Shift+Underscore".into(), vec![Command::ChangeScaleMode(Adjustment::Decrease)]);
   kb.insert("Equal".into(), vec![Command::ChangeRootNote(Adjustment::Increase)]);
   kb.insert("Minus".into(), vec![Command::ChangeRootNote(Adjustment::Decrease)]);
-  kb.insert("Shift+~".into(), vec![Command::ToggleSpatialKeyboard]);
   kb
 }
 
