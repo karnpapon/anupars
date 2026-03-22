@@ -113,3 +113,151 @@ impl Playhead {
     q.push_back(UIUpdate::AimedArea(None));
   }
 }
+
+#[cfg(test)]
+mod tests {
+  use super::super::test_helpers::make_playhead;
+  use super::Direction;
+  use crate::view::rect::Rect;
+  use cursive::Vec2;
+
+  #[test]
+  fn start_aim_initialises_aimed_area_at_current_pos_and_size() {
+    let ph = make_playhead();
+    *ph.pos.lock().unwrap() = Vec2::new(3, 4);
+    *ph.area.lock().unwrap() = Rect::from_size(Vec2::new(3, 4), (5, 2));
+
+    ph.handle_start_aim();
+
+    let aimed = ph.aimed_area.lock().unwrap();
+    let aimed_area = aimed.expect("aimed_area should be Some after start_aim");
+    assert_eq!(aimed_area.top_left(), Vec2::new(3, 4));
+    assert_eq!(aimed_area.width(), 5);
+    assert_eq!(aimed_area.height(), 2);
+  }
+
+  #[test]
+  fn start_aim_when_already_aimed_overwrites_with_current_state() {
+    let ph = make_playhead();
+    *ph.pos.lock().unwrap() = Vec2::new(1, 1);
+    *ph.area.lock().unwrap() = Rect::from_size(Vec2::new(1, 1), (2, 2));
+    *ph.aimed_area.lock().unwrap() = Some(Rect::from_size(Vec2::new(9, 9), (3, 3)));
+
+    ph.handle_start_aim();
+
+    let aimed = ph.aimed_area.lock().unwrap().unwrap();
+    assert_eq!(aimed.top_left(), Vec2::new(1, 1));
+    assert_eq!(aimed.width(), 2);
+  }
+
+  #[test]
+  fn update_aim_right_shifts_top_left_by_step() {
+    let ph = make_playhead();
+    *ph.aimed_area.lock().unwrap() = Some(Rect::from_size(Vec2::new(2, 3), (2, 2)));
+
+    ph.handle_update_aim(Direction::Right, Vec2::new(20, 20), 3);
+
+    let aimed = ph.aimed_area.lock().unwrap().unwrap();
+    assert_eq!(aimed.top_left(), Vec2::new(5, 3)); // x: 2+3=5
+  }
+
+  #[test]
+  fn update_aim_down_shifts_top_left_by_step() {
+    let ph = make_playhead();
+    *ph.aimed_area.lock().unwrap() = Some(Rect::from_size(Vec2::new(2, 3), (2, 2)));
+
+    ph.handle_update_aim(Direction::Down, Vec2::new(20, 20), 4);
+
+    let aimed = ph.aimed_area.lock().unwrap().unwrap();
+    assert_eq!(aimed.top_left(), Vec2::new(2, 7)); // y: 3+4=7
+  }
+
+  #[test]
+  fn update_aim_clamps_at_zero_when_moving_left_past_origin() {
+    let ph = make_playhead();
+    *ph.aimed_area.lock().unwrap() = Some(Rect::from_size(Vec2::new(1, 0), (2, 2)));
+
+    ph.handle_update_aim(Direction::Left, Vec2::new(20, 20), 5);
+
+    let aimed = ph.aimed_area.lock().unwrap().unwrap();
+    assert_eq!(aimed.top_left().x, 0); // saturates at 0
+  }
+
+  #[test]
+  fn update_aim_clamps_at_canvas_boundary_when_moving_right() {
+    let ph = make_playhead();
+    // area width=3, so max_x = canvas_x(10) - size(3) = 7
+    *ph.aimed_area.lock().unwrap() = Some(Rect::from_size(Vec2::new(6, 0), (3, 1)));
+
+    ph.handle_update_aim(Direction::Right, Vec2::new(10, 10), 99);
+
+    let aimed = ph.aimed_area.lock().unwrap().unwrap();
+    assert_eq!(aimed.top_left().x, 7); // clamped to max_x=7
+  }
+
+  #[test]
+  fn update_aim_preserves_area_size() {
+    let ph = make_playhead();
+    *ph.aimed_area.lock().unwrap() = Some(Rect::from_size(Vec2::new(0, 0), (4, 3)));
+
+    ph.handle_update_aim(Direction::Right, Vec2::new(20, 20), 2);
+
+    let aimed = ph.aimed_area.lock().unwrap().unwrap();
+    assert_eq!(aimed.width(), 4);
+    assert_eq!(aimed.height(), 3);
+  }
+
+  #[test]
+  fn commit_aim_sets_pos_to_aimed_top_left_and_clears_aimed_area() {
+    let ph = make_playhead();
+    *ph.pos.lock().unwrap() = Vec2::new(0, 0);
+    *ph.aimed_area.lock().unwrap() = Some(Rect::from_size(Vec2::new(5, 6), (2, 2)));
+
+    ph.handle_commit_aim();
+
+    assert_eq!(*ph.pos.lock().unwrap(), Vec2::new(5, 6));
+    assert!(ph.aimed_area.lock().unwrap().is_none());
+  }
+
+  #[test]
+  fn commit_aim_resets_actived_pos_to_zero() {
+    let ph = make_playhead();
+    *ph.actived_pos.lock().unwrap() = Vec2::new(4, 7);
+    *ph.aimed_area.lock().unwrap() = Some(Rect::from_size(Vec2::new(1, 2), (2, 2)));
+
+    ph.handle_commit_aim();
+
+    assert_eq!(*ph.actived_pos.lock().unwrap(), Vec2::zero());
+  }
+
+  #[test]
+  fn commit_aim_with_no_aimed_area_leaves_pos_unchanged() {
+    let ph = make_playhead();
+    *ph.pos.lock().unwrap() = Vec2::new(3, 3);
+    *ph.aimed_area.lock().unwrap() = None;
+
+    ph.handle_commit_aim();
+
+    assert_eq!(*ph.pos.lock().unwrap(), Vec2::new(3, 3));
+  }
+
+  #[test]
+  fn cancel_aim_clears_aimed_area() {
+    let ph = make_playhead();
+    *ph.aimed_area.lock().unwrap() = Some(Rect::from_size(Vec2::new(2, 2), (3, 3)));
+
+    ph.handle_cancel_aim();
+
+    assert!(ph.aimed_area.lock().unwrap().is_none());
+  }
+
+  #[test]
+  fn cancel_aim_is_idempotent_when_already_none() {
+    let ph = make_playhead();
+    *ph.aimed_area.lock().unwrap() = None;
+
+    ph.handle_cancel_aim(); // should not panic
+
+    assert!(ph.aimed_area.lock().unwrap().is_none());
+  }
+}

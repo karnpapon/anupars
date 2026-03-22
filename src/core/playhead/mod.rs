@@ -29,9 +29,11 @@ pub mod accumulation;
 pub mod aim;
 pub mod modes;
 pub mod music;
-pub mod tick;
 pub mod transform;
 pub mod types;
+
+#[cfg(test)]
+pub mod test_helpers;
 
 pub use types::{Direction, GridState, Message, ModeFlags, MusicState, PlayheadUI, UIUpdate};
 
@@ -457,5 +459,42 @@ impl Playhead {
 }
 
 #[cfg(test)]
-#[path = "./tests.rs"]
-mod tests;
+mod tests {
+  use super::test_helpers::make_playhead;
+  use cursive::Vec2;
+  use std::sync::atomic::Ordering;
+
+  #[test]
+  fn chn_str_no_splits_is_always_1_of_1() {
+    let ph = make_playhead();
+    ph.grid.width.store(8, Ordering::Relaxed);
+    ph.grid.height.store(8, Ordering::Relaxed);
+    ph.grid.v_splits.store(1, Ordering::Relaxed);
+    ph.grid.h_splits.store(1, Ordering::Relaxed);
+    assert_eq!(ph.compute_chn_str(Vec2::new(0, 0)), "1/1");
+    assert_eq!(ph.compute_chn_str(Vec2::new(7, 7)), "1/1");
+  }
+
+  #[test]
+  fn chn_str_2x2_splits_maps_quadrants_correctly() {
+    let ph = make_playhead();
+    ph.grid.width.store(8, Ordering::Relaxed);
+    ph.grid.height.store(8, Ordering::Relaxed);
+    ph.grid.v_splits.store(2, Ordering::Relaxed);
+    ph.grid.h_splits.store(2, Ordering::Relaxed);
+    assert_eq!(ph.compute_chn_str(Vec2::new(0, 0)), "1/4"); // top-left
+    assert_eq!(ph.compute_chn_str(Vec2::new(4, 0)), "2/4"); // top-right
+    assert_eq!(ph.compute_chn_str(Vec2::new(0, 4)), "3/4"); // bottom-left
+    assert_eq!(ph.compute_chn_str(Vec2::new(4, 4)), "4/4"); // bottom-right
+  }
+
+  #[test]
+  fn chn_str_position_at_boundary_does_not_overflow() {
+    let ph = make_playhead();
+    ph.grid.width.store(4, Ordering::Relaxed);
+    ph.grid.height.store(2, Ordering::Relaxed);
+    ph.grid.v_splits.store(2, Ordering::Relaxed);
+    ph.grid.h_splits.store(1, Ordering::Relaxed);
+    assert_eq!(ph.compute_chn_str(Vec2::new(3, 0)), "2/2");
+  }
+}

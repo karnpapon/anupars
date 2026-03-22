@@ -257,3 +257,177 @@ impl Playhead {
     }
   }
 }
+
+#[cfg(test)]
+mod tests {
+  use super::super::test_helpers::make_playhead;
+  use super::*;
+  use crate::core::engine::regex::Match;
+
+  #[test]
+  fn reset_accumulation_counter_zeroes_nonzero_value() {
+    let ph = make_playhead();
+    *ph.accumulation_counter.lock().unwrap() = 5;
+    ph.reset_accumulation_counter();
+    assert_eq!(*ph.accumulation_counter.lock().unwrap(), 0);
+  }
+
+  #[test]
+  fn handle_silent_step_does_nothing_when_mode_off() {
+    let ph = make_playhead();
+    ph.modes.accumulation_mode.store(false, Ordering::Relaxed);
+    let matcher: HashMap<usize, Match> = HashMap::new();
+    ph.handle_silent_step(&matcher);
+    assert_eq!(*ph.accumulation_counter.lock().unwrap(), 0);
+  }
+
+  #[test]
+  fn handle_silent_step_does_not_increment_when_match_inside_area() {
+    let ph = make_playhead();
+    ph.modes.accumulation_mode.store(true, Ordering::Relaxed);
+    ph.grid.width.store(10, Ordering::Relaxed);
+    *ph.area.lock().unwrap() = Rect::from_size(Vec2::new(0, 0), (2, 2));
+
+    // index 0 = (0,0) which is inside the 2×2 area
+    let mut matcher: HashMap<usize, Match> = HashMap::new();
+    matcher.insert(0, Match::make_test(0, 1));
+
+    ph.handle_silent_step(&matcher);
+    assert_eq!(*ph.accumulation_counter.lock().unwrap(), 0);
+  }
+
+  #[test]
+  fn handle_silent_step_increments_counter_when_no_match_in_area() {
+    let ph = make_playhead();
+    ph.modes.accumulation_mode.store(true, Ordering::Relaxed);
+    ph.grid.width.store(10, Ordering::Relaxed);
+    ph.grid.height.store(10, Ordering::Relaxed);
+    // large area so limit isn't hit in one call
+    *ph.area.lock().unwrap() = Rect::from_size(Vec2::new(0, 0), (4, 4));
+
+    let matcher: HashMap<usize, Match> = HashMap::new(); // no matches
+
+    ph.handle_silent_step(&matcher);
+    assert_eq!(*ph.accumulation_counter.lock().unwrap(), 1);
+
+    ph.handle_silent_step(&matcher);
+    assert_eq!(*ph.accumulation_counter.lock().unwrap(), 2);
+  }
+
+  #[test]
+  fn handle_silent_step_resets_counter_and_jumps_when_limit_reached() {
+    let ph = make_playhead();
+    ph.modes.accumulation_mode.store(true, Ordering::Relaxed);
+    ph.grid.width.store(10, Ordering::Relaxed);
+    ph.grid.height.store(10, Ordering::Relaxed);
+    // 1×1 area → limit = 1: the very first step should trigger a jump
+    *ph.area.lock().unwrap() = Rect::from_size(Vec2::new(5, 5), (1, 1));
+
+    let matcher: HashMap<usize, Match> = HashMap::new();
+    ph.handle_silent_step(&matcher);
+
+    // counter must have wrapped back to 0
+    assert_eq!(*ph.accumulation_counter.lock().unwrap(), 0);
+  }
+
+  #[test]
+  fn handle_accumulation_mode_returns_none_before_limit() {
+    let ph = make_playhead();
+    ph.grid.width.store(10, Ordering::Relaxed);
+    ph.grid.height.store(10, Ordering::Relaxed);
+    // 4×4 area → limit = 16, so 15 calls should all return None
+    *ph.area.lock().unwrap() = Rect::from_size(Vec2::zero(), (4, 4));
+
+    for _ in 0..15 {
+      let result = ph.handle_accumulation_mode(0);
+      assert!(result.is_none(), "expected None before counter hits limit");
+    }
+    assert_eq!(*ph.accumulation_counter.lock().unwrap(), 15);
+  }
+
+  #[test]
+  fn handle_accumulation_mode_returns_some_and_resets_at_limit() {
+    let ph = make_playhead();
+    ph.grid.width.store(10, Ordering::Relaxed);
+    ph.grid.height.store(10, Ordering::Relaxed);
+    // 1×1 area → limit = 1: first call triggers jump
+    *ph.area.lock().unwrap() = Rect::from_size(Vec2::zero(), (1, 1));
+
+    let result = ph.handle_accumulation_mode(0);
+    assert!(result.is_some(), "expected Some at the limit");
+    assert_eq!(*ph.accumulation_counter.lock().unwrap(), 0);
+  }
+
+  #[test]
+  fn perform_accumulation_jump_uses_armed_pending_position() {
+    use crate::core::playhead::queue::PendingJumpPosition;
+
+    let ph = make_playhead();
+    ph.grid.width.store(20, Ordering::Relaxed);
+    ph.grid.height.store(20, Ordering::Relaxed);
+    *ph.area.lock().unwrap() = Rect::from_size(Vec2::zero(), (2, 2));
+
+    ph.queue_manager
+      .set_pending_jump(PendingJumpPosition::Armed(7, 3));
+
+    ph.perform_accumulation_jump();
+
+    let pos = *ph.pos.lock().unwrap();
+    assert_eq!(pos.x, 7);
+    assert_eq!(pos.y, 3);
+  }
+
+  #[test]
+  fn perform_accumulation_jump_resets_active_pos_to_zero() {
+    let ph = make_playhead();
+    ph.grid.width.store(20, Ordering::Relaxed);
+    ph.grid.height.store(20, Ordering::Relaxed);
+    *ph.area.lock().unwrap() = Rect::from_size(Vec2::zero(), (2, 2));
+    *ph.actived_pos.lock().unwrap() = Vec2::new(3, 3);
+
+    ph.perform_accumulation_jump();
+
+    assert_eq!(*ph.actived_pos.lock().unwrap(), Vec2::zero());
+  }
+
+  #[test]
+  fn perform_accumulation_jump_preserves_playhead_size() {
+    let ph = make_playhead();
+    ph.grid.width.store(20, Ordering::Relaxed);
+    ph.grid.height.store(20, Ordering::Relaxed);
+    *ph.area.lock().unwrap() = Rect::from_size(Vec2::zero(), (3, 2));
+
+    ph.perform_accumulation_jump();
+
+    let area = *ph.area.lock().unwrap();
+    assert_eq!(area.width(), 3);
+    assert_eq!(area.height(), 2);
+  }
+
+  #[test]
+  fn perform_accumulation_jump_random_stays_within_grid_bounds() {
+    let ph = make_playhead();
+    let grid_w = 10_usize;
+    let grid_h = 8_usize;
+    ph.grid.width.store(grid_w, Ordering::Relaxed);
+    ph.grid.height.store(grid_h, Ordering::Relaxed);
+    *ph.area.lock().unwrap() = Rect::from_size(Vec2::zero(), (2, 2));
+
+    for _ in 0..50 {
+      ph.perform_accumulation_jump();
+      let pos = *ph.pos.lock().unwrap();
+      assert!(
+        pos.x + 2 <= grid_w,
+        "x={} out of bounds (grid_w={})",
+        pos.x,
+        grid_w
+      );
+      assert!(
+        pos.y + 2 <= grid_h,
+        "y={} out of bounds (grid_h={})",
+        pos.y,
+        grid_h
+      );
+    }
+  }
+}

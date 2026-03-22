@@ -222,3 +222,215 @@ impl PositionCalculator {
     }
   }
 }
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+  use crate::core::engine::regex::Match;
+  use crate::core::playhead::movement::Movement;
+
+  fn make_calc() -> PositionCalculator {
+    PositionCalculator::new()
+  }
+
+  #[test]
+  fn absolute_position_adds_playhead_and_active_offsets() {
+    let calc = make_calc();
+    calc.grid_width.store(10, Ordering::Relaxed);
+
+    let (abs_x, abs_y, idx) = calc.calculate_absolute_position(Vec2::new(2, 3), Vec2::new(1, 2));
+
+    assert_eq!(abs_x, 3);
+    assert_eq!(abs_y, 5);
+    assert_eq!(idx, 53); // 5*10 + 3
+  }
+
+  #[test]
+  fn absolute_position_zero_offsets_returns_zero() {
+    let calc = make_calc();
+    calc.grid_width.store(8, Ordering::Relaxed);
+
+    let (abs_x, abs_y, idx) = calc.calculate_absolute_position(Vec2::zero(), Vec2::zero());
+
+    assert_eq!((abs_x, abs_y, idx), (0, 0, 0));
+  }
+
+  #[test]
+  fn absolute_position_flattened_index_uses_grid_width() {
+    let calc = make_calc();
+    calc.grid_width.store(5, Ordering::Relaxed);
+
+    let (_, _, idx) = calc.calculate_absolute_position(Vec2::new(0, 2), Vec2::new(3, 0));
+    assert_eq!(idx, 13); // abs_y=2, abs_x=3 → 2*5+3
+  }
+
+  #[test]
+  fn random_position_returns_origin_when_grid_equals_playhead_size() {
+    let mut rng = rand::thread_rng();
+    // max_x = 4 - 4 = 0, so returns (0,0)
+    let (x, y) = PositionCalculator::generate_random_position(4, 4, 4, 4, &mut rng);
+    assert_eq!((x, y), (0, 0));
+  }
+
+  #[test]
+  fn random_position_returns_origin_when_grid_smaller_than_playhead() {
+    let mut rng = rand::thread_rng();
+    let (x, y) = PositionCalculator::generate_random_position(5, 5, 3, 3, &mut rng);
+    assert_eq!((x, y), (0, 0));
+  }
+
+  #[test]
+  fn random_position_stays_within_grid_bounds() {
+    let mut rng = rand::thread_rng();
+    let grid_w = 10;
+    let grid_h = 8;
+    let ph_w = 3;
+    let ph_h = 2;
+
+    for _ in 0..50 {
+      let (x, y) =
+        PositionCalculator::generate_random_position(ph_w, ph_h, grid_w, grid_h, &mut rng);
+      assert!(x + ph_w <= grid_w, "x={x} overflows grid_w={grid_w}");
+      assert!(y + ph_h <= grid_h, "y={y} overflows grid_h={grid_h}");
+    }
+  }
+
+  #[test]
+  fn actived_pos_forward_first_step_is_origin() {
+    let calc = make_calc();
+    calc.grid_width.store(10, Ordering::Relaxed);
+
+    let v = calc.calculate_actived_pos(0, 0, 0, 4, 2);
+    assert_eq!(v, Vec2::new(0, 0));
+  }
+
+  #[test]
+  fn actived_pos_forward_wraps_to_second_row() {
+    let calc = make_calc();
+    calc.grid_width.store(10, Ordering::Relaxed);
+    // w=4, h=2 → total=8; pos=4 → linear=4, x=4%4=0, y=4/4=1
+    let v = calc.calculate_actived_pos(4, 0, 0, 4, 2);
+    assert_eq!(v, Vec2::new(0, 1));
+  }
+
+  #[test]
+  fn actived_pos_forward_wraps_back_after_full_cycle() {
+    let calc = make_calc();
+    calc.grid_width.store(10, Ordering::Relaxed);
+    // w=4, h=2 → total=8; pos=8 → linear=0
+    let v = calc.calculate_actived_pos(8, 0, 0, 4, 2);
+    assert_eq!(v, Vec2::new(0, 0));
+  }
+
+  #[test]
+  fn actived_pos_reverse_first_step_is_last_cell() {
+    let calc = make_calc();
+    calc.grid_width.store(10, Ordering::Relaxed);
+    *calc.movement.lock().unwrap() = Movement::Reverse;
+    // w=4, h=1 → total=4; pos=0 → reverse_linear=3, x=3, y=0
+    let v = calc.calculate_actived_pos(0, 0, 0, 4, 1);
+    assert_eq!(v, Vec2::new(3, 0));
+  }
+
+  #[test]
+  fn distance_returns_default_for_random_movement() {
+    let calc = make_calc();
+    calc.grid_width.store(10, Ordering::Relaxed);
+    *calc.movement.lock().unwrap() = Movement::Random;
+
+    let d = calc.find_distance_to_next_trigger(5, 0, 0, 4, 4);
+    assert_eq!(d, 4);
+  }
+
+  #[test]
+  fn distance_returns_default_when_no_matcher() {
+    let calc = make_calc();
+    calc.grid_width.store(10, Ordering::Relaxed);
+    // text_matcher is None by default
+
+    let d = calc.find_distance_to_next_trigger(5, 0, 0, 4, 4);
+    assert_eq!(d, 4);
+  }
+
+  #[test]
+  fn distance_returns_default_when_no_triggers_in_area() {
+    let calc = make_calc();
+    calc.grid_width.store(10, Ordering::Relaxed);
+    // Trigger at index 50 is outside the 0,0 area of size 3x1
+    let mut map = HashMap::new();
+    map.insert(50, Match::make_test(50, 1));
+    *calc.text_matcher.lock().unwrap() = Some(map);
+
+    let d = calc.find_distance_to_next_trigger(0, 0, 0, 3, 1);
+    assert_eq!(d, 4);
+  }
+
+  #[test]
+  fn distance_forward_to_next_trigger() {
+    // grid_width=10, area x=0,y=0 w=10 h=1 → row 0
+    // curr_pos=2, trigger at index 5 → distance = 3
+    let calc = make_calc();
+    calc.grid_width.store(10, Ordering::Relaxed);
+    let mut map = HashMap::new();
+    map.insert(5, Match::make_test(5, 1));
+    *calc.text_matcher.lock().unwrap() = Some(map);
+
+    let d = calc.find_distance_to_next_trigger(2, 0, 0, 10, 1);
+    assert_eq!(d, 3);
+  }
+
+  #[test]
+  fn distance_forward_when_at_trigger_points_to_next() {
+    // curr_pos=5 (at trigger), next trigger at 8 → distance = 3
+    let calc = make_calc();
+    calc.grid_width.store(10, Ordering::Relaxed);
+    let mut map = HashMap::new();
+    map.insert(5, Match::make_test(5, 1));
+    map.insert(8, Match::make_test(8, 1));
+    *calc.text_matcher.lock().unwrap() = Some(map);
+
+    let d = calc.find_distance_to_next_trigger(5, 0, 0, 10, 1);
+    assert_eq!(d, 3);
+  }
+
+  #[test]
+  fn distance_forward_no_trigger_ahead_returns_distance_to_edge() {
+    // area: x=0,y=0 w=6 h=1; curr_pos=4, trigger only at 2 (behind) → edge = 6-4=2
+    let calc = make_calc();
+    calc.grid_width.store(10, Ordering::Relaxed);
+    let mut map = HashMap::new();
+    map.insert(2, Match::make_test(2, 1));
+    *calc.text_matcher.lock().unwrap() = Some(map);
+
+    let d = calc.find_distance_to_next_trigger(4, 0, 0, 6, 1);
+    assert_eq!(d, 2); // (0+6) - 4 = 2
+  }
+
+  #[test]
+  fn distance_reverse_to_previous_trigger() {
+    // curr_pos=7, trigger at 4 → distance = 3
+    let calc = make_calc();
+    calc.grid_width.store(10, Ordering::Relaxed);
+    *calc.movement.lock().unwrap() = Movement::Reverse;
+    let mut map = HashMap::new();
+    map.insert(4, Match::make_test(4, 1));
+    *calc.text_matcher.lock().unwrap() = Some(map);
+
+    let d = calc.find_distance_to_next_trigger(7, 0, 0, 10, 1);
+    assert_eq!(d, 3);
+  }
+
+  #[test]
+  fn distance_clamps_to_1_minimum() {
+    // trigger is at same position as curr_pos (forward, Ok(i) → next_idx i+1, no next trigger)
+    // edge = 6 - 5 = 1
+    let calc = make_calc();
+    calc.grid_width.store(10, Ordering::Relaxed);
+    let mut map = HashMap::new();
+    map.insert(5, Match::make_test(5, 1));
+    *calc.text_matcher.lock().unwrap() = Some(map);
+
+    let d = calc.find_distance_to_next_trigger(5, 0, 0, 6, 1);
+    assert!(d >= 1, "distance must be at least 1, got {d}");
+  }
+}

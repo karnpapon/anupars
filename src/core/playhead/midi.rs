@@ -10,10 +10,6 @@ use crate::core::playhead::tilt::TiltMode;
 use crate::core::playhead::types::SweepRowMode;
 use crate::core::{consts, engine::regex::Match, io::midi, tonal::scale};
 
-// ============================================================================
-// MIDI Helper Functions
-// ============================================================================
-
 /// Calculate MIDI channel based on grid splits and position
 pub fn calculate_channel(
   abs_x: usize,
@@ -43,10 +39,6 @@ pub fn calculate_velocity(abs_y: usize, grid_height: usize, max_vel: f32, min_ve
     .round()
     .max(min_vel) as u8
 }
-
-// ============================================================================
-// MIDI Trigger Handler
-// ============================================================================
 
 pub struct MidiTriggerHandler {
   pub midi_tx: Sender<midi::Message>,
@@ -335,10 +327,6 @@ impl MidiTriggerHandler {
     }
   }
 
-  // ============================================================================
-  // Event Operators (r, c, h)
-  // ============================================================================
-
   /// Hold operation - sets flag to hold next note
   pub fn h_op(&self) {
     self.hold_next_note.store(true, Ordering::Relaxed);
@@ -513,5 +501,120 @@ impl MidiTriggerHandler {
         }
       })
       .expect("Failed to spawn chord-note-off thread");
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::{calculate_channel, calculate_velocity};
+
+  #[test]
+  fn channel_no_splits_is_always_zero() {
+    assert_eq!(calculate_channel(0, 0, 8, 8, 1, 1), 0);
+    assert_eq!(calculate_channel(7, 7, 8, 8, 1, 1), 0);
+    assert_eq!(calculate_channel(3, 5, 8, 8, 1, 1), 0);
+  }
+
+  #[test]
+  fn channel_two_vertical_splits_left_right() {
+    assert_eq!(calculate_channel(0, 0, 8, 8, 2, 1), 0);
+    assert_eq!(calculate_channel(3, 0, 8, 8, 2, 1), 0);
+    assert_eq!(calculate_channel(4, 0, 8, 8, 2, 1), 1);
+    assert_eq!(calculate_channel(7, 0, 8, 8, 2, 1), 1);
+  }
+
+  #[test]
+  fn channel_two_horizontal_splits_top_bottom() {
+    assert_eq!(calculate_channel(0, 0, 8, 8, 1, 2), 0);
+    assert_eq!(calculate_channel(0, 3, 8, 8, 1, 2), 0);
+    assert_eq!(calculate_channel(0, 4, 8, 8, 1, 2), 1);
+    assert_eq!(calculate_channel(0, 7, 8, 8, 1, 2), 1);
+  }
+
+  #[test]
+  fn channel_two_by_two_splits_four_quadrants() {
+    assert_eq!(calculate_channel(0, 0, 8, 8, 2, 2), 0);
+    assert_eq!(calculate_channel(4, 0, 8, 8, 2, 2), 1);
+    assert_eq!(calculate_channel(0, 4, 8, 8, 2, 2), 2);
+    assert_eq!(calculate_channel(4, 4, 8, 8, 2, 2), 3);
+  }
+
+  #[test]
+  fn channel_position_exactly_on_split_boundary() {
+    let col_w = 10;
+    let grid_w = 20;
+    assert_eq!(calculate_channel(col_w, 0, grid_w, 8, 2, 1), 1);
+    assert_eq!(calculate_channel(col_w - 1, 0, grid_w, 8, 2, 1), 0);
+  }
+
+  #[test]
+  fn channel_out_of_bounds_position_is_clamped_not_panicked() {
+    let ch = calculate_channel(999, 999, 8, 8, 2, 2);
+    assert!(ch <= 3, "expected channel <= 3, got {ch}");
+  }
+
+  #[test]
+  fn channel_zero_grid_dimensions_does_not_panic() {
+    let ch = calculate_channel(0, 0, 0, 0, 1, 1);
+    assert_eq!(ch, 0);
+  }
+
+  #[test]
+  fn channel_zero_splits_treated_as_one() {
+    assert_eq!(calculate_channel(5, 5, 8, 8, 0, 0), 0);
+  }
+
+  #[test]
+  fn velocity_top_row_returns_max() {
+    let v = calculate_velocity(0, 8, 100.0, 10.0);
+    assert_eq!(v, 100);
+  }
+
+  #[test]
+  fn velocity_bottom_row_approaches_min() {
+    let v = calculate_velocity(7, 8, 100.0, 10.0);
+
+    assert!(v >= 10, "velocity {v} must be >= min_vel 10");
+    assert!(v <= 100, "velocity {v} must be <= max_vel 100");
+  }
+
+  #[test]
+  fn velocity_zero_grid_height_returns_default_64() {
+    let v = calculate_velocity(0, 0, 100.0, 10.0);
+    assert_eq!(v, 64);
+  }
+
+  #[test]
+  fn velocity_always_within_min_max_range() {
+    for y in 0..16_usize {
+      let v = calculate_velocity(y, 16, 100.0, 10.0);
+      assert!(
+        (10..=100).contains(&v),
+        "y={y} produced velocity {v} outside [10, 100]"
+      );
+    }
+  }
+
+  #[test]
+  fn velocity_decreases_monotonically_with_depth() {
+    let grid_h = 16;
+    let mut prev = calculate_velocity(0, grid_h, 100.0, 10.0);
+    for y in 1..grid_h {
+      let curr = calculate_velocity(y, grid_h, 100.0, 10.0);
+      assert!(
+        curr <= prev,
+        "velocity increased from y={} (v={prev}) to y={y} (v={curr})",
+        y - 1
+      );
+      prev = curr;
+    }
+  }
+
+  #[test]
+  fn velocity_equal_min_max_returns_that_value() {
+    for y in 0..8 {
+      let v = calculate_velocity(y, 8, 64.0, 64.0);
+      assert_eq!(v, 64, "y={y} should give exactly 64 when min==max");
+    }
   }
 }

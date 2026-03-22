@@ -346,3 +346,64 @@ impl Playhead {
       .unwrap();
   }
 }
+
+#[cfg(test)]
+mod tests {
+  use super::super::movement::Movement;
+  use super::super::test_helpers::make_playhead;
+  use crate::view::rect::Rect;
+  use cursive::Vec2;
+  use std::sync::atomic::Ordering;
+
+  #[test]
+  fn going_forward_for_forward_movement() {
+    let ph = make_playhead();
+    *ph.movement.lock().unwrap() = Movement::Forward;
+    assert!(ph.is_going_forward());
+  }
+
+  #[test]
+  fn not_going_forward_for_reverse_movement() {
+    let ph = make_playhead();
+    *ph.movement.lock().unwrap() = Movement::Reverse;
+    assert!(!ph.is_going_forward());
+  }
+
+  #[test]
+  fn pendulum_first_half_is_forward_second_half_is_backward() {
+    let ph = make_playhead();
+    *ph.movement.lock().unwrap() = Movement::Pendulum;
+    *ph.area.lock().unwrap() = Rect::from_size(Vec2::zero(), (4, 1));
+
+    *ph.step_index.lock().unwrap() = 3;
+    assert!(ph.is_going_forward());
+
+    *ph.step_index.lock().unwrap() = 4;
+    assert!(!ph.is_going_forward());
+  }
+
+  #[test]
+  fn mode_string_all_off_is_lowercase() {
+    let ph = make_playhead();
+    let s = ph.build_mode_status_string();
+    assert!(s.chars().all(|c| !c.is_uppercase()), "got: {s}");
+  }
+
+  #[test]
+  fn mode_string_arpeggiator_on_shows_uppercase_a() {
+    let ph = make_playhead();
+    ph.modes.arpeggiator_mode.store(true, Ordering::Relaxed);
+    let s = ph.build_mode_status_string();
+    assert!(s.contains('A'), "expected uppercase A in: {s}");
+  }
+
+  #[test]
+  fn mode_string_multiple_modes_reflected() {
+    let ph = make_playhead();
+    ph.modes.accumulation_mode.store(true, Ordering::Relaxed);
+    ph.modes.sweep_mode.store(true, Ordering::Relaxed);
+    let s = ph.build_mode_status_string();
+    assert!(s.contains('U'), "accumulation (U) missing in: {s}");
+    assert!(s.contains('S'), "sweep (S) missing in: {s}");
+  }
+}
