@@ -177,6 +177,7 @@ pub enum Message {
   UpdateAim(Direction, XY<usize>, usize),
   CommitAim(),
   CancelAim(),
+  ToggleSpatialKeyboard(),
 }
 
 /// Grid and layout state shared across playhead subsystems.
@@ -204,6 +205,7 @@ pub struct MusicState {
   pub scale_mode_left: Arc<Mutex<scale::ScaleMode>>,
   pub scale_mode_top: Arc<Mutex<scale::ScaleMode>>,
   pub scale_root_top: Arc<Mutex<scale::ScaleRoot>>,
+  pub scale_root_left: Arc<Mutex<scale::ScaleRoot>>,
   pub ratio: Arc<Mutex<(usize, usize)>>,
 }
 
@@ -214,6 +216,7 @@ impl MusicState {
       scale_mode_left: Arc::new(Mutex::new(scale::ScaleMode::default())),
       scale_mode_top: Arc::new(Mutex::new(scale::ScaleMode::default())),
       scale_root_top: Arc::new(Mutex::new(scale::ScaleRoot::default())),
+      scale_root_left: Arc::new(Mutex::new(scale::ScaleRoot::default())),
       ratio: Arc::new(Mutex::new(consts::DEFAULT_RATIO)),
     }
   }
@@ -229,6 +232,9 @@ pub struct ModeFlags {
   pub freeze_mode: Arc<AtomicBool>,
   pub hold_next_note: Arc<AtomicBool>,
   pub is_ratcheting: Arc<AtomicBool>,
+  /// When true the top keyboard (scale_mode_top / scale_root_top) is active;
+  /// when false the left keyboard (scale_mode_left / scale_root_left) is active.
+  pub keyboard_top_active: Arc<AtomicBool>,
 }
 
 impl ModeFlags {
@@ -242,6 +248,7 @@ impl ModeFlags {
       freeze_mode: Arc::new(AtomicBool::new(false)),
       hold_next_note: Arc::new(AtomicBool::new(false)),
       is_ratcheting: Arc::new(AtomicBool::new(false)),
+      keyboard_top_active: Arc::new(AtomicBool::new(true)),
     }
   }
 }

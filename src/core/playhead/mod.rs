@@ -124,6 +124,8 @@ impl Playhead {
       Arc::clone(&music.scale_mode_top),
       Arc::clone(&music.scale_mode_left),
       Arc::clone(&music.scale_root_top),
+      Arc::clone(&music.scale_root_left),
+      Arc::clone(&modes.keyboard_top_active),
       Arc::clone(&prev_active_pos),
       Arc::clone(&modes.hold_next_note),
       Arc::clone(&modes.is_ratcheting),
@@ -448,6 +450,13 @@ impl Playhead {
             }
             Message::CancelAim() => {
               self.handle_cancel_aim();
+            }
+            Message::ToggleSpatialKeyboard() => {
+              let prev = self.modes.keyboard_top_active.load(Ordering::Relaxed);
+              self
+                .modes
+                .keyboard_top_active
+                .store(!prev, Ordering::Relaxed);
             }
           }
         }

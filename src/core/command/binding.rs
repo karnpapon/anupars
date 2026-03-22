@@ -39,6 +39,7 @@ fn default_keybindings() -> HashMap<String, Vec<Command>> {
   kb.insert("Shift+Underscore".into(), vec![Command::ChangeScaleMode(Adjustment::Decrease)]);
   kb.insert("Equal".into(), vec![Command::ChangeRootNote(Adjustment::Increase)]);
   kb.insert("Minus".into(), vec![Command::ChangeRootNote(Adjustment::Decrease)]);
+  kb.insert("Shift+~".into(), vec![Command::ToggleSpatialKeyboard]);
   kb
 }
 

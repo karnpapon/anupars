@@ -1,4 +1,5 @@
 use std::sync::atomic::Ordering;
+use std::sync::Arc;
 
 use cursive::views::{Canvas, TextView};
 
@@ -11,10 +12,8 @@ use super::Playhead;
 
 impl Playhead {
   pub fn cycle_scale_root(&self, dir: types::Adjustment) {
-    let mut root = self.music.scale_root_top.lock().unwrap();
-    *root = root.cycle(dir);
-    let new_root = *root;
-    drop(root);
+    let root_top = Arc::clone(&self.music.scale_root_top);
+    let root_left = Arc::clone(&self.music.scale_root_left);
 
     let cb_sink = self.cb_sink.clone();
     cb_sink
@@ -23,7 +22,15 @@ impl Playhead {
           consts::canvas_editor_section_view,
           |canvas: &mut Canvas<GridEditor>| {
             let editor = canvas.state_mut();
-            editor.scale_root_top = new_root;
+            if editor.keyboard_top_active {
+              let mut root = root_top.lock().unwrap();
+              *root = root.cycle(dir);
+              editor.scale_root_top = *root;
+            } else {
+              let mut root = root_left.lock().unwrap();
+              *root = root.cycle(dir);
+              editor.scale_root_left = *root;
+            }
           },
         );
       }))
@@ -31,10 +38,8 @@ impl Playhead {
   }
 
   pub fn cycle_scale_mode(&self, dir: types::Adjustment) {
-    let mut mode = self.music.scale_mode_top.lock().unwrap();
-    *mode = mode.cycle(dir);
-    let new_mode = *mode;
-    drop(mode);
+    let mode_top = Arc::clone(&self.music.scale_mode_top);
+    let mode_left = Arc::clone(&self.music.scale_mode_left);
 
     let cb_sink = self.cb_sink.clone();
     cb_sink
@@ -43,7 +48,15 @@ impl Playhead {
           consts::canvas_editor_section_view,
           |canvas: &mut Canvas<GridEditor>| {
             let editor = canvas.state_mut();
-            editor.scale_mode_top = new_mode;
+            if editor.keyboard_top_active {
+              let mut mode = mode_top.lock().unwrap();
+              *mode = mode.cycle(dir);
+              editor.scale_mode_top = *mode;
+            } else {
+              let mut mode = mode_left.lock().unwrap();
+              *mode = mode.cycle(dir);
+              editor.scale_mode_left = *mode;
+            }
           },
         );
       }))

@@ -48,6 +48,7 @@ pub struct GridEditor {
   pub scale_mode_left: scale::ScaleMode,
   pub scale_mode_top: scale::ScaleMode,
   pub scale_root_top: scale::ScaleRoot,
+  pub scale_root_left: scale::ScaleRoot,
   pub arpeggiator_mode: bool,
   pub accumulation_mode: bool,
   pub event_operator_mode: bool,
@@ -59,6 +60,7 @@ pub struct GridEditor {
   pub grid_h_splits: usize,
   pub is_canvas_focused: bool,
   pub is_aiming: bool,
+  pub keyboard_top_active: bool,
 }
 
 impl GridEditor {
@@ -73,6 +75,7 @@ impl GridEditor {
       scale_mode_left: scale::ScaleMode::default(),
       scale_mode_top: scale::ScaleMode::default(),
       scale_root_top: scale::ScaleRoot::default(),
+      scale_root_left: scale::ScaleRoot::default(),
       arpeggiator_mode: false,
       accumulation_mode: false,
       event_operator_mode: false,
@@ -84,6 +87,7 @@ impl GridEditor {
       grid_h_splits: 1,
       is_canvas_focused: false,
       is_aiming: false,
+      keyboard_top_active: true,
     }
   }
 
@@ -99,7 +103,7 @@ impl GridEditor {
       y,
       total_rows,
       BASE_OCTAVE,
-      self.scale_root_top.to_root_offset(),
+      self.scale_root_left.to_root_offset(),
     );
 
     (
@@ -720,15 +724,30 @@ fn draw(canvas: &GridEditor, printer: &Printer) {
 
     // Draw corner symbol where keyboards meet
     let root_note_top = canvas.scale_root_top;
-    let style = Style::from(ColorStyle::front(ColorType::rgb(100, 100, 100)));
-    printer.with_style(style, |printer| {
-      printer.print((0, 1), root_note_top.name());
-    });
+    // let style = Style::from(ColorStyle::front(ColorType::rgb(100, 100, 100)));
+    // printer.with_style(style, |printer| {
+    //   printer.print((0, 1), root_note_top.name());
+    // });
 
     let scale_mode_top = canvas.scale_mode_top;
+    let scale_mode_left = canvas.scale_mode_left;
+    let scale_root_left = canvas.scale_root_left;
     let style = Style::from(ColorStyle::front(ColorType::rgb(100, 100, 100)));
     printer.with_style(style, |printer| {
-      printer.print((0, 0), scale_mode_top.short_name());
+      printer.print(
+        (0, 0),
+        &format!("{} {}", scale_mode_top.short_name(), root_note_top.name()),
+      );
+    });
+    printer.with_style(style, |printer| {
+      printer.print(
+        (0, 2),
+        &format!(
+          "{} {}",
+          scale_mode_left.short_name(),
+          scale_root_left.name()
+        ),
+      );
     });
 
     let left_keyboard_printer = printer.offset((0, KEYBOARD_MARGIN_TOP));
@@ -826,14 +845,19 @@ fn draw(canvas: &GridEditor, printer: &Printer) {
 
   // Canvas focus indicator: shown at top-left margin (row 2, free space)
   if canvas.show_keyboard {
-    let (label, color) = if canvas.is_canvas_focused {
-      ("[  >  ]", ColorType::rgb(200, 200, 200))
+    let keyboard_label = if canvas.keyboard_top_active {
+      "[  \u{2227}  ]"
     } else {
-      ("[     ]", ColorType::rgb(40, 40, 40))
+      "[  \u{2228}  ]"
+    };
+    let color = if canvas.is_canvas_focused {
+      ColorType::rgb(200, 200, 200)
+    } else {
+      ColorType::rgb(40, 40, 40)
     };
     let style = Style::from(ColorStyle::front(color));
     printer.with_style(style, |printer| {
-      printer.print((0, 2), label);
+      printer.print((0, 1), keyboard_label);
     });
   }
 }

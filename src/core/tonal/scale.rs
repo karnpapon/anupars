@@ -169,22 +169,22 @@ impl ScaleMode {
 
   pub fn short_name(&self) -> &'static str {
     match self {
-      ScaleMode::Chromatic => "CHRMT",
-      ScaleMode::Major => "MAJOR",
-      ScaleMode::Minor => "MINOR",
-      ScaleMode::HarmonicMinor => "HARMNC",
-      ScaleMode::MelodicMinor => "MELODC",
-      ScaleMode::Dorian => "DORIAN",
-      ScaleMode::Phrygian => "PHRYGN",
-      ScaleMode::Lydian => "LYDIAN",
-      ScaleMode::Mixolydian => "MIXOLI",
-      ScaleMode::Locrian => "LOCRN",
-      ScaleMode::MajorPentatonic => "MJPTNC",
-      ScaleMode::MinorPentatonic => "MNPTNC",
-      ScaleMode::Blues => "BLUES",
-      ScaleMode::WholeTone => "WHOLE",
-      ScaleMode::Diminished => "DIMIN",
-      ScaleMode::Thai7Tet => "THAI7",
+      ScaleMode::Chromatic => "CHRM",
+      ScaleMode::Major => "MAJR",
+      ScaleMode::Minor => "MINR",
+      ScaleMode::HarmonicMinor => "HRMN",
+      ScaleMode::MelodicMinor => "MLOD",
+      ScaleMode::Dorian => "DRIA",
+      ScaleMode::Phrygian => "PHRY",
+      ScaleMode::Lydian => "LYDI",
+      ScaleMode::Mixolydian => "MIXO",
+      ScaleMode::Locrian => "LOCR",
+      ScaleMode::MajorPentatonic => "MJPT",
+      ScaleMode::MinorPentatonic => "MNPT",
+      ScaleMode::Blues => "BLUS",
+      ScaleMode::WholeTone => "WHOL",
+      ScaleMode::Diminished => "DIMI",
+      ScaleMode::Thai7Tet => "THA7",
     }
   }
 

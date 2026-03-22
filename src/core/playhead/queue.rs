@@ -8,10 +8,6 @@ use std::sync::{Arc, Mutex};
 
 use crate::core::consts;
 
-// ============================================================================
-// Queue Operator Types
-// ============================================================================
-
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum QueueOperator {
   Push,      // P
@@ -37,10 +33,6 @@ pub const QUEUE_OPERATORS: [QueueOperator; 4] = [
   QueueOperator::Pop,
   QueueOperator::Duplicate,
 ];
-
-// ============================================================================
-// Event Operator Types
-// ============================================================================
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum EventOperator {
@@ -72,10 +64,6 @@ impl EventOperator {
 pub const EVENT_OPERATORS: [EventOperator; 3] =
   [EventOperator::R, EventOperator::C, EventOperator::H];
 
-// ============================================================================
-// Pending Jump Position
-// ============================================================================
-
 /// Two-stage pending jump position:
 /// - `Waiting`, position was just popped; the *current* jump will still be random,
 ///   and it will be promoted to `Armed` afterwards.
@@ -86,10 +74,6 @@ pub enum PendingJumpPosition {
   Waiting(usize, usize),
   Armed(usize, usize),
 }
-
-// ============================================================================
-// Queue Item
-// ============================================================================
 
 /// Queue item that can be either a position or an event
 #[derive(Clone, Debug, PartialEq)]
@@ -106,11 +90,6 @@ impl fmt::Display for QueueItem {
     }
   }
 }
-
-// ============================================================================
-// Queue Manager
-// ============================================================================
-
 /// Manages operator queue, event queue, and pushed positions
 pub struct QueueManager {
   pub operator_queue: Arc<Mutex<ArrayVec<QueueItem, { consts::OP_QUEUE_CAPACITY }>>>,
@@ -146,10 +125,6 @@ impl QueueManager {
     self.pushed_positions.lock().unwrap().clear();
     *self.pending_jump_position.lock().unwrap() = PendingJumpPosition::Empty;
   }
-
-  // ============================================================================
-  // Operator Execution
-  // ============================================================================
 
   pub fn check_and_execute_operators(&self, abs_x: usize, event_operator_mode: bool) {
     let is_space = abs_x.is_multiple_of(consts::EVENT_OP_SPACING);
@@ -204,10 +179,6 @@ impl QueueManager {
       EventOperator::H => self.handle_h(),
     }
   }
-
-  // ============================================================================
-  // Queue Operations
-  // ============================================================================
 
   pub fn handle_push(&self, current_pos: (usize, usize)) {
     // Check event queue first (FIFO)
@@ -275,10 +246,6 @@ impl QueueManager {
     drop(queue);
   }
 
-  // ============================================================================
-  // Event Operations
-  // ============================================================================
-
   fn handle_r(&self) {
     let mut event_queue = self.event_queue.lock().unwrap();
     event_queue.enqueue(EventOperator::R);
@@ -296,10 +263,6 @@ impl QueueManager {
     event_queue.enqueue(EventOperator::C);
     drop(event_queue);
   }
-
-  // ============================================================================
-  // Queue Inspection
-  // ============================================================================
 
   pub fn get_front_item(&self) -> Option<QueueItem> {
     self.operator_queue.lock().unwrap().first().cloned()

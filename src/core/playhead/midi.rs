@@ -50,6 +50,8 @@ pub struct MidiTriggerHandler {
   pub scale_mode_top: Arc<Mutex<scale::ScaleMode>>,
   pub scale_mode_left: Arc<Mutex<scale::ScaleMode>>,
   pub scale_root_top: Arc<Mutex<scale::ScaleRoot>>,
+  pub scale_root_left: Arc<Mutex<scale::ScaleRoot>>,
+  pub keyboard_top_active: Arc<AtomicBool>,
   pub prev_active_pos: Arc<Mutex<Vec2>>,
   pub hold_next_note: Arc<AtomicBool>,
   pub is_ratcheting: Arc<AtomicBool>,
@@ -77,6 +79,8 @@ impl MidiTriggerHandler {
     scale_mode_top: Arc<Mutex<scale::ScaleMode>>,
     scale_mode_left: Arc<Mutex<scale::ScaleMode>>,
     scale_root_top: Arc<Mutex<scale::ScaleRoot>>,
+    scale_root_left: Arc<Mutex<scale::ScaleRoot>>,
+    keyboard_top_active: Arc<AtomicBool>,
     prev_active_pos: Arc<Mutex<Vec2>>,
     hold_next_note: Arc<AtomicBool>,
     is_ratcheting: Arc<AtomicBool>,
@@ -100,6 +104,8 @@ impl MidiTriggerHandler {
       scale_mode_top,
       scale_mode_left,
       scale_root_top,
+      scale_root_left,
+      keyboard_top_active,
       prev_active_pos,
       hold_next_note,
       is_ratcheting,
@@ -127,12 +133,22 @@ impl MidiTriggerHandler {
     drop(prev_active);
 
     let grid_height = self.grid_height.load(Ordering::Relaxed);
-    let pos = if grid_height > 0 {
-      abs_x % grid_height
+    let scale = if self.keyboard_top_active.load(Ordering::Relaxed) {
+      *self.scale_mode_top.lock().unwrap()
+    } else {
+      *self.scale_mode_left.lock().unwrap()
+    };
+    // Top keyboard: notes vary along the x-axis (horizontal layout).
+    // Left keyboard: notes vary along the y-axis (vertical layout).
+    let pos = if self.keyboard_top_active.load(Ordering::Relaxed) {
+      if grid_height > 0 {
+        abs_x % grid_height
+      } else {
+        abs_x
+      }
     } else {
       abs_y
     };
-    let scale = *self.scale_mode_top.lock().unwrap();
     (pos, scale)
   }
 
@@ -162,7 +178,11 @@ impl MidiTriggerHandler {
         grid_v_splits: self.grid_v_splits.load(Ordering::Relaxed),
         grid_h_splits: self.grid_h_splits.load(Ordering::Relaxed),
         scale_mode,
-        scale_root_offset: self.scale_root_top.lock().unwrap().to_root_offset(),
+        scale_root_offset: if self.keyboard_top_active.load(Ordering::Relaxed) {
+          self.scale_root_top.lock().unwrap().to_root_offset()
+        } else {
+          self.scale_root_left.lock().unwrap().to_root_offset()
+        },
         bpm: current_tempo,
         trigger_pos_y: abs_y,
         active_pos_y: abs_y,
@@ -246,6 +266,12 @@ impl MidiTriggerHandler {
     let grid_width = self.grid_width.load(Ordering::Relaxed);
     let grid_height = self.grid_height.load(Ordering::Relaxed);
     let current_tempo = self.tempo.load(Ordering::Relaxed);
+    // Sweep always uses the top keyboard regardless of keyboard_top_active.
+    // let x_scale_mode = if self.keyboard_top_active.load(Ordering::Relaxed) {
+    //   *self.scale_mode_top.lock().unwrap()
+    // } else {
+    //   *self.scale_mode_left.lock().unwrap()
+    // };
     let x_scale_mode = *self.scale_mode_top.lock().unwrap();
 
     // Precompute tilt sweep geometry (mirrors printer.rs logic)
@@ -302,13 +328,32 @@ impl MidiTriggerHandler {
     // Send one TriggerWithPosition per matched cell so each uses the correct
     // tilt-adjusted x_position → correct MIDI channel via calculate_channel.
     let default_length = 4;
+    // Sweep always uses the top keyboard regardless of keyboard_top_active.
+    // let scale_root_offset = if self.keyboard_top_active.load(Ordering::Relaxed) {
+    //   self.scale_root_top.lock().unwrap().to_root_offset()
+    // } else {
+    //   self.scale_root_left.lock().unwrap().to_root_offset()
+    // };
     let scale_root_offset = self.scale_root_top.lock().unwrap().to_root_offset();
     let div = self.ratio.lock().unwrap().1;
+    // Sweep always uses x-axis (top keyboard) for note position.
+    // let top_active = self.keyboard_top_active.load(Ordering::Relaxed);
     for (y, tilt_x) in matched {
+      // Top keyboard: note varies by x-axis position; left keyboard: note varies by y-axis.
+      // let note_pos = if top_active {
+      //   if grid_height > 0 { tilt_x % grid_height } else { tilt_x }
+      // } else {
+      //   y
+      // };
+      let note_pos = if grid_height > 0 {
+        tilt_x % grid_height
+      } else {
+        tilt_x
+      };
       let _ = self
         .midi_tx
         .send(midi::Message::TriggerWithPosition(midi::TriggerParams {
-          y_position: y,
+          y_position: note_pos,
           grid_height,
           x_position: tilt_x,
           grid_width,
@@ -334,8 +379,16 @@ impl MidiTriggerHandler {
 
   /// Ratchet operation - rapid retriggering with velocity decay
   pub fn r_op(&self, abs_x: usize, abs_y: usize) {
-    let scale_mode = *self.scale_mode_top.lock().unwrap();
-    let scale_root_offset = self.scale_root_top.lock().unwrap().to_root_offset();
+    let scale_mode = if self.keyboard_top_active.load(Ordering::Relaxed) {
+      *self.scale_mode_top.lock().unwrap()
+    } else {
+      *self.scale_mode_left.lock().unwrap()
+    };
+    let scale_root_offset = if self.keyboard_top_active.load(Ordering::Relaxed) {
+      self.scale_root_top.lock().unwrap().to_root_offset()
+    } else {
+      self.scale_root_left.lock().unwrap().to_root_offset()
+    };
     let grid_height = self.grid_height.load(Ordering::Relaxed);
     let grid_width = self.grid_width.load(Ordering::Relaxed);
 
@@ -343,7 +396,11 @@ impl MidiTriggerHandler {
       return;
     }
 
-    let note_position = abs_x % grid_height;
+    let note_position = if self.keyboard_top_active.load(Ordering::Relaxed) {
+      abs_x % grid_height
+    } else {
+      abs_y
+    };
     let (note_index, octave) = scale_mode.pos_to_scale_note(
       note_position,
       grid_height,
@@ -416,15 +473,27 @@ impl MidiTriggerHandler {
 
   /// Chord operation - trigger triad (root, third, fifth)
   pub fn c_op(&self, abs_x: usize, abs_y: usize, distance_to_next: usize) {
-    let scale_mode = *self.scale_mode_top.lock().unwrap();
-    let scale_root_offset = self.scale_root_top.lock().unwrap().to_root_offset();
+    let scale_mode = if self.keyboard_top_active.load(Ordering::Relaxed) {
+      *self.scale_mode_top.lock().unwrap()
+    } else {
+      *self.scale_mode_left.lock().unwrap()
+    };
+    let scale_root_offset = if self.keyboard_top_active.load(Ordering::Relaxed) {
+      self.scale_root_top.lock().unwrap().to_root_offset()
+    } else {
+      self.scale_root_left.lock().unwrap().to_root_offset()
+    };
     let grid_height = self.grid_height.load(Ordering::Relaxed);
 
     if grid_height == 0 {
       return;
     }
 
-    let note_position = abs_x % grid_height;
+    let note_position = if self.keyboard_top_active.load(Ordering::Relaxed) {
+      abs_x % grid_height
+    } else {
+      abs_y
+    };
 
     // Get the base note
     let (_base_note_index, base_octave) = scale_mode.pos_to_scale_note(

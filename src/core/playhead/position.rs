@@ -8,10 +8,6 @@ use super::movement;
 use crate::core::engine::regex::Match;
 use crate::core::playhead::movement::Movement;
 
-// ============================================================================
-// Position Calculator
-// ============================================================================
-
 /// Helper struct for position calculations
 pub struct PositionCalculator {
   pub grid_width: Arc<AtomicUsize>,

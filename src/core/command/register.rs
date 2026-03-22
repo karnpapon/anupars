@@ -309,6 +309,20 @@ impl CommandManager {
           .unwrap();
         Ok(None)
       }
+      Command::ToggleSpatialKeyboard => {
+        s.call_on_name(
+          consts::canvas_editor_section_view,
+          |canvas: &mut Canvas<GridEditor>| {
+            let editor = canvas.state_mut();
+            editor.keyboard_top_active = !editor.keyboard_top_active;
+          },
+        );
+        self
+          .playhead_tx_cloned
+          .send(playhead::Message::ToggleSpatialKeyboard())
+          .unwrap();
+        Ok(None)
+      }
     }
   }
 
