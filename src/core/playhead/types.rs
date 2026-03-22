@@ -181,6 +181,7 @@ pub enum Message {
 }
 
 /// Grid and layout state shared across playhead subsystems.
+#[derive(Clone)]
 pub struct GridState {
   pub width: Arc<AtomicUsize>,
   pub height: Arc<AtomicUsize>,
@@ -200,6 +201,7 @@ impl GridState {
 }
 
 /// Musical parameters and scale configuration shared across playhead subsystems.
+#[derive(Clone)]
 pub struct MusicState {
   pub tempo: Arc<AtomicUsize>,
   pub scale_mode_left: Arc<Mutex<scale::ScaleMode>>,
@@ -223,6 +225,7 @@ impl MusicState {
 }
 
 /// Boolean operation mode flags shared across playhead subsystems.
+#[derive(Clone)]
 pub struct ModeFlags {
   pub accumulation_mode: Arc<AtomicBool>,
   pub arpeggiator_mode: Arc<AtomicBool>,

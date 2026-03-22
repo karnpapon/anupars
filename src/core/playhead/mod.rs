@@ -37,6 +37,7 @@ pub mod test_helpers;
 
 pub use types::{Direction, GridState, Message, ModeFlags, MusicState, PlayheadUI, UIUpdate};
 
+use self::midi::MidiHandlerConfig;
 use self::midi::MidiTriggerHandler;
 use self::movement::Movement;
 use self::position::PositionCalculator;
@@ -115,29 +116,18 @@ impl Playhead {
     let aimed_area = Arc::new(Mutex::new(None));
 
     let midi_handler = Arc::new(MidiTriggerHandler::new(
-      midi_tx.clone(),
-      Arc::clone(&grid.width),
-      Arc::clone(&grid.height),
-      Arc::clone(&grid.v_splits),
-      Arc::clone(&grid.h_splits),
-      Arc::clone(&music.tempo),
-      Arc::clone(&music.scale_mode_top),
-      Arc::clone(&music.scale_mode_left),
-      Arc::clone(&music.scale_root_top),
-      Arc::clone(&music.scale_root_left),
-      Arc::clone(&modes.keyboard_top_active),
-      Arc::clone(&prev_active_pos),
-      Arc::clone(&modes.hold_next_note),
-      Arc::clone(&modes.is_ratcheting),
-      Arc::clone(&ratchet_generation),
-      Arc::clone(&position_calc.text_matcher),
-      Arc::clone(&modes.sweep_mode),
-      Arc::clone(&modes.dyn_length_mode),
-      Arc::clone(&modes.arpeggiator_mode),
-      Arc::clone(&tilt_mode),
-      Arc::clone(&pos),
-      Arc::clone(&music.ratio),
-      Arc::clone(&sweep_row_mode),
+      MidiHandlerConfig {
+        midi_tx: midi_tx.clone(),
+        prev_active_pos: Arc::clone(&prev_active_pos),
+        ratchet_generation: Arc::clone(&ratchet_generation),
+        text_matcher: Arc::clone(&position_calc.text_matcher),
+        tilt_mode: Arc::clone(&tilt_mode),
+        playhead_pos: Arc::clone(&pos),
+        sweep_row_mode: Arc::clone(&sweep_row_mode),
+      },
+      &grid,
+      &music,
+      &modes,
     ));
 
     Playhead {

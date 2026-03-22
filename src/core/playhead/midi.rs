@@ -1,12 +1,15 @@
 use cursive::Vec2;
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::mpsc::Sender;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 
 use crate::core::playhead::tilt::TiltMode;
+use crate::core::playhead::types::GridState;
+use crate::core::playhead::types::ModeFlags;
+use crate::core::playhead::types::MusicState;
 use crate::core::playhead::types::SweepRowMode;
 use crate::core::{consts, engine::regex::Match, io::midi, tonal::scale};
 
@@ -40,84 +43,47 @@ pub fn calculate_velocity(abs_y: usize, grid_height: usize, max_vel: f32, min_ve
     .max(min_vel) as u8
 }
 
-pub struct MidiTriggerHandler {
+pub struct MidiHandlerConfig {
   pub midi_tx: Sender<midi::Message>,
-  pub grid_width: Arc<AtomicUsize>,
-  pub grid_height: Arc<AtomicUsize>,
-  pub grid_v_splits: Arc<AtomicUsize>,
-  pub grid_h_splits: Arc<AtomicUsize>,
-  pub tempo: Arc<AtomicUsize>,
-  pub scale_mode_top: Arc<Mutex<scale::ScaleMode>>,
-  pub scale_mode_left: Arc<Mutex<scale::ScaleMode>>,
-  pub scale_root_top: Arc<Mutex<scale::ScaleRoot>>,
-  pub scale_root_left: Arc<Mutex<scale::ScaleRoot>>,
-  pub keyboard_top_active: Arc<AtomicBool>,
   pub prev_active_pos: Arc<Mutex<Vec2>>,
-  pub hold_next_note: Arc<AtomicBool>,
-  pub is_ratcheting: Arc<AtomicBool>,
   pub ratchet_generation: Arc<AtomicUsize>,
   pub text_matcher: Arc<Mutex<Option<HashMap<usize, Match>>>>,
-  pub sweep_mode: Arc<AtomicBool>,
-  pub dyn_length_mode: Arc<AtomicBool>,
-  pub arpeggiator_mode: Arc<AtomicBool>,
   pub tilt_mode: Arc<Mutex<TiltMode>>,
   pub playhead_pos: Arc<Mutex<Vec2>>,
-  /// Current DIV ratio (ratio.1, e.g. 8, 16, 32, 64) for note-length capping.
-  pub ratio: Arc<Mutex<(usize, usize)>>,
+  pub sweep_row_mode: Arc<Mutex<SweepRowMode>>,
+}
+
+pub struct MidiTriggerHandler {
+  pub midi_tx: Sender<midi::Message>,
+  pub grid: GridState,
+  pub music: MusicState,
+  pub modes: ModeFlags,
+  pub prev_active_pos: Arc<Mutex<Vec2>>,
+  pub ratchet_generation: Arc<AtomicUsize>,
+  pub text_matcher: Arc<Mutex<Option<HashMap<usize, Match>>>>,
+  pub tilt_mode: Arc<Mutex<TiltMode>>,
+  pub playhead_pos: Arc<Mutex<Vec2>>,
   pub sweep_row_mode: Arc<Mutex<SweepRowMode>>,
 }
 
 impl MidiTriggerHandler {
-  #[allow(clippy::too_many_arguments)]
   pub fn new(
-    midi_tx: Sender<midi::Message>,
-    grid_width: Arc<AtomicUsize>,
-    grid_height: Arc<AtomicUsize>,
-    grid_v_splits: Arc<AtomicUsize>,
-    grid_h_splits: Arc<AtomicUsize>,
-    tempo: Arc<AtomicUsize>,
-    scale_mode_top: Arc<Mutex<scale::ScaleMode>>,
-    scale_mode_left: Arc<Mutex<scale::ScaleMode>>,
-    scale_root_top: Arc<Mutex<scale::ScaleRoot>>,
-    scale_root_left: Arc<Mutex<scale::ScaleRoot>>,
-    keyboard_top_active: Arc<AtomicBool>,
-    prev_active_pos: Arc<Mutex<Vec2>>,
-    hold_next_note: Arc<AtomicBool>,
-    is_ratcheting: Arc<AtomicBool>,
-    ratchet_generation: Arc<AtomicUsize>,
-    text_matcher: Arc<Mutex<Option<HashMap<usize, Match>>>>,
-    sweep_mode: Arc<AtomicBool>,
-    dyn_length_mode: Arc<AtomicBool>,
-    arpeggiator_mode: Arc<AtomicBool>,
-    tilt_mode: Arc<Mutex<TiltMode>>,
-    playhead_pos: Arc<Mutex<Vec2>>,
-    ratio: Arc<Mutex<(usize, usize)>>,
-    sweep_row_mode: Arc<Mutex<SweepRowMode>>,
+    config: MidiHandlerConfig,
+    grid: &GridState,
+    music: &MusicState,
+    modes: &ModeFlags,
   ) -> Self {
     MidiTriggerHandler {
-      midi_tx,
-      grid_width,
-      grid_height,
-      grid_v_splits,
-      grid_h_splits,
-      tempo,
-      scale_mode_top,
-      scale_mode_left,
-      scale_root_top,
-      scale_root_left,
-      keyboard_top_active,
-      prev_active_pos,
-      hold_next_note,
-      is_ratcheting,
-      ratchet_generation,
-      text_matcher,
-      sweep_mode,
-      dyn_length_mode,
-      arpeggiator_mode,
-      tilt_mode,
-      playhead_pos,
-      ratio,
-      sweep_row_mode,
+      midi_tx: config.midi_tx,
+      grid: grid.clone(),
+      music: music.clone(),
+      modes: modes.clone(),
+      prev_active_pos: config.prev_active_pos,
+      ratchet_generation: config.ratchet_generation,
+      text_matcher: config.text_matcher,
+      tilt_mode: config.tilt_mode,
+      playhead_pos: config.playhead_pos,
+      sweep_row_mode: config.sweep_row_mode,
     }
   }
 
@@ -132,15 +98,15 @@ impl MidiTriggerHandler {
     *prev_active = active_pos;
     drop(prev_active);
 
-    let grid_height = self.grid_height.load(Ordering::Relaxed);
-    let scale = if self.keyboard_top_active.load(Ordering::Relaxed) {
-      *self.scale_mode_top.lock().unwrap()
+    let grid_height = self.grid.height.load(Ordering::Relaxed);
+    let scale = if self.modes.keyboard_top_active.load(Ordering::Relaxed) {
+      *self.music.scale_mode_top.lock().unwrap()
     } else {
-      *self.scale_mode_left.lock().unwrap()
+      *self.music.scale_mode_left.lock().unwrap()
     };
     // Top keyboard: notes vary along the x-axis (horizontal layout).
     // Left keyboard: notes vary along the y-axis (vertical layout).
-    let pos = if self.keyboard_top_active.load(Ordering::Relaxed) {
+    let pos = if self.modes.keyboard_top_active.load(Ordering::Relaxed) {
       if grid_height > 0 {
         abs_x % grid_height
       } else {
@@ -162,11 +128,11 @@ impl MidiTriggerHandler {
     abs_y: usize,
     distance_to_next: usize,
   ) {
-    let grid_height = self.grid_height.load(Ordering::Relaxed);
-    let grid_width = self.grid_width.load(Ordering::Relaxed);
-    let current_tempo = self.tempo.load(Ordering::Relaxed);
-    let hold_next = self.hold_next_note.load(Ordering::Relaxed);
-    let div = self.ratio.lock().unwrap().1;
+    let grid_height = self.grid.height.load(Ordering::Relaxed);
+    let grid_width = self.grid.width.load(Ordering::Relaxed);
+    let current_tempo = self.music.tempo.load(Ordering::Relaxed);
+    let hold_next = self.modes.hold_next_note.load(Ordering::Relaxed);
+    let div = self.music.ratio.lock().unwrap().1;
 
     let _ = self
       .midi_tx
@@ -175,13 +141,13 @@ impl MidiTriggerHandler {
         grid_height,
         x_position: abs_x,
         grid_width,
-        grid_v_splits: self.grid_v_splits.load(Ordering::Relaxed),
-        grid_h_splits: self.grid_h_splits.load(Ordering::Relaxed),
+        grid_v_splits: self.grid.v_splits.load(Ordering::Relaxed),
+        grid_h_splits: self.grid.h_splits.load(Ordering::Relaxed),
         scale_mode,
-        scale_root_offset: if self.keyboard_top_active.load(Ordering::Relaxed) {
-          self.scale_root_top.lock().unwrap().to_root_offset()
+        scale_root_offset: if self.modes.keyboard_top_active.load(Ordering::Relaxed) {
+          self.music.scale_root_top.lock().unwrap().to_root_offset()
         } else {
-          self.scale_root_left.lock().unwrap().to_root_offset()
+          self.music.scale_root_left.lock().unwrap().to_root_offset()
         },
         bpm: current_tempo,
         trigger_pos_y: abs_y,
@@ -200,15 +166,15 @@ impl MidiTriggerHandler {
     abs_x: usize,
     area_right: usize,
   ) -> Vec<usize> {
-    if !self.sweep_mode.load(Ordering::Relaxed) {
+    if !self.modes.sweep_mode.load(Ordering::Relaxed) {
       return Vec::new();
     }
-    let grid_width = self.grid_width.load(Ordering::Relaxed);
-    let grid_height = self.grid_height.load(Ordering::Relaxed);
+    let grid_width = self.grid.width.load(Ordering::Relaxed);
+    let grid_height = self.grid.height.load(Ordering::Relaxed);
     let tilt_mode = *self.tilt_mode.lock().unwrap();
     let playhead_pos = *self.playhead_pos.lock().unwrap();
-    let v = self.grid_v_splits.load(Ordering::Relaxed).max(1);
-    let h = self.grid_h_splits.load(Ordering::Relaxed).max(1);
+    let v = self.grid.v_splits.load(Ordering::Relaxed).max(1);
+    let h = self.grid.h_splits.load(Ordering::Relaxed).max(1);
     let col_w = (grid_width / v).max(1);
     let row_h = (grid_height / h).max(1);
     let playhead_col = (playhead_pos.x / col_w).min(v.saturating_sub(1));
@@ -259,26 +225,20 @@ impl MidiTriggerHandler {
     active_pos_y: usize,
     area_right: usize,
   ) {
-    if !self.sweep_mode.load(Ordering::Relaxed) {
+    if !self.modes.sweep_mode.load(Ordering::Relaxed) {
       return;
     }
 
-    let grid_width = self.grid_width.load(Ordering::Relaxed);
-    let grid_height = self.grid_height.load(Ordering::Relaxed);
-    let current_tempo = self.tempo.load(Ordering::Relaxed);
-    // Sweep always uses the top keyboard regardless of keyboard_top_active.
-    // let x_scale_mode = if self.keyboard_top_active.load(Ordering::Relaxed) {
-    //   *self.scale_mode_top.lock().unwrap()
-    // } else {
-    //   *self.scale_mode_left.lock().unwrap()
-    // };
-    let x_scale_mode = *self.scale_mode_top.lock().unwrap();
+    let grid_width = self.grid.width.load(Ordering::Relaxed);
+    let grid_height = self.grid.height.load(Ordering::Relaxed);
+    let current_tempo = self.music.tempo.load(Ordering::Relaxed);
+    let x_scale_mode = *self.music.scale_mode_top.lock().unwrap();
 
     // Precompute tilt sweep geometry (mirrors printer.rs logic)
     let tilt_mode = *self.tilt_mode.lock().unwrap();
     let playhead_pos = *self.playhead_pos.lock().unwrap();
-    let v = self.grid_v_splits.load(Ordering::Relaxed).max(1);
-    let h = self.grid_h_splits.load(Ordering::Relaxed).max(1);
+    let v = self.grid.v_splits.load(Ordering::Relaxed).max(1);
+    let h = self.grid.h_splits.load(Ordering::Relaxed).max(1);
     let col_w = (grid_width / v).max(1);
     let row_h = (grid_height / h).max(1);
     let playhead_col = (playhead_pos.x / col_w).min(v.saturating_sub(1));
@@ -328,14 +288,8 @@ impl MidiTriggerHandler {
     // Send one TriggerWithPosition per matched cell so each uses the correct
     // tilt-adjusted x_position → correct MIDI channel via calculate_channel.
     let default_length = 4;
-    // Sweep always uses the top keyboard regardless of keyboard_top_active.
-    // let scale_root_offset = if self.keyboard_top_active.load(Ordering::Relaxed) {
-    //   self.scale_root_top.lock().unwrap().to_root_offset()
-    // } else {
-    //   self.scale_root_left.lock().unwrap().to_root_offset()
-    // };
-    let scale_root_offset = self.scale_root_top.lock().unwrap().to_root_offset();
-    let div = self.ratio.lock().unwrap().1;
+    let scale_root_offset = self.music.scale_root_top.lock().unwrap().to_root_offset();
+    let div = self.music.ratio.lock().unwrap().1;
     // Sweep always uses x-axis (top keyboard) for note position.
     // let top_active = self.keyboard_top_active.load(Ordering::Relaxed);
     for (y, tilt_x) in matched {
@@ -357,8 +311,8 @@ impl MidiTriggerHandler {
           grid_height,
           x_position: tilt_x,
           grid_width,
-          grid_v_splits: self.grid_v_splits.load(Ordering::Relaxed),
-          grid_h_splits: self.grid_h_splits.load(Ordering::Relaxed),
+          grid_v_splits: self.grid.v_splits.load(Ordering::Relaxed),
+          grid_h_splits: self.grid.h_splits.load(Ordering::Relaxed),
           scale_mode: x_scale_mode,
           scale_root_offset,
           bpm: current_tempo,
@@ -374,29 +328,29 @@ impl MidiTriggerHandler {
 
   /// Hold operation - sets flag to hold next note
   pub fn h_op(&self) {
-    self.hold_next_note.store(true, Ordering::Relaxed);
+    self.modes.hold_next_note.store(true, Ordering::Relaxed);
   }
 
   /// Ratchet operation - rapid retriggering with velocity decay
   pub fn r_op(&self, abs_x: usize, abs_y: usize) {
-    let scale_mode = if self.keyboard_top_active.load(Ordering::Relaxed) {
-      *self.scale_mode_top.lock().unwrap()
+    let scale_mode = if self.modes.keyboard_top_active.load(Ordering::Relaxed) {
+      *self.music.scale_mode_top.lock().unwrap()
     } else {
-      *self.scale_mode_left.lock().unwrap()
+      *self.music.scale_mode_left.lock().unwrap()
     };
-    let scale_root_offset = if self.keyboard_top_active.load(Ordering::Relaxed) {
-      self.scale_root_top.lock().unwrap().to_root_offset()
+    let scale_root_offset = if self.modes.keyboard_top_active.load(Ordering::Relaxed) {
+      self.music.scale_root_top.lock().unwrap().to_root_offset()
     } else {
-      self.scale_root_left.lock().unwrap().to_root_offset()
+      self.music.scale_root_left.lock().unwrap().to_root_offset()
     };
-    let grid_height = self.grid_height.load(Ordering::Relaxed);
-    let grid_width = self.grid_width.load(Ordering::Relaxed);
+    let grid_height = self.grid.height.load(Ordering::Relaxed);
+    let grid_width = self.grid.width.load(Ordering::Relaxed);
 
     if grid_height == 0 {
       return;
     }
 
-    let note_position = if self.keyboard_top_active.load(Ordering::Relaxed) {
+    let note_position = if self.modes.keyboard_top_active.load(Ordering::Relaxed) {
       abs_x % grid_height
     } else {
       abs_y
@@ -415,8 +369,8 @@ impl MidiTriggerHandler {
       abs_y,
       grid_width,
       grid_height,
-      self.grid_v_splits.load(Ordering::Relaxed),
-      self.grid_h_splits.load(Ordering::Relaxed),
+      self.grid.v_splits.load(Ordering::Relaxed),
+      self.grid.h_splits.load(Ordering::Relaxed),
     );
 
     let ratchet_count = 4_u8;
@@ -425,9 +379,9 @@ impl MidiTriggerHandler {
     let note_length = ((note_duration_ms / 8) as u8).max(1);
 
     let my_gen = self.ratchet_generation.fetch_add(1, Ordering::SeqCst) + 1;
-    self.is_ratcheting.store(true, Ordering::SeqCst);
+    self.modes.is_ratcheting.store(true, Ordering::SeqCst);
 
-    let is_ratcheting = Arc::clone(&self.is_ratcheting);
+    let is_ratcheting = Arc::clone(&self.modes.is_ratcheting);
     let ratchet_generation = Arc::clone(&self.ratchet_generation);
     let midi_tx = self.midi_tx.clone();
 
@@ -473,23 +427,23 @@ impl MidiTriggerHandler {
 
   /// Chord operation - trigger triad (root, third, fifth)
   pub fn c_op(&self, abs_x: usize, abs_y: usize, distance_to_next: usize) {
-    let scale_mode = if self.keyboard_top_active.load(Ordering::Relaxed) {
-      *self.scale_mode_top.lock().unwrap()
+    let scale_mode = if self.modes.keyboard_top_active.load(Ordering::Relaxed) {
+      *self.music.scale_mode_top.lock().unwrap()
     } else {
-      *self.scale_mode_left.lock().unwrap()
+      *self.music.scale_mode_left.lock().unwrap()
     };
-    let scale_root_offset = if self.keyboard_top_active.load(Ordering::Relaxed) {
-      self.scale_root_top.lock().unwrap().to_root_offset()
+    let scale_root_offset = if self.modes.keyboard_top_active.load(Ordering::Relaxed) {
+      self.music.scale_root_top.lock().unwrap().to_root_offset()
     } else {
-      self.scale_root_left.lock().unwrap().to_root_offset()
+      self.music.scale_root_left.lock().unwrap().to_root_offset()
     };
-    let grid_height = self.grid_height.load(Ordering::Relaxed);
+    let grid_height = self.grid.height.load(Ordering::Relaxed);
 
     if grid_height == 0 {
       return;
     }
 
-    let note_position = if self.keyboard_top_active.load(Ordering::Relaxed) {
+    let note_position = if self.modes.keyboard_top_active.load(Ordering::Relaxed) {
       abs_x % grid_height
     } else {
       abs_y
@@ -513,7 +467,7 @@ impl MidiTriggerHandler {
 
     let velocity = calculate_velocity(abs_y, grid_height, 100.0, 10.0);
 
-    let current_tempo = self.tempo.load(Ordering::Relaxed);
+    let current_tempo = self.music.tempo.load(Ordering::Relaxed);
     let base_bpm = consts::DEFAULT_TEMPO;
 
     let calculated_length = if current_tempo > 0 {
@@ -529,10 +483,10 @@ impl MidiTriggerHandler {
     let channel = calculate_channel(
       abs_x,
       abs_y,
-      self.grid_width.load(Ordering::Relaxed),
+      self.grid.width.load(Ordering::Relaxed),
       grid_height,
-      self.grid_v_splits.load(Ordering::Relaxed),
-      self.grid_h_splits.load(Ordering::Relaxed),
+      self.grid.v_splits.load(Ordering::Relaxed),
+      self.grid.h_splits.load(Ordering::Relaxed),
     );
 
     let mut chord_notes = Vec::new();
