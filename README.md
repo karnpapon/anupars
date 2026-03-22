@@ -117,10 +117,6 @@ That's all you need for a first session. Explore [Features](#features) and [Keyb
 - **Arpeggiator Mode**
   - When enabled, the sequencer steps only through positions matching the current regex, producing arpeggiator-like melodic patterns from your rules.
 
-- **Generated Text Content (Dissociative Press Algorithm)**
-  - Generate new musical or textual material using the Dissociative Press algorithm, for creative pattern mutation and generative composition.
-  - Manaul file loader TBD
-
 - **Accumulation Mode (Semi Self-Configuration)**
   - Activate accumulation mode to let the system semi-autonomously reconfigure itself via [Queue System](#queue-system), stacking and evolving patterns for emergent musical results.
 

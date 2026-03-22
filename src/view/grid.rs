@@ -732,14 +732,23 @@ fn draw(canvas: &GridEditor, printer: &Printer) {
     let scale_mode_top = canvas.scale_mode_top;
     let scale_mode_left = canvas.scale_mode_left;
     let scale_root_left = canvas.scale_root_left;
-    let style = Style::from(ColorStyle::front(ColorType::rgb(100, 100, 100)));
-    printer.with_style(style, |printer| {
+    let active_style = Style::from(ColorStyle::front(ColorType::rgb(255, 255, 255)));
+    let inactive_style = Style::from(ColorStyle::front(ColorType::rgb(100, 100, 100)));
+    let (style_top, style_left) = if !canvas.is_canvas_focused {
+      (inactive_style, inactive_style)
+    } else if canvas.keyboard_top_active {
+      (active_style, inactive_style)
+    } else {
+      (inactive_style, active_style)
+    };
+
+    printer.with_style(style_top, |printer| {
       printer.print(
         (0, 0),
         &format!("{} {}", scale_mode_top.short_name(), root_note_top.name()),
       );
     });
-    printer.with_style(style, |printer| {
+    printer.with_style(style_left, |printer| {
       printer.print(
         (0, 2),
         &format!(
@@ -853,7 +862,7 @@ fn draw(canvas: &GridEditor, printer: &Printer) {
     let color = if canvas.is_canvas_focused {
       ColorType::rgb(200, 200, 200)
     } else {
-      ColorType::rgb(40, 40, 40)
+      ColorType::rgb(100, 100, 100)
     };
     let style = Style::from(ColorStyle::front(color));
     printer.with_style(style, |printer| {
