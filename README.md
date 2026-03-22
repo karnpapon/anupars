@@ -51,7 +51,7 @@ cargo run
 ## Quick Start
 
 1. **Open the menubar** with `Ctrl+b`, the menubar will be shown at the top of terminal screen.
-2. **Click "anupars" > "Generate Text"**, enter a length for the generated text, then hit `Enter`, this fills the grid editor with content (you can also provide your own text in `Insert File` below `Generate Text` menu).
+2. ~~**Click "anupars" > "Generate Text"**, enter a length for the generated text, then hit `Enter`, this fills the grid editor with content (you can also provide your own text in `Insert File` below `Generate Text` menu).~~ (obsoleted for v0.2.0)
 3. **Click `anupars` > `MIDI`** ensure you select the right MIDI output.
 4. **Type a regex**, the matching cells are highlighted on the grid in real time.
 5. **Press `Esc`** to switch between the regex input and the grid editor section (there's a little indicator to tell which section is currently selected).
