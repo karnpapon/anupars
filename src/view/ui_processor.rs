@@ -1,4 +1,5 @@
 use std::collections::VecDeque;
+use std::sync::atomic::Ordering;
 use std::sync::mpsc::Sender;
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -123,7 +124,6 @@ impl Playhead {
       .expect("Failed to spawn UI batch processor thread");
   }
 
-  #[inline]
   pub(crate) fn enqueue_sym_space(&self) {
     self
       .ui_update_queue
@@ -132,8 +132,10 @@ impl Playhead {
       .push_back(UIUpdate::TmpAppendSpace);
   }
 
-  #[inline]
   pub(crate) fn enqueue_sym_buf_append(&self, idx: usize) {
+    if !self.modes.accumulation_mode.load(Ordering::Relaxed) {
+      return;
+    }
     self
       .ui_update_queue
       .lock()
@@ -141,7 +143,6 @@ impl Playhead {
       .push_back(UIUpdate::TmpAppend(idx));
   }
 
-  #[inline]
   pub(crate) fn enqueue_sym_rpl_cycle(&self, area: Rect) {
     self
       .ui_update_queue

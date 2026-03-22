@@ -72,7 +72,7 @@ pub struct Playhead {
   // Consolidated state
   grid: GridState,
   music: MusicState,
-  modes: ModeFlags,
+  pub modes: ModeFlags,
 
   // Pattern matching state
   regex_indexes: Arc<Mutex<BTreeSet<usize>>>,
