@@ -158,7 +158,7 @@ pub const MOVE_Y_STEP_SIZE: usize = 4;
 pub const SCALE_X_STEP_SIZE: usize = 8;
 pub const SCALE_Y_STEP_SIZE: usize = 2;
 
-pub const FREQ_DICT_PATH: &str = "data/frequency_dictionary_en_30_000.txt";
+pub const FREQ_DICT_PATH: &str = "data/frequency_dictionary_en_10k.txt";
 
 // permanent threads, live for the entire application lifetime
 pub const THREAD_NAME_TEMPO_MONITOR: &str = "tempo-monitor";
