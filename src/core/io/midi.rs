@@ -716,7 +716,7 @@ impl Midi {
     Arc::clone(&stack).refresh(self.tx.clone());
 
     thread::Builder::new()
-      .name("midi-processor".to_string())
+      .name(crate::core::consts::THREAD_NAME_MIDI_PROCESSOR.to_string())
       .spawn(move || {
         for control_message in &self.rx {
           match control_message {

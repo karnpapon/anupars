@@ -387,7 +387,7 @@ impl MidiTriggerHandler {
     let midi_tx = self.midi_tx.clone();
 
     thread::Builder::new()
-      .name("ratchet".to_string())
+      .name(crate::core::consts::THREAD_NAME_RATCHET.to_string())
       .spawn(move || {
         for i in 0..ratchet_count {
           if ratchet_generation.load(Ordering::SeqCst) != my_gen {
@@ -406,7 +406,7 @@ impl MidiTriggerHandler {
             let gen_off = my_gen;
             let gen_arc = Arc::clone(&ratchet_generation);
             thread::Builder::new()
-              .name("ratchet-note-off".to_string())
+              .name(crate::core::consts::THREAD_NAME_RATCHET_NOTE_OFF.to_string())
               .spawn(move || {
                 thread::sleep(Duration::from_millis(note_duration_ms));
                 if gen_arc.load(Ordering::SeqCst) == gen_off {
@@ -505,7 +505,7 @@ impl MidiTriggerHandler {
 
     let midi_tx_clone = self.midi_tx.clone();
     thread::Builder::new()
-      .name("chord-note-off".to_string())
+      .name(crate::core::consts::THREAD_NAME_CHORD_NOTE_OFF.to_string())
       .spawn(move || {
         thread::sleep(Duration::from_millis(chord_duration_ms));
         for midi_msg in chord_notes {

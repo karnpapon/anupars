@@ -230,7 +230,7 @@ fn spawn_tempo_monitor_thread(
   metronome_tx: Sender<Message>,
 ) {
   thread::Builder::new()
-    .name("tempo-monitor".to_string())
+    .name(consts::THREAD_NAME_TEMPO_MONITOR.to_string())
     .spawn(move || loop {
       thread::sleep(Duration::from_millis(TEMPO_CHECK_INTERVAL_MS));
 
@@ -259,12 +259,12 @@ pub fn spawn_background_threads(
   spawn_tempo_monitor_thread(last_key_time, current_tempo, metronome_tx);
 
   thread::Builder::new()
-    .name("regex-handler".to_string())
+    .name(consts::THREAD_NAME_REGEX_HANDLER.to_string())
     .spawn(move || regex_handler.run())
     .expect("Failed to spawn regex handler thread");
 
   thread::Builder::new()
-    .name("metronome".to_string())
+    .name(consts::THREAD_NAME_METRONOME.to_string())
     .spawn(move || metronome.run())
     .expect("Failed to spawn metronome thread");
 }

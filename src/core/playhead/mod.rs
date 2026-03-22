@@ -333,7 +333,7 @@ impl Playhead {
     );
 
     thread::Builder::new()
-      .name("playhead".to_string())
+      .name(crate::core::consts::THREAD_NAME_PLAYHEAD.to_string())
       .spawn(move || {
         for control_message in &rx {
           match control_message {

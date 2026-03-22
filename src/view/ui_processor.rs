@@ -22,7 +22,7 @@ impl Playhead {
     regex_tx: Sender<regex::Message>,
   ) {
     thread::Builder::new()
-      .name("ui-batch-processor".to_string())
+      .name(consts::THREAD_NAME_UI_PROCESSOR.to_string())
       .spawn(move || loop {
         thread::sleep(Duration::from_millis(16)); // ~60 FPS
 

@@ -36,7 +36,7 @@ impl Stack {
     let (tx, rx) = channel();
 
     thread::Builder::new()
-      .name("stack-event-loop".to_string())
+      .name(crate::core::consts::THREAD_NAME_STACK_EVENT_LOOP.to_string())
       .spawn(move || {
         for control_message in &rx {
           match control_message {
@@ -74,7 +74,7 @@ impl Stack {
 
   pub fn refresh(self: Arc<Self>, midi_tx: Sender<midi::Message>) {
     thread::Builder::new()
-      .name("stack-refresh".to_string())
+      .name(crate::core::consts::THREAD_NAME_STACK_REFRESH.to_string())
       .spawn(move || {
         // Reduced from 34ms to 8ms for 8x better timing resolution
         // This provides ~125 FPS update rate for precise MIDI note releases

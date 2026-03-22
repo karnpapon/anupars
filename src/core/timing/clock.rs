@@ -284,7 +284,7 @@ impl Clock {
       .unwrap();
 
     thread::Builder::new()
-      .name("clock".to_string())
+      .name(crate::core::consts::THREAD_NAME_CLOCK.to_string())
       .spawn(move || {
         loop {
           // process all pending control messages (non-blocking)

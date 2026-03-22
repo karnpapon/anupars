@@ -44,7 +44,7 @@ impl SymSpellState {
     let symspell: Arc<Mutex<Option<SymSpell>>> = Arc::new(Mutex::new(None));
     let symspell_bg = Arc::clone(&symspell);
     thread::Builder::new()
-      .name("symspell-loader".to_string())
+      .name(consts::THREAD_NAME_SYMSPELL_LOADER.to_string())
       .spawn(move || {
         let mut inner = SymSpell::new(2, None, 7, 1);
         let _ = inner.load_dictionary(Path::new(consts::FREQ_DICT_PATH), 0, 1, " ");

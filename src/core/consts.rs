@@ -4,7 +4,7 @@ use std::sync::atomic::AtomicBool;
 
 use lazy_static::lazy_static;
 
-pub type StaticStrInt = Vec<(&'static str, i32)>;
+type StaticStrInt = Vec<(&'static str, i32)>;
 pub type StaticStrStr = Vec<(&'static str, &'static str)>;
 
 lazy_static! {
@@ -146,7 +146,6 @@ pub static FOCUS_MODE: AtomicBool = AtomicBool::new(false);
 pub static EXT_CLOCK_ACTIVE: AtomicBool = AtomicBool::new(false);
 
 pub const QUEUE_PLACEHOLDER_SYMBOL: &str = ":";
-pub const SYMBOL_DRAIN: &char = &'~';
 pub const PLAYHEAD_CHAR: char = '>';
 pub const TRIGGER_CHAR: char = '*';
 pub const PLAYHEAD_MATCH_CHAR: char = '@';
@@ -160,3 +159,22 @@ pub const SCALE_X_STEP_SIZE: usize = 8;
 pub const SCALE_Y_STEP_SIZE: usize = 2;
 
 pub const FREQ_DICT_PATH: &str = "data/frequency_dictionary_en_30_000.txt";
+
+// permanent threads, live for the entire application lifetime
+pub const THREAD_NAME_TEMPO_MONITOR: &str = "tempo-monitor";
+pub const THREAD_NAME_REGEX_HANDLER: &str = "regex-handler";
+pub const THREAD_NAME_METRONOME: &str = "metronome";
+pub const THREAD_NAME_CLOCK: &str = "clock";
+pub const THREAD_NAME_PLAYHEAD: &str = "playhead";
+pub const THREAD_NAME_MIDI_PROCESSOR: &str = "midi-processor";
+pub const THREAD_NAME_STACK_EVENT_LOOP: &str = "stack-event-loop";
+pub const THREAD_NAME_STACK_REFRESH: &str = "stack-refresh";
+pub const THREAD_NAME_UI_PROCESSOR: &str = "ui-batch-processor";
+
+// temporary threads, spawned once at startup, exit when their task completes
+pub const THREAD_NAME_SYMSPELL_LOADER: &str = "symspell-loader";
+
+// temporary threads, spawned per event
+pub const THREAD_NAME_RATCHET: &str = "ratchet";
+pub const THREAD_NAME_RATCHET_NOTE_OFF: &str = "ratchet-note-off";
+pub const THREAD_NAME_CHORD_NOTE_OFF: &str = "chord-note-off";
