@@ -34,7 +34,7 @@ impl SweepRowMode {
     match self {
       SweepRowMode::Normal => SweepRowMode::Odd,
       SweepRowMode::Odd => SweepRowMode::Even,
-      SweepRowMode::Even => SweepRowMode::Random(rand::random()),
+      SweepRowMode::Even => SweepRowMode::Random(fastrand::u64(..)),
       SweepRowMode::Random(_) => SweepRowMode::Normal,
     }
   }

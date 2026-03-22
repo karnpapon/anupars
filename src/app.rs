@@ -2,7 +2,6 @@ use std::fmt;
 
 use crate::core::command::register::CommandManager;
 use crate::core::consts;
-use crate::core::engine::disspress::MANIFESTO_TEXT;
 use crate::core::engine::regex::RegExpHandler;
 use crate::core::io::midi;
 use crate::core::playhead::{Message as PlayheadMessage, Playhead};
@@ -11,15 +10,15 @@ use crate::view::menubar::{set_contents, Menubar};
 use cursive::theme::{BorderStyle, Palette};
 use cursive::views::TextView;
 use cursive::Cursive;
-use num::rational::Ratio;
-use num::FromPrimitive;
+use num_rational::Ratio;
+use num_traits::FromPrimitive;
 use std::rc::Rc;
 use std::sync::mpsc::Sender;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use consts::{DEFAULT_TEMPO, TEMPO_CHECK_INTERVAL_MS, TEMPO_RESET_DELAY_MS};
+use consts::{DEFAULT_TEMPO, MANIFESTO_TEXT, TEMPO_CHECK_INTERVAL_MS, TEMPO_RESET_DELAY_MS};
 
 use crate::view::layout::Program;
 

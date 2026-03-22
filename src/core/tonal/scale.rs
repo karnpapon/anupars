@@ -1,5 +1,4 @@
 use crate::core::command::types;
-use serde::{Deserialize, Serialize};
 
 /// Musical scale modes and their interval patterns
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
@@ -23,7 +22,7 @@ pub enum ScaleMode {
   Thai7Tet, // Thai 7-TET microtonal scale
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub enum ScaleRoot {
   #[default]
   C = 0,

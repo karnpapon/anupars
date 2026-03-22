@@ -11,12 +11,11 @@ use crate::view::rect::Rect;
 
 use super::{Playhead, UIUpdate};
 
-struct GridParams<'a, R: rand::Rng> {
+struct GridParams {
   pub playhead_width: usize,
   pub playhead_height: usize,
   pub grid_width: usize,
   pub grid_height: usize,
-  pub rng: &'a mut R,
 }
 
 impl Playhead {
@@ -137,8 +136,6 @@ impl Playhead {
   }
 
   pub(super) fn perform_accumulation_jump(&self) -> Vec2 {
-    let mut rng = rand::thread_rng();
-
     let area = self.area.lock().unwrap();
     let playhead_width = area.width();
     let playhead_height = area.height();
@@ -167,7 +164,6 @@ impl Playhead {
             playhead_height,
             grid_width,
             grid_height,
-            rng: &mut rng,
           };
           self.get_jump_position(current_playhead_pos, params)
         }
@@ -177,7 +173,6 @@ impl Playhead {
             playhead_height,
             grid_width,
             grid_height,
-            rng: &mut rng,
           };
           self.get_jump_position(current_playhead_pos, params)
         }
@@ -214,10 +209,10 @@ impl Playhead {
     Vec2::zero()
   }
 
-  fn get_jump_position<R: rand::Rng>(
+  fn get_jump_position(
     &self,
     current_playhead_pos: (usize, usize),
-    params: GridParams<R>,
+    params: GridParams,
   ) -> (usize, usize) {
     if let Some(first_item) = self.queue_manager.get_front_item() {
       match first_item {
@@ -229,7 +224,6 @@ impl Playhead {
               params.playhead_height,
               params.grid_width,
               params.grid_height,
-              params.rng,
             )
           } else if let Some(QueueItem::Position(x, y)) = self.queue_manager.remove_front_item() {
             self.execute_front_op_in_queue();
@@ -243,7 +237,6 @@ impl Playhead {
           params.playhead_height,
           params.grid_width,
           params.grid_height,
-          params.rng,
         ),
       }
     } else {
@@ -252,7 +245,6 @@ impl Playhead {
         params.playhead_height,
         params.grid_width,
         params.grid_height,
-        params.rng,
       )
     }
   }

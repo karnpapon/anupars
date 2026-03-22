@@ -1,13 +1,12 @@
-use serde::{Deserialize, Serialize};
 use std::fmt;
 
-#[derive(Clone, Serialize, Deserialize, Debug, Copy)]
+#[derive(Clone, Debug, Copy)]
 pub enum Adjustment {
   Increase,
   Decrease,
 }
 
-#[derive(Clone, Serialize, Deserialize, Debug, Copy)]
+#[derive(Clone, Debug, Copy)]
 pub enum Command {
   Quit,
   TogglePlay,

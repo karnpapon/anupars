@@ -1,4 +1,4 @@
-use cursive::views::Button;
+// use cursive::views::Button;
 use cursive::views::Canvas;
 use cursive::views::Dialog;
 use cursive::views::DummyView;
@@ -7,7 +7,7 @@ use cursive::views::FocusTracker;
 use cursive::views::LinearLayout;
 use cursive::views::ListView;
 use cursive::views::NamedView;
-use cursive::views::PaddedView;
+// use cursive::views::PaddedView;
 use cursive::views::ResizedView;
 use cursive::views::TextView;
 use cursive::views::ThemedView;
@@ -23,7 +23,7 @@ use crate::core::engine::regex;
 use super::layout::Program;
 use crate::core::consts;
 use crate::core::io::midi::{self, MidiMsg};
-use crate::core::parser::{self};
+// use crate::core::parser::{self};
 use crate::core::playhead::tilt;
 use crate::core::utils;
 use crate::view::grid::GridEditor;
@@ -236,6 +236,7 @@ impl Console {
       .with_name(consts::display_view)
   }
 
+  #[cfg(feature = "midi_input")]
   fn build_midi_input() -> NamedView<PaddedView<LinearLayout>> {
     PaddedView::lrtb(
       10,

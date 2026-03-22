@@ -7,7 +7,7 @@ use std::sync::Arc;
 // use cursive::theme::{ColorStyle, ColorType, Style};
 // use cursive::utils::markup::StyledString;
 use cursive::views::TextView;
-use num::ToPrimitive;
+use num_traits::ToPrimitive;
 use std::time::Instant;
 
 use crate::core::consts;

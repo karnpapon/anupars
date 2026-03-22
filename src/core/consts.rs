@@ -178,3 +178,8 @@ pub const THREAD_NAME_SYMSPELL_LOADER: &str = "symspell-loader";
 pub const THREAD_NAME_RATCHET: &str = "ratchet";
 pub const THREAD_NAME_RATCHET_NOTE_OFF: &str = "ratchet-note-off";
 pub const THREAD_NAME_CHORD_NOTE_OFF: &str = "chord-note-off";
+
+pub(crate) const MANIFESTO_TEXT: &str =
+  include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/data/manifesto.txt"));
+pub const INITIALIZER_TEXT: &str =
+  include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/data/texts.txt"));

@@ -1,8 +1,8 @@
 use crate::core::consts::DEFAULT_TEMPO;
 
 use super::metronome;
-use num::integer::Integer;
-use num::rational::Ratio;
+use num_integer::Integer;
+use num_rational::Ratio;
 use std::ops::Deref;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{channel, Sender};

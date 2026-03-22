@@ -115,13 +115,12 @@ impl PositionCalculator {
     playhead_height: usize,
     grid_width: usize,
     grid_height: usize,
-    rng: &mut impl rand::Rng,
   ) -> (usize, usize) {
     let max_x = grid_width.saturating_sub(playhead_width);
     let max_y = grid_height.saturating_sub(playhead_height);
 
     if max_x > 0 && max_y > 0 {
-      (rng.gen_range(0..=max_x), rng.gen_range(0..=max_y))
+      (fastrand::usize(0..=max_x), fastrand::usize(0..=max_y))
     } else {
       (0, 0)
     }
@@ -262,30 +261,26 @@ mod tests {
 
   #[test]
   fn random_position_returns_origin_when_grid_equals_playhead_size() {
-    let mut rng = rand::thread_rng();
     // max_x = 4 - 4 = 0, so returns (0,0)
-    let (x, y) = PositionCalculator::generate_random_position(4, 4, 4, 4, &mut rng);
+    let (x, y) = PositionCalculator::generate_random_position(4, 4, 4, 4);
     assert_eq!((x, y), (0, 0));
   }
 
   #[test]
   fn random_position_returns_origin_when_grid_smaller_than_playhead() {
-    let mut rng = rand::thread_rng();
-    let (x, y) = PositionCalculator::generate_random_position(5, 5, 3, 3, &mut rng);
+    let (x, y) = PositionCalculator::generate_random_position(5, 5, 3, 3);
     assert_eq!((x, y), (0, 0));
   }
 
   #[test]
   fn random_position_stays_within_grid_bounds() {
-    let mut rng = rand::thread_rng();
     let grid_w = 10;
     let grid_h = 8;
     let ph_w = 3;
     let ph_h = 2;
 
     for _ in 0..50 {
-      let (x, y) =
-        PositionCalculator::generate_random_position(ph_w, ph_h, grid_w, grid_h, &mut rng);
+      let (x, y) = PositionCalculator::generate_random_position(ph_w, ph_h, grid_w, grid_h);
       assert!(x + ph_w <= grid_w, "x={x} overflows grid_w={grid_w}");
       assert!(y + ph_h <= grid_h, "y={y} overflows grid_h={grid_h}");
     }

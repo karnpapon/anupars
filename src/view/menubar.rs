@@ -22,7 +22,7 @@ use cursive::view::Resizable;
 use cursive::views::Canvas;
 use cursive::views::Dialog;
 use cursive::views::DummyView;
-use cursive::views::EditView;
+// use cursive::views::EditView;
 use cursive::views::HideableView;
 use cursive::views::LinearLayout;
 use cursive::views::NamedView;
@@ -40,7 +40,7 @@ use crate::core::utils;
 use midir;
 
 use super::grid::GridEditor;
-use crate::core::{consts, engine::disspress};
+use crate::core::consts;
 
 type MidiMenuState = (
   Vec<(String, usize)>,
@@ -466,6 +466,7 @@ fn build_about_view(siv: &mut Cursive) {
 
 // ----------------------------------------------------------------
 
+#[cfg(feature = "disspress")]
 // generate random text based-on Dissociate Press algorithm:
 // https://en.wikipedia.org/wiki/Dissociated_press
 pub fn generate_contents(siv: &mut Cursive) {
@@ -517,7 +518,7 @@ pub(crate) fn set_contents(siv: &mut Cursive, contents: String) {
           let total = lines.len();
           // let start = 0;
           let start = if total > 1 {
-            rand::random::<usize>() % total
+            fastrand::usize(0..total)
           } else {
             0
           };

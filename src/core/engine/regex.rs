@@ -9,9 +9,6 @@ use cursive::views::Canvas;
 use cursive::views::TextView;
 use regex_lite::Regex;
 
-use serde::Deserialize;
-use serde::Serialize;
-
 use crate::core::consts;
 use crate::core::playhead;
 use crate::view::grid::GridEditor;
@@ -50,7 +47,7 @@ impl RegexCache {
   }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug)]
 struct RegexError {
   id: String,
   warning: bool,
