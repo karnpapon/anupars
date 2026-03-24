@@ -102,7 +102,6 @@ impl Playhead {
       .calculate_absolute_position(playhead_pos, active_pos)
   }
 
-  // TODO: revisit keyboard-left
   /// Find distance to the next closest trigger position within the playhead area.
   pub(super) fn find_distance_to_next_trigger(&self, curr_pos: usize) -> usize {
     let area = self.area.lock().unwrap();
