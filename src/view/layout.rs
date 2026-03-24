@@ -47,9 +47,9 @@ impl Program {
     regex_tx: Sender<regex::Message>,
     playhead_tx: Sender<playhead::Message>,
   ) -> NamedView<LinearLayout> {
-    let top_section = Console::build(self, regex_tx);
+    let top_section = Console::build(self, regex_tx.clone());
     let padding_section = DummyView::new().fixed_width(1);
-    let canvas_section = FocusTracker::new(GridEditor::build(playhead_tx));
+    let canvas_section = FocusTracker::new(GridEditor::build(playhead_tx, regex_tx));
 
     LinearLayout::vertical()
       .child(top_section)

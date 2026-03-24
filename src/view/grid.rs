@@ -36,6 +36,7 @@ use consts::KEYBOARD_MARGIN_TOP;
 use consts::NOTE_NAMES;
 use consts::QUEUE_MARGIN_RIGHT;
 
+use crate::core::engine::regex;
 use crate::core::playhead::{Direction, Message as PlayheadMessage};
 
 pub struct GridEditor {
@@ -61,6 +62,9 @@ pub struct GridEditor {
   pub is_canvas_focused: bool,
   pub is_aiming: bool,
   pub keyboard_top_active: bool,
+  pub regex_tx: Option<Sender<regex::Message>>,
+  pub last_pattern: String,
+  pub last_flag_str: String,
 }
 
 impl GridEditor {
@@ -88,6 +92,9 @@ impl GridEditor {
       is_canvas_focused: false,
       is_aiming: false,
       keyboard_top_active: true,
+      regex_tx: None,
+      last_pattern: String::new(),
+      last_flag_str: String::new(),
     }
   }
 
@@ -464,8 +471,11 @@ impl GridEditor {
 
   pub fn build(
     playhead_tx: Sender<PlayheadMessage>,
+    regex_tx: Sender<regex::Message>,
   ) -> ResizedView<ResizedView<NamedView<Canvas<GridEditor>>>> {
-    Canvas::new(GridEditor::new(playhead_tx))
+    let mut editor = GridEditor::new(playhead_tx);
+    editor.regex_tx = Some(regex_tx);
+    Canvas::new(editor)
       .with_draw(draw)
       .with_layout(layout)
       .with_on_event(on_event)
@@ -876,6 +886,17 @@ fn layout(canvas: &mut GridEditor, size: Vec2) {
     canvas.resize(size);
     if canvas.text_contents.is_some() {
       canvas.update_grid_src();
+      if !canvas.last_pattern.is_empty() {
+        if let Some(ref tx) = canvas.regex_tx {
+          let input_regex = regex::EventData {
+            text: canvas.text_contents(),
+            pattern: canvas.last_pattern.clone(),
+            flags: canvas.last_flag_str.clone(),
+            grid_width: canvas.grid.width,
+          };
+          let _ = tx.send(regex::Message::Solve(input_regex));
+        }
+      }
     }
   }
 }

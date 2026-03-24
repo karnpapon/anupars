@@ -437,6 +437,9 @@ fn solve_regex(siv: &mut Cursive, texts: &str, regex_tx: Sender<regex::Message>)
     grid_width,
   };
 
+  state.last_pattern = texts.to_string();
+  state.last_flag_str = flag_str.to_string();
+
   regex_tx.send(regex::Message::Solve(input_regex)).unwrap()
 }
 
@@ -447,6 +450,10 @@ fn input_submit(siv: &mut Cursive, texts: &str, regex_tx: Sender<regex::Message>
 fn input_edit(siv: &mut Cursive, texts: &str, _cursor: usize, regex_tx: Sender<regex::Message>) {
   if texts.is_empty() {
     regex_tx.send(regex::Message::Clear).unwrap();
+    if let Some(mut c) = siv.find_name::<Canvas<GridEditor>>(consts::canvas_editor_section_view) {
+      c.state_mut().last_pattern.clear();
+      c.state_mut().last_flag_str.clear();
+    }
     return;
   }
 
