@@ -37,7 +37,7 @@ impl Program {
       regex_mode_state: RadioGroup::new(),
       regex_flag_state: RadioGroup::new(),
       input_regex: String::new(),
-      toggle_regex_input: Arc::new(RwLock::new(false)),
+      toggle_regex_input: Arc::new(RwLock::new(true)),
       top_section: Console::new(),
     }
   }

@@ -183,3 +183,6 @@ pub(crate) const MANIFESTO_TEXT: &str =
   include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/data/manifesto.txt"));
 pub const INITIALIZER_TEXT: &str =
   include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/data/texts.txt"));
+
+pub const PLAYHEAD_INIT_AREA_WIDTH: usize = 8;
+pub const PLAYHEAD_INIT_AREA_HEIGHT: usize = 1;

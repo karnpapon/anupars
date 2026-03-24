@@ -132,7 +132,13 @@ impl Playhead {
 
     Playhead {
       pos,
-      area: Arc::new(Mutex::new(Rect::from_point(Vec2::zero()))),
+      area: Arc::new(Mutex::new(Rect::from_size(
+        Vec2::zero(),
+        Vec2::new(
+          consts::PLAYHEAD_INIT_AREA_WIDTH,
+          consts::PLAYHEAD_INIT_AREA_HEIGHT,
+        ),
+      ))),
       drag_start_x: AtomicUsize::new(0),
       drag_start_y: AtomicUsize::new(0),
       actived_pos: Arc::new(Mutex::new(Vec2::zero())),
