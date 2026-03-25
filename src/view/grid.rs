@@ -23,9 +23,7 @@ use ringbuffer::RingBuffer;
 
 use crate::core::playhead::queue::EVENT_OPERATORS;
 use crate::core::playhead::queue::QUEUE_OPERATORS;
-use crate::core::playhead::types::SweepRowMode;
 use crate::core::playhead::PlayheadUI;
-use crate::core::tonal::scale;
 use crate::core::{consts, playhead::queue::PendingJumpPosition};
 use crate::view::printer::Matrix;
 
@@ -46,22 +44,7 @@ pub struct GridEditor {
   pub text_contents: Option<String>,
   pub playhead_ui: PlayheadUI,
   pub show_keyboard: bool,
-  pub scale_mode_left: scale::ScaleMode,
-  pub scale_mode_top: scale::ScaleMode,
-  pub scale_root_top: scale::ScaleRoot,
-  pub scale_root_left: scale::ScaleRoot,
-  pub arpeggiator_mode: bool,
-  pub accumulation_mode: bool,
-  pub event_operator_mode: bool,
-  pub drain_queue_mode: bool,
-  pub sweep_mode: bool,
-  pub sweep_row_mode: SweepRowMode,
-  pub freeze_mode: bool,
-  pub grid_v_splits: usize,
-  pub grid_h_splits: usize,
   pub is_canvas_focused: bool,
-  pub is_aiming: bool,
-  pub keyboard_top_active: bool,
   pub regex_tx: Option<Sender<regex::Message>>,
   pub last_pattern: String,
   pub last_flag_str: String,
@@ -76,22 +59,7 @@ impl GridEditor {
       text_contents: None,
       playhead_ui: PlayheadUI::new(),
       show_keyboard: true,
-      scale_mode_left: scale::ScaleMode::default(),
-      scale_mode_top: scale::ScaleMode::default(),
-      scale_root_top: scale::ScaleRoot::default(),
-      scale_root_left: scale::ScaleRoot::default(),
-      arpeggiator_mode: false,
-      accumulation_mode: false,
-      event_operator_mode: false,
-      drain_queue_mode: false,
-      sweep_mode: false,
-      sweep_row_mode: SweepRowMode::default(),
-      freeze_mode: false,
-      grid_v_splits: 1,
-      grid_h_splits: 1,
       is_canvas_focused: false,
-      is_aiming: false,
-      keyboard_top_active: true,
       regex_tx: None,
       last_pattern: String::new(),
       last_flag_str: String::new(),
@@ -106,11 +74,11 @@ impl GridEditor {
       return (0.0, BASE_OCTAVE, "C");
     }
 
-    let (note_index, octave) = self.scale_mode_left.pos_to_scale_note(
+    let (note_index, octave) = self.playhead_ui.scale_mode_left.pos_to_scale_note(
       y,
       total_rows,
       BASE_OCTAVE,
-      self.scale_root_left.to_root_offset(),
+      self.playhead_ui.scale_root_left.to_root_offset(),
     );
 
     (
@@ -128,11 +96,11 @@ impl GridEditor {
       return (0.0, BASE_OCTAVE, "C");
     }
 
-    let (note_index, octave) = self.scale_mode_top.pos_to_scale_note(
+    let (note_index, octave) = self.playhead_ui.scale_mode_top.pos_to_scale_note(
       y,
       total_rows,
       BASE_OCTAVE,
-      self.scale_root_top.to_root_offset(),
+      self.playhead_ui.scale_root_top.to_root_offset(),
     );
 
     (
@@ -416,7 +384,7 @@ impl GridEditor {
       let is_event_position = x % consts::EVENT_OP_SPACING == 0;
       let display_char = if is_event_position {
         "-".to_string()
-      } else if !self.accumulation_mode {
+      } else if !self.playhead_ui.accumulation_mode {
         " ".to_string()
       } else {
         let op = QUEUE_OPERATORS[queue_index % QUEUE_OPERATORS.len()];
@@ -443,7 +411,7 @@ impl GridEditor {
     }
 
     // Draw event operators on row 1 (same line)
-    if self.event_operator_mode {
+    if self.playhead_ui.event_operator_mode {
       let mut x = 0;
       let mut event_index = 0;
       while x < self.grid.width {
@@ -545,8 +513,7 @@ impl GridEditor {
   }
 
   fn start_aim_if_needed(&mut self) {
-    if !self.is_aiming {
-      self.is_aiming = true;
+    if self.playhead_ui.aimed_area.is_none() {
       let _ = self.playhead_tx.send(PlayheadMessage::StartAim());
     }
   }
@@ -560,7 +527,7 @@ impl GridEditor {
   }
 
   fn commit_or_move(&mut self, dir: Direction) -> EventResult {
-    if self.is_aiming {
+    if self.playhead_ui.aimed_area.is_some() {
       let _ = self.playhead_tx.send(PlayheadMessage::CommitAim());
       return EventResult::Ignored;
     }
@@ -571,7 +538,7 @@ impl GridEditor {
 
   fn alt_action(&self, dir: Direction, step: usize) -> EventResult {
     let grid_size = self.grid_size_xy();
-    if self.is_aiming {
+    if self.playhead_ui.aimed_area.is_some() {
       let _ = self
         .playhead_tx
         .send(PlayheadMessage::UpdateAim(dir, grid_size, step));
@@ -661,8 +628,6 @@ impl GridEditor {
       '7' => (4, 4),
       _ => (1, 1),
     };
-    self.grid_v_splits = v;
-    self.grid_h_splits = h;
     self.playhead_ui.grid_v_splits = v;
     self.playhead_ui.grid_h_splits = h;
     let _ = self.playhead_tx.send(PlayheadMessage::SetGridSplits(v, h));
@@ -733,20 +698,20 @@ fn draw(canvas: &GridEditor, printer: &Printer) {
     canvas.draw_keyboard_top(&top_keyboard_printer);
 
     // Draw corner symbol where keyboards meet
-    let root_note_top = canvas.scale_root_top;
+    let root_note_top = canvas.playhead_ui.scale_root_top;
     // let style = Style::from(ColorStyle::front(ColorType::rgb(100, 100, 100)));
     // printer.with_style(style, |printer| {
     //   printer.print((0, 1), root_note_top.name());
     // });
 
-    let scale_mode_top = canvas.scale_mode_top;
-    let scale_mode_left = canvas.scale_mode_left;
-    let scale_root_left = canvas.scale_root_left;
+    let scale_mode_top = canvas.playhead_ui.scale_mode_top;
+    let scale_mode_left = canvas.playhead_ui.scale_mode_left;
+    let scale_root_left = canvas.playhead_ui.scale_root_left;
     let active_style = Style::from(ColorStyle::front(ColorType::rgb(255, 255, 255)));
     let inactive_style = Style::from(ColorStyle::front(ColorType::rgb(100, 100, 100)));
     let (style_top, style_left) = if !canvas.is_canvas_focused {
       (inactive_style, inactive_style)
-    } else if canvas.keyboard_top_active {
+    } else if canvas.playhead_ui.keyboard_top_active {
       (active_style, inactive_style)
     } else {
       (inactive_style, active_style)
@@ -807,19 +772,19 @@ fn draw(canvas: &GridEditor, printer: &Printer) {
 
   let sep_style = Style::from(ColorStyle::front(ColorType::rgb(100, 100, 100)));
 
-  let col_w = if canvas.grid_v_splits >= 2 {
-    canvas.grid.width / canvas.grid_v_splits
+  let col_w = if canvas.playhead_ui.grid_v_splits >= 2 {
+    canvas.grid.width / canvas.playhead_ui.grid_v_splits
   } else {
     0
   };
-  let row_h = if canvas.grid_h_splits >= 2 {
-    canvas.grid.height / canvas.grid_h_splits
+  let row_h = if canvas.playhead_ui.grid_h_splits >= 2 {
+    canvas.grid.height / canvas.playhead_ui.grid_h_splits
   } else {
     0
   };
 
-  let sep_xs: Vec<usize> = if canvas.grid_v_splits >= 2 {
-    (1..canvas.grid_v_splits)
+  let sep_xs: Vec<usize> = if canvas.playhead_ui.grid_v_splits >= 2 {
+    (1..canvas.playhead_ui.grid_v_splits)
       .map(|i| col_w * i)
       .filter(|&x| x < canvas.grid.width)
       .collect()
@@ -827,8 +792,8 @@ fn draw(canvas: &GridEditor, printer: &Printer) {
     vec![]
   };
 
-  let sep_ys: Vec<usize> = if canvas.grid_h_splits >= 2 {
-    (1..canvas.grid_h_splits)
+  let sep_ys: Vec<usize> = if canvas.playhead_ui.grid_h_splits >= 2 {
+    (1..canvas.playhead_ui.grid_h_splits)
       .map(|i| row_h * i)
       .filter(|&y| y < canvas.grid.height)
       .collect()
@@ -864,7 +829,7 @@ fn draw(canvas: &GridEditor, printer: &Printer) {
 
   // Canvas focus indicator: shown at top-left margin (row 2, free space)
   if canvas.show_keyboard {
-    let keyboard_label = if canvas.keyboard_top_active {
+    let keyboard_label = if canvas.playhead_ui.keyboard_top_active {
       "[  \u{2227}  ]"
     } else {
       "[  \u{2228}  ]"

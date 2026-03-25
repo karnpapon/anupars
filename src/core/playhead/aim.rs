@@ -73,7 +73,6 @@ impl Playhead {
               editor.playhead_ui.playhead_pos = target_pos;
               editor.playhead_ui.playhead_area = aimed_area;
               editor.playhead_ui.aimed_area = None;
-              editor.is_aiming = false;
             },
           );
 
@@ -99,7 +98,6 @@ impl Playhead {
             move |canvas: &mut Canvas<GridEditor>| {
               let editor = canvas.state_mut();
               editor.playhead_ui.aimed_area = None;
-              editor.is_aiming = false;
             },
           );
         }))

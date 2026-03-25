@@ -22,14 +22,14 @@ impl Playhead {
           consts::canvas_editor_section_view,
           |canvas: &mut Canvas<GridEditor>| {
             let editor = canvas.state_mut();
-            if editor.keyboard_top_active {
+            if editor.playhead_ui.keyboard_top_active {
               let mut root = root_top.lock().unwrap();
               *root = root.cycle(dir);
-              editor.scale_root_top = *root;
+              editor.playhead_ui.scale_root_top = *root;
             } else {
               let mut root = root_left.lock().unwrap();
               *root = root.cycle(dir);
-              editor.scale_root_left = *root;
+              editor.playhead_ui.scale_root_left = *root;
             }
           },
         );
@@ -48,14 +48,14 @@ impl Playhead {
           consts::canvas_editor_section_view,
           |canvas: &mut Canvas<GridEditor>| {
             let editor = canvas.state_mut();
-            if editor.keyboard_top_active {
+            if editor.playhead_ui.keyboard_top_active {
               let mut mode = mode_top.lock().unwrap();
               *mode = mode.cycle(dir);
-              editor.scale_mode_top = *mode;
+              editor.playhead_ui.scale_mode_top = *mode;
             } else {
               let mut mode = mode_left.lock().unwrap();
               *mode = mode.cycle(dir);
-              editor.scale_mode_left = *mode;
+              editor.playhead_ui.scale_mode_left = *mode;
             }
           },
         );
@@ -75,7 +75,7 @@ impl Playhead {
           consts::canvas_editor_section_view,
           move |canvas: &mut Canvas<GridEditor>| {
             let editor = canvas.state_mut();
-            editor.scale_mode_left = scale_mode;
+            editor.playhead_ui.scale_mode_left = scale_mode;
           },
         );
       }))
@@ -94,7 +94,7 @@ impl Playhead {
           consts::canvas_editor_section_view,
           move |canvas: &mut Canvas<GridEditor>| {
             let editor = canvas.state_mut();
-            editor.scale_mode_top = scale_mode;
+            editor.playhead_ui.scale_mode_top = scale_mode;
           },
         );
       }))
@@ -113,7 +113,7 @@ impl Playhead {
           consts::canvas_editor_section_view,
           move |canvas: &mut Canvas<GridEditor>| {
             let editor = canvas.state_mut();
-            editor.scale_root_top = scale_root;
+            editor.playhead_ui.scale_root_top = scale_root;
           },
         );
       }))

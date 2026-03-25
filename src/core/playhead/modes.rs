@@ -122,7 +122,6 @@ impl Playhead {
           consts::canvas_editor_section_view,
           |canvas: &mut Canvas<GridEditor>| {
             let editor = canvas.state_mut();
-            editor.arpeggiator_mode = is_arp;
             editor.playhead_ui.arpeggiator_mode = is_arp;
           },
         );
@@ -150,7 +149,7 @@ impl Playhead {
           consts::canvas_editor_section_view,
           |canvas: &mut Canvas<GridEditor>| {
             let editor = canvas.state_mut();
-            editor.event_operator_mode = is_event_op;
+            editor.playhead_ui.event_operator_mode = is_event_op;
           },
         );
 
@@ -174,7 +173,7 @@ impl Playhead {
           consts::canvas_editor_section_view,
           |canvas: &mut Canvas<GridEditor>| {
             let editor = canvas.state_mut();
-            editor.drain_queue_mode = is_drain;
+            editor.playhead_ui.drain_queue_mode = is_drain;
           },
         );
 
@@ -198,7 +197,6 @@ impl Playhead {
           consts::canvas_editor_section_view,
           |canvas: &mut Canvas<GridEditor>| {
             let editor = canvas.state_mut();
-            editor.sweep_mode = is_sweep;
             editor.playhead_ui.sweep_mode = is_sweep;
           },
         );
@@ -250,7 +248,6 @@ impl Playhead {
           consts::canvas_editor_section_view,
           |canvas: &mut Canvas<GridEditor>| {
             let editor = canvas.state_mut();
-            editor.sweep_row_mode = new_mode;
             editor.playhead_ui.sweep_row_mode = new_mode;
           },
         );
@@ -298,7 +295,7 @@ impl Playhead {
           consts::canvas_editor_section_view,
           |canvas: &mut Canvas<GridEditor>| {
             let editor = canvas.state_mut();
-            editor.freeze_mode = is_freeze;
+            editor.playhead_ui.freeze_mode = is_freeze;
           },
         );
 
@@ -330,7 +327,6 @@ impl Playhead {
           consts::canvas_editor_section_view,
           |canvas: &mut Canvas<GridEditor>| {
             let editor = canvas.state_mut();
-            editor.accumulation_mode = is_enabled;
             editor.playhead_ui.accumulation_mode = is_enabled;
           },
         );

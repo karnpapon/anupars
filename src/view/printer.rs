@@ -308,12 +308,6 @@ impl<T: Printable + Copy> Matrix<T> {
       ColorType::rgb(50, 50, 50),
     ));
 
-    let pa_left = playhead_area.left();
-    let pa_right = playhead_area.right();
-    let pa_top = playhead_area.top();
-    let pa_bottom = playhead_area.bottom();
-    let aimed_bounds = aimed_area.map(|r| (r.left(), r.right(), r.top(), r.bottom()));
-
     // Build a flat match-lookup map: cell_index -> &Match.
     let match_map: HashMap<usize, &Match> = text_matcher
       .as_ref()
@@ -341,7 +335,7 @@ impl<T: Printable + Copy> Matrix<T> {
         let pos = (x, y);
         let ch = self.get_display_char(x, y);
 
-        let is_in_playhead_area = x >= pa_left && x <= pa_right && y >= pa_top && y <= pa_bottom;
+        let is_in_playhead_area = playhead_area.contains((x, y).into());
         let is_active_pos = x == active_absolute_pos.x && y == active_absolute_pos.y;
         let matched = match_map.get(&cell_index);
         let is_regex_match = matched.is_some();
@@ -372,7 +366,10 @@ impl<T: Printable + Copy> Matrix<T> {
         }
 
         // Focus dim (only for cells outside the playhead x-band).
-        if *focus_mode && !is_in_playhead_area && (x < pa_left || x >= pa_right) {
+        if *focus_mode
+          && !is_in_playhead_area
+          && (x < playhead_area.left() || x >= playhead_area.right())
+        {
           final_ch = ch;
           final_style = style_dim;
         }
@@ -404,8 +401,8 @@ impl<T: Printable + Copy> Matrix<T> {
         }
 
         // aimed pos
-        if let Some((ax0, ax1, ay0, ay1)) = aimed_bounds {
-          if x >= ax0 && x <= ax1 && y >= ay0 && y <= ay1 {
+        if let Some(aimed_rect) = aimed_area {
+          if aimed_rect.contains((x, y).into()) {
             final_ch = ch;
             final_style = if is_regex_match {
               style_highlight

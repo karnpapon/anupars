@@ -107,9 +107,6 @@ impl Playhead {
                     move |canvas: &mut Canvas<GridEditor>| {
                       let editor = canvas.state_mut();
                       editor.playhead_ui.aimed_area = aimed_area;
-                      if aimed_area.is_none() {
-                        editor.is_aiming = false;
-                      }
                     },
                   );
                 }

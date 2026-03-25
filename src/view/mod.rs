@@ -1,4 +1,5 @@
 pub mod console;
+pub mod consts;
 pub mod grid;
 pub mod layout;
 pub mod menubar;
