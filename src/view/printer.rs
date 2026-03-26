@@ -284,6 +284,8 @@ impl<T: Printable + Copy> Matrix<T> {
       aimed_area,
       sweep_mode,
       sweep_row_mode,
+      drone_mode,
+      drone_x,
       tilt_mode,
       grid_v_splits,
       grid_h_splits,
@@ -363,6 +365,26 @@ impl<T: Printable + Copy> Matrix<T> {
           } else {
             style_xhair_dim
           };
+        }
+
+        // drone line
+        if *drone_mode && x == *drone_x && !is_active_pos && !is_regex_match {
+          let (note_index, _octave) = playhead_ui.scale_mode_left.pos_to_scale_note(
+            y,
+            self.height,
+            consts::BASE_OCTAVE,
+            playhead_ui.scale_root_left.to_root_offset(),
+          );
+          let note_i = note_index.round() as usize % 12;
+          let is_black_key = matches!(note_i, 1 | 3 | 6 | 8 | 10);
+          let is_c = consts::NOTE_NAMES[note_i] == "C";
+          final_ch = if is_c { '┣' } else { '┃' };
+          let color = if is_black_key {
+            ColorType::rgb(50, 50, 50)
+          } else {
+            ColorType::rgb(100, 100, 100)
+          };
+          final_style = Style::from_color_style(ColorStyle::front(color));
         }
 
         // Focus dim (only for cells outside the playhead x-band).

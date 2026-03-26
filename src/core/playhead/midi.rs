@@ -12,6 +12,7 @@ use crate::core::playhead::types::ModeFlags;
 use crate::core::playhead::types::MusicState;
 use crate::core::playhead::types::SweepRowMode;
 use crate::core::{consts, engine::regex::Match, io::midi, tonal::scale};
+use crate::view::rect::Rect;
 
 /// Calculate MIDI channel based on grid splits and position
 pub fn calculate_channel(
@@ -64,6 +65,9 @@ pub struct MidiTriggerHandler {
   pub tilt_mode: Arc<Mutex<TiltMode>>,
   pub playhead_pos: Arc<Mutex<Vec2>>,
   pub sweep_row_mode: Arc<Mutex<SweepRowMode>>,
+  pub drone_held_notes: Arc<Mutex<Vec<midi::MidiMsg>>>,
+  /// Incremented on each drone move so stale note-off threads self-cancel.
+  pub drone_release_generation: Arc<AtomicUsize>,
 }
 
 impl MidiTriggerHandler {
@@ -84,6 +88,8 @@ impl MidiTriggerHandler {
       tilt_mode: config.tilt_mode,
       playhead_pos: config.playhead_pos,
       sweep_row_mode: config.sweep_row_mode,
+      drone_held_notes: Arc::new(Mutex::new(Vec::new())),
+      drone_release_generation: Arc::new(AtomicUsize::new(0)),
     }
   }
 
@@ -323,6 +329,89 @@ impl MidiTriggerHandler {
           is_sweep: true,
           div,
         }));
+    }
+  }
+
+  pub fn release_drone_notes_with_tail(&self) {
+    let old_notes: Vec<midi::MidiMsg> = {
+      let mut held = self.drone_held_notes.lock().unwrap();
+      std::mem::take(&mut *held)
+    };
+    if old_notes.is_empty() {
+      return;
+    }
+    let gen = self.drone_release_generation.fetch_add(1, Ordering::SeqCst) + 1;
+    let tx = self.midi_tx.clone();
+    let gen_arc = Arc::clone(&self.drone_release_generation);
+    thread::Builder::new()
+      .name(consts::THREAD_NAME_DRONE_NOTE_OFF.to_string())
+      .spawn(move || {
+        thread::sleep(Duration::from_millis(80));
+        if gen_arc.load(Ordering::SeqCst) == gen {
+          for msg in old_notes {
+            let _ = tx.send(midi::Message::Trigger(msg, false));
+          }
+        }
+      })
+      .expect("failed to spawn drone-note-off thread");
+  }
+
+  /// Release held drone notes with tail, then immediately trigger new notes at `drone_x`
+  /// for every row in `area` that has a regex match at that x position.
+  /// Notes are derived from the left keyboard (scale_mode_left / scale_root_left).
+  pub fn trigger_drone_at_x(&self, drone_x: usize, area: &Rect) {
+    self.release_drone_notes_with_tail();
+
+    let grid_width = self.grid.width.load(Ordering::Relaxed);
+    let grid_height = self.grid.height.load(Ordering::Relaxed);
+    if grid_width == 0 || grid_height == 0 || drone_x >= grid_width {
+      return;
+    }
+
+    let scale_mode = *self.music.scale_mode_left.lock().unwrap();
+    let scale_root_offset = self.music.scale_root_left.lock().unwrap().to_root_offset();
+    let v_splits = self.grid.v_splits.load(Ordering::Relaxed);
+    let h_splits = self.grid.h_splits.load(Ordering::Relaxed);
+    // drone_channel is 1-indexed; convert to 0-indexed for MIDI.
+    // When channel is 1 (default), derive channel from grid splits as normal.
+    let drone_channel = self.modes.drone_channel.load(Ordering::Relaxed);
+
+    let new_notes: Vec<midi::MidiMsg> = {
+      let matcher = self.text_matcher.lock().unwrap();
+      if let Some(ref m) = *matcher {
+        let mut notes = Vec::new();
+        for y in 0..grid_height {
+          if area.contains((drone_x, y).into()) {
+            continue;
+          }
+          let cell_index = drone_x + y * grid_width;
+          if m.contains_key(&cell_index) {
+            let velocity = calculate_velocity(y, grid_height, 100.0, 10.0);
+            let channel = if drone_channel > 1 {
+              (drone_channel - 1) as u8
+            } else {
+              calculate_channel(drone_x, y, grid_width, grid_height, v_splits, h_splits)
+            };
+            let (note_index, octave) =
+              scale_mode.pos_to_scale_note(y, grid_height, consts::BASE_OCTAVE, scale_root_offset);
+            // length=127 is a placeholder; release is managed manually
+            notes.push(midi::MidiMsg::from(
+              note_index, octave, 127, velocity, channel,
+            ));
+          }
+        }
+        notes
+      } else {
+        Vec::new()
+      }
+    };
+
+    {
+      let mut held = self.drone_held_notes.lock().unwrap();
+      *held = new_notes.clone();
+    }
+    for msg in new_notes {
+      let _ = self.midi_tx.send(midi::Message::Trigger(msg, true));
     }
   }
 

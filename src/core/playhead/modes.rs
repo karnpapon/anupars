@@ -4,8 +4,10 @@ use cursive::views::Canvas;
 use cursive::views::TextView;
 
 use super::movement::Movement;
+use super::types::Direction;
 use super::types::SweepRowMode;
 use crate::app::AppMode;
+use crate::core::command::types::Adjustment;
 use crate::core::consts;
 use crate::view::grid::GridEditor;
 
@@ -38,6 +40,7 @@ impl Playhead {
     let event_op = self.modes.event_operator_mode.load(Ordering::Relaxed);
     let drain_queue = self.queue_manager.is_drain_queue_mode();
     let sweep = self.modes.sweep_mode.load(Ordering::Relaxed);
+    let drone = self.modes.drone_mode.load(Ordering::Relaxed);
     let dyn_length = self.modes.dyn_length_mode.load(Ordering::Relaxed);
     let freeze = self.modes.freeze_mode.load(Ordering::Relaxed);
 
@@ -60,23 +63,39 @@ impl Playhead {
     if sweep {
       active_modes.push(AppMode::Sweep);
     }
+    if drone {
+      active_modes.push(AppMode::Drone);
+    }
     if freeze {
       active_modes.push(AppMode::Freeze);
     }
 
     let base = AppMode::print_activated_modes_from_vec(&active_modes);
 
-    if sweep {
+    let base = if sweep {
       let sweep_row = *self.sweep_row_mode.lock().unwrap();
       if sweep_row == SweepRowMode::Normal {
         base
       } else {
-        let sweep = &format!("{}", AppMode::Sweep).to_uppercase();
-        base.replace(sweep.as_str(), &format!("{}<{}>", sweep, sweep_row.label()))
+        let sweep_str = &format!("{}", AppMode::Sweep).to_uppercase();
+        base.replace(
+          sweep_str.as_str(),
+          &format!("{}<{}>", sweep_str, sweep_row.label()),
+        )
       }
     } else {
       base
+    };
+
+    if drone {
+      let ch = self.modes.drone_channel.load(Ordering::Relaxed);
+      if ch > 1 {
+        let drone_str = &format!("{}", AppMode::Drone).to_uppercase();
+        return base.replace(drone_str.as_str(), &format!("{}<{}>", drone_str, ch));
+      }
     }
+
+    base
   }
 
   pub(super) fn build_movement_status_string(&self) -> String {
@@ -302,6 +321,127 @@ impl Playhead {
         siv.call_on_name(consts::mode_unit_view, |view: &mut TextView| {
           view.set_content(mode_status);
         });
+      }))
+      .unwrap();
+  }
+
+  pub fn cycle_drone_channel(&self, dir: Adjustment) {
+    if !self.modes.drone_mode.load(Ordering::Relaxed) {
+      return;
+    }
+
+    let current = self.modes.drone_channel.load(Ordering::Relaxed);
+    let new_ch = match dir {
+      Adjustment::Increase => {
+        if current >= 16 {
+          1
+        } else {
+          current + 1
+        }
+      }
+      Adjustment::Decrease => {
+        if current <= 1 {
+          16
+        } else {
+          current - 1
+        }
+      }
+    };
+    self.modes.drone_channel.store(new_ch, Ordering::Relaxed);
+
+    // Retrigger so the new channel takes effect immediately.
+    let area = *self.area.lock().unwrap();
+    let drone_x = self.modes.drone_x.load(Ordering::Relaxed);
+    self.midi_handler.trigger_drone_at_x(drone_x, &area);
+
+    let mode_status = self.build_mode_status_string();
+    let cb_sink = self.cb_sink.clone();
+    cb_sink
+      .send(Box::new(move |siv| {
+        siv.call_on_name(
+          consts::canvas_editor_section_view,
+          |canvas: &mut Canvas<GridEditor>| {
+            canvas.state_mut().playhead_ui.drone_channel = new_ch;
+          },
+        );
+        siv.call_on_name(consts::mode_unit_view, |view: &mut TextView| {
+          view.set_content(mode_status);
+        });
+      }))
+      .unwrap();
+  }
+
+  pub fn toggle_drone_mode(&self) {
+    let is_drone = !self.modes.drone_mode.load(Ordering::Relaxed);
+    self.modes.drone_mode.store(is_drone, Ordering::Relaxed);
+
+    let area = {
+      let a = self.area.lock().unwrap();
+      *a
+    };
+    let drone_x = if is_drone {
+      let x = area.left();
+      self.modes.drone_x.store(x, Ordering::Relaxed);
+      self.modes.drone_channel.store(1, Ordering::Relaxed);
+      self.midi_handler.trigger_drone_at_x(x, &area);
+      x
+    } else {
+      self.midi_handler.release_drone_notes_with_tail();
+      self.modes.drone_x.load(Ordering::Relaxed)
+    };
+
+    let mode_status = self.build_mode_status_string();
+    let cb_sink = self.cb_sink.clone();
+
+    cb_sink
+      .send(Box::new(move |siv| {
+        siv.call_on_name(
+          consts::canvas_editor_section_view,
+          |canvas: &mut Canvas<GridEditor>| {
+            let editor = canvas.state_mut();
+            editor.playhead_ui.drone_mode = is_drone;
+            editor.playhead_ui.drone_x = drone_x;
+            editor.playhead_ui.drone_channel = 1;
+          },
+        );
+        siv.call_on_name(consts::mode_unit_view, |view: &mut TextView| {
+          view.set_content(mode_status);
+        });
+      }))
+      .unwrap();
+  }
+
+  /// Move the drone line left or right within the playhead area bounds.
+  /// Releases held notes with a tail and triggers new notes at the new position.
+  pub fn move_drone(&self, dir: Direction) {
+    if !self.modes.drone_mode.load(Ordering::Relaxed) {
+      return;
+    }
+
+    let area = {
+      let a = self.area.lock().unwrap();
+      *a
+    };
+
+    let current = self.modes.drone_x.load(Ordering::Relaxed);
+    let new_x = match dir {
+      Direction::Left if current > area.left() => current - 1,
+      Direction::Right if current < area.right() => current + 1,
+      _ => return,
+    };
+
+    self.modes.drone_x.store(new_x, Ordering::Relaxed);
+    self.midi_handler.trigger_drone_at_x(new_x, &area);
+
+    let cb_sink = self.cb_sink.clone();
+    cb_sink
+      .send(Box::new(move |siv| {
+        siv.call_on_name(
+          consts::canvas_editor_section_view,
+          |canvas: &mut Canvas<GridEditor>| {
+            canvas.state_mut().playhead_ui.drone_x = new_x;
+          },
+        );
       }))
       .unwrap();
   }

@@ -411,6 +411,15 @@ impl Playhead {
             Message::ToggleSweepMode() => {
               self.toggle_sweep_mode();
             }
+            Message::ToggleDroneMode() => {
+              self.toggle_drone_mode();
+            }
+            Message::MoveDrone(dir) => {
+              self.move_drone(dir);
+            }
+            Message::CycleDroneChannel(adj) => {
+              self.cycle_drone_channel(adj);
+            }
             Message::ToggleDynLengthMode() => {
               self.toggle_dyn_length_mode();
             }

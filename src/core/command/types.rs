@@ -23,6 +23,10 @@ pub enum Command {
   ToggleEventOperator,
   ToggleDrainQueue,
   ToggleSweep,
+  ToggleDrone,
+  MoveDroneLeft,
+  MoveDroneRight,
+  CycleDroneChannel(Adjustment),
   ToggleDynLength,
   ToggleFreeze,
   ChangeRootNote(Adjustment),
@@ -50,6 +54,10 @@ impl fmt::Display for Command {
       | Self::ToggleEventOperator
       | Self::ToggleDrainQueue
       | Self::ToggleSweep
+      | Self::ToggleDrone
+      | Self::MoveDroneLeft
+      | Self::MoveDroneRight
+      | Self::CycleDroneChannel(_)
       | Self::ToggleDynLength
       | Self::ChangeRootNote(_)
       | Self::ChangeScaleMode(_)
@@ -82,6 +90,10 @@ impl Command {
       Self::ToggleEventOperator => "toggleeventoperator",
       Self::ToggleDrainQueue => "toggledrainqueue",
       Self::ToggleSweep => "togglesweep",
+      Self::ToggleDrone => "toggledrone",
+      Self::MoveDroneLeft => "droneLeft",
+      Self::MoveDroneRight => "droneRight",
+      Self::CycleDroneChannel(_) => "cycledronechannel",
       Self::ToggleDynLength => "toggledynlength",
       Self::ChangeRootNote(_) => "changerootnote",
       Self::ChangeScaleMode(_) => "changescale",

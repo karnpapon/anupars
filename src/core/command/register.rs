@@ -267,6 +267,34 @@ impl CommandManager {
           .unwrap();
         Ok(None)
       }
+      Command::ToggleDrone => {
+        self
+          .playhead_tx_cloned
+          .send(playhead::Message::ToggleDroneMode())
+          .unwrap();
+        Ok(None)
+      }
+      Command::MoveDroneLeft => {
+        self
+          .playhead_tx_cloned
+          .send(playhead::Message::MoveDrone(playhead::Direction::Left))
+          .unwrap();
+        Ok(None)
+      }
+      Command::MoveDroneRight => {
+        self
+          .playhead_tx_cloned
+          .send(playhead::Message::MoveDrone(playhead::Direction::Right))
+          .unwrap();
+        Ok(None)
+      }
+      Command::CycleDroneChannel(adj) => {
+        self
+          .playhead_tx_cloned
+          .send(playhead::Message::CycleDroneChannel(*adj))
+          .unwrap();
+        Ok(None)
+      }
       Command::ToggleFreeze => {
         self
           .playhead_tx_cloned

@@ -11,9 +11,23 @@ use crate::view::grid::GridEditor;
 use super::Playhead;
 
 impl Playhead {
+  fn retrigger_drone_if_active(&self) {
+    if !self.modes.drone_mode.load(Ordering::Relaxed) {
+      return;
+    }
+    let drone_x = self.modes.drone_x.load(Ordering::Relaxed);
+    let area = *self.area.lock().unwrap();
+    self.midi_handler.trigger_drone_at_x(drone_x, &area);
+  }
+
   pub fn cycle_scale_root(&self, dir: types::Adjustment) {
     let root_top = Arc::clone(&self.music.scale_root_top);
     let root_left = Arc::clone(&self.music.scale_root_left);
+
+    let midi_handler = Arc::clone(&self.midi_handler);
+    let drone_mode = Arc::clone(&self.modes.drone_mode);
+    let drone_x = Arc::clone(&self.modes.drone_x);
+    let area = Arc::clone(&self.area);
 
     let cb_sink = self.cb_sink.clone();
     cb_sink
@@ -30,6 +44,12 @@ impl Playhead {
               let mut root = root_left.lock().unwrap();
               *root = root.cycle(dir);
               editor.playhead_ui.scale_root_left = *root;
+              drop(root);
+              if drone_mode.load(Ordering::Relaxed) {
+                let x = drone_x.load(Ordering::Relaxed);
+                let a = *area.lock().unwrap();
+                midi_handler.trigger_drone_at_x(x, &a);
+              }
             }
           },
         );
@@ -40,6 +60,11 @@ impl Playhead {
   pub fn cycle_scale_mode(&self, dir: types::Adjustment) {
     let mode_top = Arc::clone(&self.music.scale_mode_top);
     let mode_left = Arc::clone(&self.music.scale_mode_left);
+
+    let midi_handler = Arc::clone(&self.midi_handler);
+    let drone_mode = Arc::clone(&self.modes.drone_mode);
+    let drone_x = Arc::clone(&self.modes.drone_x);
+    let area = Arc::clone(&self.area);
 
     let cb_sink = self.cb_sink.clone();
     cb_sink
@@ -56,6 +81,12 @@ impl Playhead {
               let mut mode = mode_left.lock().unwrap();
               *mode = mode.cycle(dir);
               editor.playhead_ui.scale_mode_left = *mode;
+              drop(mode);
+              if drone_mode.load(Ordering::Relaxed) {
+                let x = drone_x.load(Ordering::Relaxed);
+                let a = *area.lock().unwrap();
+                midi_handler.trigger_drone_at_x(x, &a);
+              }
             }
           },
         );
@@ -67,6 +98,8 @@ impl Playhead {
     let mut mode = self.music.scale_mode_left.lock().unwrap();
     *mode = scale_mode;
     drop(mode);
+
+    self.retrigger_drone_if_active();
 
     let cb_sink = self.cb_sink.clone();
     cb_sink
