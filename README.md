@@ -68,8 +68,8 @@ cargo run
   - long-vertical represent natural C
   - the number in long-vertical key is an octave
 14. a **left keyboard** (vertical layout) is also available — press `~` to toggle between top keyboard (`[  ∧  ]`) and left keyboard (`[  ∨  ]`). When the left keyboard is active, notes vary along the y-axis (each row is a pitch) instead of the x-axis.
-15. try changing scale by `Shift+Plus` (scale up) or `Shift+Underscore` (scale down)
-16. changing root note by `=` (root note up) or `-` (down)
+15. try changing scale by `Shift+Plus` (scale up) or `Shift+Underscore` (scale down); use `(` / `)` to change the left keyboard scale directly
+16. changing root note by `=` (root note up) or `-` (down); use `9` / `0` to change the left keyboard root note directly
 
 
 That's all you need for a first session. Explore [Features](#features) and [Keybindings](#keybindings-reference) whenever you're ready to go deeper.
@@ -102,6 +102,7 @@ That's all you need for a first session. Explore [Features](#features) and [Keyb
   - **Left keyboard** (vertical layout): notes vary along the **y-axis** — each row is a distinct pitch. The keyboard strip is drawn along the left edge of the grid.
   - Press `~` to toggle between the two keyboards. The active keyboard is shown as `[  ∧  ]` (top) or `[  ∨  ]` (left) at the top-left of the canvas.
   - Scale mode and root note changes (`Shift++`, `Shift+_`, `=`, `-`) apply to whichever keyboard is currently active.
+  - The left keyboard also has **dedicated shortcuts** that always target it regardless of the active keyboard: `(` / `)` cycle scale mode, `9` / `0` adjust root note.
   - Sweep mode always uses the top keyboard regardless of the active selection.
 
 - **Separated Scale Change for Vertical/Horizontal Steps**
@@ -120,6 +121,12 @@ That's all you need for a first session. Explore [Features](#features) and [Keyb
 - **Accumulation Mode (Semi Self-Configuration)**
   - Activate accumulation mode to let the system semi-autonomously reconfigure itself via [Queue System](#queue-system), stacking and evolving patterns for emergent musical results.
 
+- **Drone Mode**
+  - A sustained-note layer that runs independently of the sequencer playback. Toggle with `Ctrl+o`.
+  - When active, a vertical drone line appears at the left edge of the playhead area. Every row with a regex match at that x-column is held simultaneously, producing a chord that sustains until the line moves or the mode is toggled off.
+  - Notes use the **left keyboard** scale (`scale_mode_left` / `scale_root_left`) with y-axis velocity (higher rows = louder). Cells inside the playhead area are excluded to avoid overlap with the sequencer trigger.
+  - Move the drone line with `i` (left) / `p` (right), held notes fade out with a short tail before the new position fires, enabling smooth chord transitions.
+  - Cycle the MIDI output channel with `I` (decrease) / `P` (increase), wrapping through channels 1–16. When a non-default channel is selected it is shown in the status bar as `O<ch>` (e.g. `O<3>`). Changing the scale root or scale mode via `9` / `0` / `(` / `)` retriggers the drone automatically.
 
 - **Modes** (shown in status bar; uppercase = active)
   - `a`: Arpeggiator (see above)
@@ -127,6 +134,7 @@ That's all you need for a first session. Explore [Features](#features) and [Keyb
   - `u`: Accumulation (see above)
   - `e`: Event Operator, enables event operator triggering from keyboard.
   - `s`: Sweep, sweeps through positions across the playhead range.
+  - `o`: Drone, sustains matched notes at a movable vertical line (see Drone Mode above).
   - `y`: Dynamic Length, playhead length adjusts dynamically.
   - `z`: Freeze, locks the active position and retriggers MIDI at that cell each DIV tick (it's quantized to the beat).
 
@@ -223,7 +231,7 @@ it comprised of
 
 | Key | Action | Description |
 |-----|--------|-------------|
-| `0` or `1` | 1×1 Grid | Single cell (no splits) |
+| `1` | 1×1 Grid | Single cell (no splits) |
 | `2` | 2×1 Grid | 2 vertical splits |
 | `3` | 3×1 Grid | 3 vertical splits |
 | `4` | 4×1 Grid | 4 vertical splits |
@@ -252,8 +260,19 @@ it comprised of
 | `Ctrl+s` | Toggle Sweep | Enable/disable sweep mode |
 | `Shift+\|` | Cycle Sweep Row Mode (SWP) | Cycle sweep row filter: `Nrm` → `Odd` → `Even` → `Rnd` |
 | `Ctrl+t` | Cycle Tilt (TLT) | Cycle sweep crosshair angle: `\|` → `/` → `\` |
+| `Ctrl+o` | Toggle Drone | Enable/disable drone mode |
 | `Ctrl+y` | Toggle Dynamic Length | Enable/disable dynamic length mode |
 | `Ctrl+z` | Toggle Freeze | Lock active position; retrigger matched cell at current DIV rate |
+
+## Drone
+
+| Key | Action | Description |
+|-----|--------|-------------|
+| `Ctrl+o` | Toggle Drone | Enable/disable drone mode; line starts at left edge of playhead area |
+| `i` | Move Drone Left | Shift drone line one column left (within playhead area) |
+| `p` | Move Drone Right | Shift drone line one column right (within playhead area) |
+| `I` | Cycle Drone Channel Down | Previous MIDI channel (1–16, wraps); shown as `O<ch>` in status bar |
+| `P` | Cycle Drone Channel Up | Next MIDI channel (1–16, wraps); shown as `O<ch>` in status bar |
 
 ## Tempo & Timing
 
@@ -272,6 +291,10 @@ it comprised of
 | `Shift+_` / `Shift+Underscore` | Cycle Scale Mode Down | Previous musical scale (applies to active keyboard) |
 | `=` / `Equal` | Increase Root Note | Next root note (applies to active keyboard) |
 | `-` / `Minus` | Decrease Root Note | Previous root note (applies to active keyboard) |
+| `)` | Cycle Left Scale Mode Up | Next scale for left keyboard (always targets left keyboard) |
+| `(` | Cycle Left Scale Mode Down | Previous scale for left keyboard (always targets left keyboard) |
+| `0` | Increase Left Root Note | Next root note for left keyboard (always targets left keyboard) |
+| `9` | Decrease Left Root Note | Previous root note for left keyboard (always targets left keyboard) |
 | `~` | Toggle Spatial Keyboard | Switch between top keyboard `[  ∧  ]` (x-axis, horizontal) and left keyboard `[  ∨  ]` (y-axis, vertical) |
 
 ## UI & Navigation
