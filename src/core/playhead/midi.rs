@@ -171,6 +171,7 @@ impl MidiTriggerHandler {
     curr_running_playhead: usize,
     abs_x: usize,
     area_right: usize,
+    exclude: Option<(usize, u8)>,
   ) -> Vec<usize> {
     if !self.modes.sweep_mode.load(Ordering::Relaxed) {
       return Vec::new();
@@ -209,7 +210,16 @@ impl MidiTriggerHandler {
               let col = (base_col + col_off).min(v.saturating_sub(1));
               let tilt_x = col * col_w + x_offset_in_band;
               let crosshair_index = y * grid_width + tilt_x;
-              if crosshair_index != curr_running_playhead && m.contains_key(&crosshair_index) {
+              let note_pos = if grid_height > 0 {
+                tilt_x % grid_height
+              } else {
+                tilt_x
+              };
+              let channel = (row_idx * v + col) as u8;
+              if crosshair_index != curr_running_playhead
+                && exclude != Some((note_pos, channel))
+                && m.contains_key(&crosshair_index)
+              {
                 Some(crosshair_index)
               } else {
                 None
@@ -230,6 +240,7 @@ impl MidiTriggerHandler {
     abs_x: usize,
     active_pos_y: usize,
     area_right: usize,
+    exclude: Option<(usize, u8)>,
   ) {
     if !self.modes.sweep_mode.load(Ordering::Relaxed) {
       return;
@@ -291,25 +302,36 @@ impl MidiTriggerHandler {
       }
     };
 
-    // Send one TriggerWithPosition per matched cell so each uses the correct
-    // tilt-adjusted x_position → correct MIDI channel via calculate_channel.
+    // Deduplicate matched cells by (note_pos, channel): among cells that would
+    // produce the same MIDI note on the same channel, keep only the one nearest
+    // to active_pos_y (highest proximity velocity). Also skip any (note_pos, channel)
+    // that the playhead already triggered at higher priority.
     let default_length = 4;
     let scale_root_offset = self.music.scale_root_top.lock().unwrap().to_root_offset();
     let div = self.music.ratio.lock().unwrap().1;
-    // Sweep always uses x-axis (top keyboard) for note position.
-    // let top_active = self.keyboard_top_active.load(Ordering::Relaxed);
+
+    // key: (note_pos, channel) → (distance_to_active, y, tilt_x)
+    let mut best: HashMap<(usize, u8), (usize, usize, usize)> = HashMap::new();
     for (y, tilt_x) in matched {
-      // Top keyboard: note varies by x-axis position; left keyboard: note varies by y-axis.
-      // let note_pos = if top_active {
-      //   if grid_height > 0 { tilt_x % grid_height } else { tilt_x }
-      // } else {
-      //   y
-      // };
       let note_pos = if grid_height > 0 {
         tilt_x % grid_height
       } else {
         tilt_x
       };
+      let col_idx = (tilt_x / col_w).min(v.saturating_sub(1));
+      let row_idx = (y / row_h).min(h.saturating_sub(1));
+      let channel = (row_idx * v + col_idx) as u8;
+      if exclude == Some((note_pos, channel)) {
+        continue;
+      }
+      let dist = (y as i32 - active_pos_y as i32).unsigned_abs() as usize;
+      let entry = best.entry((note_pos, channel)).or_insert((dist, y, tilt_x));
+      if dist < entry.0 {
+        *entry = (dist, y, tilt_x);
+      }
+    }
+
+    for ((note_pos, _), (_, y, tilt_x)) in best {
       let _ = self
         .midi_tx
         .send(midi::Message::TriggerWithPosition(midi::TriggerParams {

@@ -312,16 +312,41 @@ impl Playhead {
       if !did_jump && !self.modes.is_ratcheting.load(Ordering::Relaxed) {
         let area_right = self.area.lock().unwrap().right();
         let active_pos_y = self.pos.lock().unwrap().y;
+        // When the playhead triggered a note using the top keyboard (x-axis), exclude
+        // that exact (note_pos, channel) from sweep so the crosshair cannot re-trigger
+        // the same MIDI note at lower velocity. The keyboard_top_active guard ensures
+        // we only compare when both playhead and sweep use the same note formula.
+        // With keyboard_top_active=false the playhead uses the y-axis scale, which is
+        // not comparable to sweep's x-axis formula, so no exclusion is applied there.
+        let playhead_triggered = (in_match_span && !has_match) || (has_match && !did_jump);
+        let exclude =
+          if playhead_triggered && self.modes.keyboard_top_active.load(Ordering::Relaxed) {
+            let grid_width = self.grid.width.load(Ordering::Relaxed);
+            let grid_height = self.grid.height.load(Ordering::Relaxed);
+            let channel = crate::core::playhead::midi::calculate_channel(
+              abs_x,
+              abs_y,
+              grid_width,
+              grid_height,
+              self.grid.v_splits.load(Ordering::Relaxed),
+              self.grid.h_splits.load(Ordering::Relaxed),
+            );
+            Some((note_position, channel))
+          } else {
+            None
+          };
         self.midi_handler.trigger_midi_if_matched_sweep(
           curr_running_playhead,
           abs_x,
           active_pos_y,
           area_right,
+          exclude,
         );
 
-        for idx in self
-          .midi_handler
-          .sweep_matched_indexes(curr_running_playhead, abs_x, area_right)
+        for idx in
+          self
+            .midi_handler
+            .sweep_matched_indexes(curr_running_playhead, abs_x, area_right, exclude)
         {
           self.enqueue_sym_buf_append(idx);
         }
