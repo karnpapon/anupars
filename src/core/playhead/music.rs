@@ -94,6 +94,64 @@ impl Playhead {
       .unwrap();
   }
 
+  pub fn cycle_scale_root_left(&self, dir: types::Adjustment) {
+    let root_left = Arc::clone(&self.music.scale_root_left);
+    let midi_handler = Arc::clone(&self.midi_handler);
+    let drone_mode = Arc::clone(&self.modes.drone_mode);
+    let drone_x = Arc::clone(&self.modes.drone_x);
+    let area = Arc::clone(&self.area);
+
+    let cb_sink = self.cb_sink.clone();
+    cb_sink
+      .send(Box::new(move |siv| {
+        siv.call_on_name(
+          consts::canvas_editor_section_view,
+          |canvas: &mut Canvas<GridEditor>| {
+            let editor = canvas.state_mut();
+            let mut root = root_left.lock().unwrap();
+            *root = root.cycle(dir);
+            editor.playhead_ui.scale_root_left = *root;
+            drop(root);
+            if drone_mode.load(Ordering::Relaxed) {
+              let x = drone_x.load(Ordering::Relaxed);
+              let a = *area.lock().unwrap();
+              midi_handler.trigger_drone_at_x(x, &a);
+            }
+          },
+        );
+      }))
+      .unwrap();
+  }
+
+  pub fn cycle_scale_mode_left(&self, dir: types::Adjustment) {
+    let mode_left = Arc::clone(&self.music.scale_mode_left);
+    let midi_handler = Arc::clone(&self.midi_handler);
+    let drone_mode = Arc::clone(&self.modes.drone_mode);
+    let drone_x = Arc::clone(&self.modes.drone_x);
+    let area = Arc::clone(&self.area);
+
+    let cb_sink = self.cb_sink.clone();
+    cb_sink
+      .send(Box::new(move |siv| {
+        siv.call_on_name(
+          consts::canvas_editor_section_view,
+          |canvas: &mut Canvas<GridEditor>| {
+            let editor = canvas.state_mut();
+            let mut mode = mode_left.lock().unwrap();
+            *mode = mode.cycle(dir);
+            editor.playhead_ui.scale_mode_left = *mode;
+            drop(mode);
+            if drone_mode.load(Ordering::Relaxed) {
+              let x = drone_x.load(Ordering::Relaxed);
+              let a = *area.lock().unwrap();
+              midi_handler.trigger_drone_at_x(x, &a);
+            }
+          },
+        );
+      }))
+      .unwrap();
+  }
+
   pub(super) fn handle_set_scale_mode_left(&self, scale_mode: scale::ScaleMode) {
     let mut mode = self.music.scale_mode_left.lock().unwrap();
     *mode = scale_mode;

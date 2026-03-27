@@ -432,6 +432,12 @@ impl Playhead {
             Message::CycleScaleMode(dir) => {
               self.cycle_scale_mode(dir);
             }
+            Message::CycleScaleRootLeft(dir) => {
+              self.cycle_scale_root_left(dir);
+            }
+            Message::CycleScaleModeLeft(dir) => {
+              self.cycle_scale_mode_left(dir);
+            }
             Message::ClearQueue() => {
               self.handle_clear_queue();
             }

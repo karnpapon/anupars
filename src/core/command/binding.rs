@@ -45,6 +45,10 @@ fn default_keybindings() -> HashMap<String, Vec<Command>> {
   kb.insert("Shift+Underscore".into(), vec![Command::ChangeScaleMode(Adjustment::Decrease)]);
   kb.insert("Equal".into(), vec![Command::ChangeRootNote(Adjustment::Increase)]);
   kb.insert("Minus".into(), vec![Command::ChangeRootNote(Adjustment::Decrease)]);
+  kb.insert(")".into(), vec![Command::ChangeScaleModeLeft(Adjustment::Increase)]);
+  kb.insert("(".into(), vec![Command::ChangeScaleModeLeft(Adjustment::Decrease)]);
+  kb.insert("0".into(), vec![Command::ChangeRootNoteLeft(Adjustment::Increase)]);
+  kb.insert("9".into(), vec![Command::ChangeRootNoteLeft(Adjustment::Decrease)]);
   kb
 }
 

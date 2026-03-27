@@ -878,7 +878,7 @@ fn on_event(canvas: &mut GridEditor, event: Event) -> EventResult {
     Event::Refresh => EventResult::consumed(),
 
     // handle split midi-chan
-    Event::Char(c) if ('0'..='7').contains(&c) => canvas.handle_split_char(c),
+    Event::Char(c) if ('1'..='7').contains(&c) => canvas.handle_split_char(c),
 
     // Vim keybindings for movement (h/j/k/l)
     Event::Char('h') => canvas.commit_or_move(Direction::Left),

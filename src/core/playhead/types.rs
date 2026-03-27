@@ -192,6 +192,8 @@ pub enum Message {
   ToggleFreezeMode(),
   CycleScaleRootTop(types::Adjustment),
   CycleScaleMode(types::Adjustment),
+  CycleScaleRootLeft(types::Adjustment),
+  CycleScaleModeLeft(types::Adjustment),
   SetTempo(usize),
   SetRatio((usize, usize)),
   ClearQueue(),
