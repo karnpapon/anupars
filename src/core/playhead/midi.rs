@@ -366,15 +366,16 @@ impl MidiTriggerHandler {
       .expect("failed to spawn drone-note-off thread");
   }
 
-  /// Release held drone notes with tail, then immediately trigger new notes at `drone_x`
-  /// for every row in `area` that has a regex match at that x position.
+  /// Release held drone notes with tail, then immediately trigger new notes at `drone_x_rel`
+  /// (relative offset from `area.left()`) for every row in `area` that has a regex match.
   /// Notes are derived from the left keyboard (scale_mode_left / scale_root_left).
-  pub fn trigger_drone_at_x(&self, drone_x: usize, area: &Rect) {
+  pub fn trigger_drone_at_x(&self, drone_x_rel: usize, area: &Rect) {
     self.release_drone_notes_with_tail();
 
+    let abs_x = area.left() + drone_x_rel;
     let grid_width = self.grid.width.load(Ordering::Relaxed);
     let grid_height = self.grid.height.load(Ordering::Relaxed);
-    if grid_width == 0 || grid_height == 0 || drone_x >= grid_width {
+    if grid_width == 0 || grid_height == 0 || abs_x >= grid_width {
       return;
     }
 
@@ -391,16 +392,16 @@ impl MidiTriggerHandler {
       if let Some(ref m) = *matcher {
         let mut notes = Vec::new();
         for y in 0..grid_height {
-          if area.contains((drone_x, y).into()) {
+          if area.contains((abs_x, y).into()) {
             continue;
           }
-          let cell_index = drone_x + y * grid_width;
+          let cell_index = abs_x + y * grid_width;
           if m.contains_key(&cell_index) {
             let velocity = calculate_velocity(y, grid_height, 100.0, 10.0);
             let channel = if drone_channel > 1 {
               (drone_channel - 1) as u8
             } else {
-              calculate_channel(drone_x, y, grid_width, grid_height, v_splits, h_splits)
+              calculate_channel(abs_x, y, grid_width, grid_height, v_splits, h_splits)
             };
             let (note_index, octave) =
               scale_mode.pos_to_scale_note(y, grid_height, consts::BASE_OCTAVE, scale_root_offset);

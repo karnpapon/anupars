@@ -368,7 +368,8 @@ impl<T: Printable + Copy> Matrix<T> {
         }
 
         // drone line
-        if *drone_mode && x == *drone_x && !is_active_pos && !is_regex_match {
+        if *drone_mode && x == playhead_area.left() + *drone_x && !is_active_pos && !is_regex_match
+        {
           let (note_index, _octave) = playhead_ui.scale_mode_left.pos_to_scale_note(
             y,
             self.height,

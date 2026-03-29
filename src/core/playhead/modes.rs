@@ -380,7 +380,7 @@ impl Playhead {
       *a
     };
     let drone_x = if is_drone {
-      let x = area.left();
+      let x = 0; // relative offset from area.left()
       self.modes.drone_x.store(x, Ordering::Relaxed);
       self.modes.drone_channel.store(1, Ordering::Relaxed);
       self.midi_handler.trigger_drone_at_x(x, &area);
@@ -425,8 +425,8 @@ impl Playhead {
 
     let current = self.modes.drone_x.load(Ordering::Relaxed);
     let new_x = match dir {
-      Direction::Left if current > area.left() => current - 1,
-      Direction::Right if current < area.right() => current + 1,
+      Direction::Left if current > 0 => current - 1,
+      Direction::Right if current < area.width().saturating_sub(1) => current + 1,
       _ => return,
     };
 
