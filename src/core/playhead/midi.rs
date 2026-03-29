@@ -353,13 +353,19 @@ impl MidiTriggerHandler {
     let gen = self.drone_release_generation.fetch_add(1, Ordering::SeqCst) + 1;
     let tx = self.midi_tx.clone();
     let gen_arc = Arc::clone(&self.drone_release_generation);
+    let held_arc = Arc::clone(&self.drone_held_notes);
     thread::Builder::new()
       .name(consts::THREAD_NAME_DRONE_NOTE_OFF.to_string())
       .spawn(move || {
         thread::sleep(Duration::from_millis(80));
         if gen_arc.load(Ordering::SeqCst) == gen {
+          let current_held = held_arc.lock().unwrap();
           for msg in old_notes {
-            let _ = tx.send(midi::Message::Trigger(msg, false));
+            // Skip note-off for notes that are still active in the new held set
+            // (e.g. when scale changes and some notes survive the update).
+            if !current_held.contains(&msg) {
+              let _ = tx.send(midi::Message::Trigger(msg, false));
+            }
           }
         }
       })

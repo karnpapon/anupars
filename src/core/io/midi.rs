@@ -120,6 +120,14 @@ pub struct MidiMsg {
   pub length: u8,
 }
 
+impl PartialEq for MidiMsg {
+  fn eq(&self, other: &Self) -> bool {
+    self.note.to_bits() == other.note.to_bits()
+      && self.octave == other.octave
+      && self.channel == other.channel
+  }
+}
+
 impl MidiMsg {
   pub fn from(note: f32, octave: u8, length: u8, velocity: u8, channel: u8) -> MidiMsg {
     Self {
