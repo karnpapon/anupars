@@ -368,8 +368,7 @@ impl<T: Printable + Copy> Matrix<T> {
         }
 
         // drone line
-        if *drone_mode && x == playhead_area.left() + *drone_x && !is_active_pos && !is_regex_match
-        {
+        if *drone_mode && x == playhead_area.left() + *drone_x && !is_active_pos {
           let (note_index, _octave) = playhead_ui.scale_mode_left.pos_to_scale_note(
             y,
             self.height,
@@ -379,13 +378,23 @@ impl<T: Printable + Copy> Matrix<T> {
           let note_i = note_index.round() as usize % 12;
           let is_black_key = matches!(note_i, 1 | 3 | 6 | 8 | 10);
           let is_c = consts::NOTE_NAMES[note_i] == "C";
-          final_ch = if is_c { '┣' } else { '┃' };
+          final_ch = if is_regex_match {
+            consts::TRIGGER_CHAR
+          } else if is_c {
+            '┣'
+          } else {
+            '┃'
+          };
           let color = if is_black_key {
             ColorType::rgb(50, 50, 50)
           } else {
             ColorType::rgb(100, 100, 100)
           };
-          final_style = Style::from_color_style(ColorStyle::front(color));
+          final_style = if is_regex_match {
+            Style::highlight()
+          } else {
+            Style::from_color_style(ColorStyle::front(color))
+          }
         }
 
         // Focus dim (only for cells outside the playhead x-band).
