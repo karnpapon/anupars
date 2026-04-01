@@ -8,7 +8,9 @@
 
 use std::fmt;
 
-#[derive(Clone, PartialEq, Copy)]
+use crate::core::consts;
+
+#[derive(Clone, PartialEq, Copy, Debug)]
 pub enum Movement {
   Forward,
   Reverse,
@@ -29,6 +31,10 @@ impl fmt::Display for Movement {
 
 impl Movement {
   pub fn print_movements(&self) -> String {
+    self.print_movements_with_sweep(None)
+  }
+
+  pub fn print_movements_with_sweep(&self, sweep_movement: Option<Movement>) -> String {
     let movements = [
       Movement::Forward,
       Movement::Reverse,
@@ -38,11 +44,17 @@ impl Movement {
     movements
       .iter()
       .map(|mv| {
-        let movement = self;
-        if *mv == *movement {
-          format!("[{}]", mv)
-        } else {
-          format!("{}", mv)
+        let is_normal_active = *mv == *self;
+        let is_sweep_active = sweep_movement.map(|s| *mv == s).unwrap_or(false);
+        let so = consts::SWEEP_MOVEMENT_OPEN;
+        let sc = consts::SWEEP_MOVEMENT_CLOSE;
+        let mo = consts::MOVEMENT_OPEN;
+        let mc = consts::MOVEMENT_CLOSE;
+        match (is_normal_active, is_sweep_active) {
+          (true, true) => format!("{so}{mo}{mv}{mc}{sc}"),
+          (true, false) => format!("{mo}{mv}{mc}"),
+          (false, true) => format!("{so}{mv}{sc}"),
+          (false, false) => format!("{mv}"),
         }
       })
       .collect::<Vec<_>>()

@@ -294,6 +294,11 @@ impl<T: Printable + Copy> Matrix<T> {
     } = playhead_ui;
 
     let active_absolute_pos = playhead_pos.saturating_add(actived_pos);
+    let crosshair_abs_x = if playhead_ui.sweep_movement.is_some() {
+      playhead_ui.sweep_x
+    } else {
+      active_absolute_pos.x
+    };
     let v = (*grid_v_splits).max(1);
     let h = (*grid_h_splits).max(1);
     let total = self.width * self.height;
@@ -330,7 +335,7 @@ impl<T: Printable + Copy> Matrix<T> {
     let mut new_regex_in_area: Vec<usize> = Vec::new();
 
     for y in 0..self.height {
-      let sweep = self.row_sweep(&metrics, tilt_mode, active_absolute_pos.x, v, h, y);
+      let sweep = self.row_sweep(&metrics, tilt_mode, crosshair_abs_x, v, h, y);
 
       for x in 0..self.width {
         let cell_index = x + y * self.width;

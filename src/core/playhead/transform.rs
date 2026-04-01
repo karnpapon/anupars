@@ -12,6 +12,7 @@ use std::collections::HashMap;
 
 use crate::core::engine::regex;
 
+use super::movement::Movement;
 use super::{Playhead, UIUpdate};
 
 use super::Direction;
@@ -310,12 +311,51 @@ impl Playhead {
       drop(matcher_guard);
 
       if !did_jump && !self.modes.is_ratcheting.load(Ordering::Relaxed) {
-        let area_right = self.area.lock().unwrap().right();
+        let area = *self.area.lock().unwrap();
+        let area_right = area.right();
         let active_pos_y = self.pos.lock().unwrap().y;
-        // Exclude the (note_pos, channel) that the playhead already triggered from sweep
-        // so the crosshair cannot re-trigger the same MIDI note at lower velocity.
-        // Both playhead and sweep always use the top keyboard (x-axis), so the exclusion
-        // always applies when the playhead triggered.
+
+        // Compute the sweep crosshair x based on active sweep movement mode.
+        let sweep_mv = *self.modes.sweep_movement.lock().unwrap();
+        let sweep_abs_x = if let Some(mv) = sweep_mv {
+          let area_width = area.width();
+          let step = *self.step_index.lock().unwrap();
+          // Sweep direction is absolute (computed from step_index), independent of normal movement.
+          let sweep_rel = match mv {
+            // Forward: always 0→W-1 regardless of normal movement.
+            Movement::Forward => step % area_width.max(1),
+            // Reverse: always W-1→0 regardless of normal movement.
+            Movement::Reverse => area_width
+              .saturating_sub(1)
+              .saturating_sub(step % area_width.max(1)),
+            Movement::Random => {
+              crate::core::playhead::movement::get_random_index(step, area_width.max(1))
+            }
+            Movement::Pendulum => {
+              // Reversed pendulum: starts at W-1, goes W-1→0→W-1→…
+              let cycle = if area_width <= 1 {
+                1
+              } else {
+                area_width * 2 - 2
+              };
+              let phase = step % cycle;
+              if phase < area_width {
+                area_width.saturating_sub(1).saturating_sub(phase)
+              } else {
+                phase.saturating_sub(area_width.saturating_sub(1))
+              }
+            }
+          };
+          let x = area.left() + sweep_rel.min(area_width.saturating_sub(1));
+          self.modes.sweep_x.store(x, Ordering::Relaxed);
+          let mut q = self.ui_update_queue.lock().unwrap();
+          q.push_back(UIUpdate::SweepX(x));
+          x
+        } else {
+          abs_x
+        };
+
+        // Exclude the (note_pos, channel) that the playhead already triggered from sweep.
         let playhead_triggered = (in_match_span && !has_match) || (has_match && !did_jump);
         let exclude = if playhead_triggered {
           let grid_width = self.grid.width.load(Ordering::Relaxed);
@@ -334,17 +374,18 @@ impl Playhead {
         };
         self.midi_handler.trigger_midi_if_matched_sweep(
           curr_running_playhead,
-          abs_x,
+          sweep_abs_x,
           active_pos_y,
           area_right,
           exclude,
         );
 
-        for idx in
-          self
-            .midi_handler
-            .sweep_matched_indexes(curr_running_playhead, abs_x, area_right, exclude)
-        {
+        for idx in self.midi_handler.sweep_matched_indexes(
+          curr_running_playhead,
+          sweep_abs_x,
+          area_right,
+          exclude,
+        ) {
           self.enqueue_sym_buf_append(idx);
         }
       }

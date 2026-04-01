@@ -32,6 +32,7 @@ fn default_keybindings() -> HashMap<String, Vec<Command>> {
   kb.insert("Ctrl+e".into(), vec![Command::ToggleEventOperator]);
   kb.insert("Ctrl+n".into(), vec![Command::ToggleDrainQueue]);
   kb.insert("Ctrl+s".into(), vec![Command::ToggleSweep]);
+  kb.insert("!".into(), vec![Command::ToggleSweepMovement]);
   kb.insert("Ctrl+o".into(), vec![Command::ToggleDrone]);
   kb.insert("i".into(), vec![Command::MoveDroneLeft]);
   kb.insert("p".into(), vec![Command::MoveDroneRight]);

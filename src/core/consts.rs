@@ -116,6 +116,10 @@ pub const PLAYHEAD_CHAR: char = '>';
 pub const TRIGGER_CHAR: char = '*';
 pub const PLAYHEAD_MATCH_CHAR: char = '@';
 pub const MATCH_GROUP_CHAR: char = '}';
+pub const SWEEP_MOVEMENT_OPEN: char = '<';
+pub const SWEEP_MOVEMENT_CLOSE: char = '>';
+pub const MOVEMENT_OPEN: char = '[';
+pub const MOVEMENT_CLOSE: char = ']';
 
 pub const TMP_BUF_SIZE: usize = 6;
 

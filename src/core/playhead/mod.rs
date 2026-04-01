@@ -462,6 +462,12 @@ impl Playhead {
             Message::CancelAim() => {
               self.handle_cancel_aim();
             }
+            Message::ToggleSweepMovementMode() => {
+              self.toggle_sweep_movement_mode();
+            }
+            Message::SetSweepMovement(mv) => {
+              self.set_sweep_movement(mv);
+            }
             Message::ToggleSpatialKeyboard() => {
               let prev = self.modes.keyboard_top_active.load(Ordering::Relaxed);
               self

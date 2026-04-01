@@ -99,11 +99,18 @@ impl Playhead {
   }
 
   pub(super) fn build_movement_status_string(&self) -> String {
-    let movement = self.movement.lock().unwrap();
-    movement.print_movements()
+    let movement = *self.movement.lock().unwrap();
+    let sweep_movement = *self.modes.sweep_movement.lock().unwrap();
+    movement.print_movements_with_sweep(sweep_movement)
   }
 
   pub fn switch_movement(&self, new_movement: Movement) {
+    // If sweep movement mode is active, redirect to sweep movement instead.
+    if self.modes.sweep_movement.lock().unwrap().is_some() {
+      self.set_sweep_movement(new_movement);
+      return;
+    }
+
     let mut movement = self.movement.lock().unwrap();
     *movement = new_movement;
     drop(movement);
@@ -117,6 +124,60 @@ impl Playhead {
         siv.call_on_name(consts::mode_unit_view, |view: &mut TextView| {
           view.set_content(mode_status);
         });
+        siv.call_on_name(consts::movement_unit_view, |view: &mut TextView| {
+          view.set_content(movement_status);
+        });
+      }))
+      .unwrap();
+  }
+
+  pub fn toggle_sweep_movement_mode(&self) {
+    let mut sweep_movement = self.modes.sweep_movement.lock().unwrap();
+    if sweep_movement.is_some() {
+      *sweep_movement = None;
+    } else {
+      // Only activate when sweep mode is on.
+      if !self.modes.sweep_mode.load(Ordering::Relaxed) {
+        return;
+      }
+      let current = *self.movement.lock().unwrap();
+      *sweep_movement = Some(current);
+    }
+    let new_val = *sweep_movement;
+    drop(sweep_movement);
+
+    let movement_status = self.build_movement_status_string();
+    let cb_sink = self.cb_sink.clone();
+    cb_sink
+      .send(Box::new(move |siv| {
+        siv.call_on_name(
+          consts::canvas_editor_section_view,
+          |canvas: &mut Canvas<GridEditor>| {
+            canvas.state_mut().playhead_ui.sweep_movement = new_val;
+          },
+        );
+        siv.call_on_name(consts::movement_unit_view, |view: &mut TextView| {
+          view.set_content(movement_status);
+        });
+      }))
+      .unwrap();
+  }
+
+  pub fn set_sweep_movement(&self, new_movement: Movement) {
+    let mut sweep_movement = self.modes.sweep_movement.lock().unwrap();
+    *sweep_movement = Some(new_movement);
+    drop(sweep_movement);
+
+    let movement_status = self.build_movement_status_string();
+    let cb_sink = self.cb_sink.clone();
+    cb_sink
+      .send(Box::new(move |siv| {
+        siv.call_on_name(
+          consts::canvas_editor_section_view,
+          |canvas: &mut Canvas<GridEditor>| {
+            canvas.state_mut().playhead_ui.sweep_movement = Some(new_movement);
+          },
+        );
         siv.call_on_name(consts::movement_unit_view, |view: &mut TextView| {
           view.set_content(movement_status);
         });

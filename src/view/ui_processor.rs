@@ -113,6 +113,14 @@ impl Playhead {
                 UIUpdate::TmpAppendSpace => sym_state.handle_buf_append_space(siv),
                 UIUpdate::TmpAppend(idx) => sym_state.handle_buf_append(siv, idx),
                 UIUpdate::RplCycle(old_area) => sym_state.handle_rpl_cycle(siv, old_area),
+                UIUpdate::SweepX(x) => {
+                  siv.call_on_name(
+                    consts::canvas_editor_section_view,
+                    |canvas: &mut Canvas<GridEditor>| {
+                      canvas.state_mut().playhead_ui.sweep_x = x;
+                    },
+                  );
+                }
               }
             }
           }))

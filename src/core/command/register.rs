@@ -351,6 +351,13 @@ impl CommandManager {
           .unwrap();
         Ok(None)
       }
+      Command::ToggleSweepMovement => {
+        self
+          .playhead_tx_cloned
+          .send(playhead::Message::ToggleSweepMovementMode())
+          .unwrap();
+        Ok(None)
+      }
       Command::ToggleSpatialKeyboard => {
         s.call_on_name(
           consts::canvas_editor_section_view,

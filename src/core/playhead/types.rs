@@ -16,6 +16,7 @@ use std::collections::hash_map::DefaultHasher;
 use std::hash::Hash;
 use std::hash::Hasher;
 
+use super::movement::Movement;
 use super::queue::QueueManager;
 use super::tilt::TiltMode;
 
@@ -98,6 +99,7 @@ pub enum UIUpdate {
   TmpAppend(usize),
   TmpAppendSpace,
   RplCycle(Rect),
+  SweepX(usize),
 }
 
 pub struct PlayheadUI {
@@ -117,6 +119,8 @@ pub struct PlayheadUI {
   pub drain_queue_mode: bool,
   pub sweep_mode: bool,
   pub sweep_row_mode: SweepRowMode,
+  pub sweep_movement: Option<Movement>,
+  pub sweep_x: usize,
   pub drone_mode: bool,
   pub drone_x: usize,
   pub drone_channel: usize,
@@ -148,6 +152,8 @@ impl PlayheadUI {
       drain_queue_mode: false,
       sweep_mode: false,
       sweep_row_mode: SweepRowMode::default(),
+      sweep_movement: None,
+      sweep_x: 0,
       drone_mode: false,
       drone_x: 0,
       drone_channel: 1,
@@ -205,6 +211,8 @@ pub enum Message {
   CommitAim(),
   CancelAim(),
   ToggleSpatialKeyboard(),
+  ToggleSweepMovementMode(),
+  SetSweepMovement(Movement),
 }
 
 /// Grid and layout state shared across playhead subsystems.
@@ -258,6 +266,8 @@ pub struct ModeFlags {
   pub arpeggiator_mode: Arc<AtomicBool>,
   pub event_operator_mode: Arc<AtomicBool>,
   pub sweep_mode: Arc<AtomicBool>,
+  pub sweep_movement: Arc<Mutex<Option<Movement>>>,
+  pub sweep_x: Arc<AtomicUsize>,
   pub drone_mode: Arc<AtomicBool>,
   pub drone_x: Arc<AtomicUsize>,
   /// MIDI channel for drone line (1-indexed, 1-16). Channel 1 is the default.
@@ -278,6 +288,8 @@ impl ModeFlags {
       arpeggiator_mode: Arc::new(AtomicBool::new(false)),
       event_operator_mode: Arc::new(AtomicBool::new(false)),
       sweep_mode: Arc::new(AtomicBool::new(false)),
+      sweep_movement: Arc::new(Mutex::new(None)),
+      sweep_x: Arc::new(AtomicUsize::new(0)),
       drone_mode: Arc::new(AtomicBool::new(false)),
       drone_x: Arc::new(AtomicUsize::new(0)),
       drone_channel: Arc::new(AtomicUsize::new(1)),
