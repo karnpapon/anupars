@@ -48,6 +48,7 @@ pub struct GridEditor {
   pub regex_tx: Option<Sender<regex::Message>>,
   pub last_pattern: String,
   pub last_flag_str: String,
+  sgr_leak_state: u8,
 }
 
 impl GridEditor {
@@ -63,6 +64,7 @@ impl GridEditor {
       regex_tx: None,
       last_pattern: String::new(),
       last_flag_str: String::new(),
+      sgr_leak_state: 0,
     }
   }
 
@@ -877,8 +879,29 @@ fn on_event(canvas: &mut GridEditor, event: Event) -> EventResult {
   match event {
     Event::Refresh => EventResult::consumed(),
 
+    // detect leaked SGR mouse escape sequences eg. `[<35;74;24M`
+    // aka. Mouse Drag + Pressing ESC thingy
+    Event::Char('[') => {
+      canvas.sgr_leak_state = 1;
+      EventResult::consumed()
+    }
+    Event::Char('<') if canvas.sgr_leak_state == 1 => {
+      canvas.sgr_leak_state = 2;
+      EventResult::consumed()
+    }
+    Event::Char(c) if canvas.sgr_leak_state == 2 && (c.is_ascii_digit() || c == ';') => {
+      EventResult::consumed()
+    }
+    Event::Char('M') | Event::Char('m') if canvas.sgr_leak_state == 2 => {
+      canvas.sgr_leak_state = 0;
+      EventResult::consumed()
+    }
+
     // handle split midi-chan
-    Event::Char(c) if ('1'..='7').contains(&c) => canvas.handle_split_char(c),
+    Event::Char(c) if ('1'..='7').contains(&c) => {
+      canvas.sgr_leak_state = 0;
+      canvas.handle_split_char(c)
+    }
 
     // Vim keybindings for movement (h/j/k/l)
     Event::Char('h') => canvas.commit_or_move(Direction::Left),
@@ -942,6 +965,9 @@ fn on_event(canvas: &mut GridEditor, event: Event) -> EventResult {
       position,
       event: MouseEvent::Hold(MouseButton::Left),
     } => canvas.handle_mouse_hold(offset, position),
-    _ => EventResult::Ignored,
+    _ => {
+      canvas.sgr_leak_state = 0;
+      EventResult::Ignored
+    }
   }
 }

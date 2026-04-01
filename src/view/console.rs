@@ -448,6 +448,18 @@ fn input_submit(siv: &mut Cursive, texts: &str, regex_tx: Sender<regex::Message>
 }
 
 fn input_edit(siv: &mut Cursive, texts: &str, _cursor: usize, regex_tx: Sender<regex::Message>) {
+  // Strip any SGR mouse escape sequence garbage that leaks into the EditView e.g. `[<35;74;24M`
+  if texts.contains("[<") {
+    let cleaned: String = regex_lite::Regex::new(r"\[<\d+;\d+;\d+[Mm]")
+      .unwrap()
+      .replace_all(texts, "")
+      .into_owned();
+    siv.call_on_name(consts::regex_input_unit_view, |v: &mut EditView| {
+      v.set_content(cleaned.clone());
+    });
+    return;
+  }
+
   if texts.is_empty() {
     regex_tx.send(regex::Message::Clear).unwrap();
     if let Some(mut c) = siv.find_name::<Canvas<GridEditor>>(consts::canvas_editor_section_view) {
