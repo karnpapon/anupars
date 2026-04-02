@@ -114,6 +114,18 @@ That's all you need for a first session. Explore [Features](#features) and [Keyb
     - Reverse
     - Pendulum
     - Random
+  - The active movement is shown in the `MVE:` status bar as `[f]rdp` (brackets mark the current mode).
+
+- **Sweep Movement Mode**
+  - An independent movement direction for the sweep crosshair, decoupled from the normal playhead movement. Press `!` to toggle (requires Sweep mode to be active first).
+  - When enabled, the sweep crosshair `<x>` moves according to its own direction while the playhead `[x]` continues on its own. Both indicators are shown together in `MVE:`, e.g. `[f]<r>dp` means normal=Forward, sweep=Reverse.
+  - Initializes to the current normal movement when activated.
+  - Sweep movement directions:
+    - **Forward** (`Ctrl+f`): crosshair moves left→right (0→W-1) each step.
+    - **Reverse** (`Ctrl+r`): crosshair moves right→left (W-1→0) each step.
+    - **Random** (`Ctrl+d`): crosshair jumps to a deterministic pseudo-random column each step.
+    - **Pendulum** (`Ctrl+p`): crosshair oscillates W-1→0→W-1→… (reversed pendulum).
+  - Press `!` again to disable; the crosshair returns to following the playhead.
 
 - **Arpeggiator Mode**
   - When enabled, the sequencer steps only through positions matching the current regex, producing arpeggiator-like melodic patterns from your rules.
@@ -124,9 +136,10 @@ That's all you need for a first session. Explore [Features](#features) and [Keyb
 - **Drone Mode**
   - A sustained-note layer that runs independently of the sequencer playback. Toggle with `Ctrl+o`.
   - When active, a vertical drone line appears at the left edge of the playhead area. Every row with a regex match at that x-column is held simultaneously, producing a chord that sustains until the line moves or the mode is toggled off.
+  - **No sound on enable** — toggling drone mode on only shows the line; no MIDI is triggered until you explicitly move the line with `i` or `p`. This avoids unwanted notes during live performance.
   - Notes use the **left keyboard** scale (`scale_mode_left` / `scale_root_left`) with y-axis velocity (higher rows = louder). Cells inside the playhead area are excluded to avoid overlap with the sequencer trigger.
   - Move the drone line with `i` (left) / `p` (right), held notes fade out with a short tail before the new position fires, enabling smooth chord transitions.
-  - Cycle the MIDI output channel with `I` (decrease) / `P` (increase), wrapping through channels 1–16. When a non-default channel is selected it is shown in the status bar as `O<ch>` (e.g. `O<3>`). Changing the scale root or scale mode via `9` / `0` / `(` / `)` retriggers the drone automatically.
+  - Cycle the MIDI output channel with `I` (decrease) / `P` (increase), wrapping through channels 1–16. When a non-default channel is selected it is shown in the status bar as `O<ch>` (e.g. `O<3>`).
 
 - **Modes** (shown in status bar; uppercase = active)
   - `a`: Arpeggiator (see above)
@@ -258,6 +271,7 @@ it comprised of
 | `Ctrl+e` | Toggle Event Operator | Enable/disable event operators |
 | `Ctrl+n` | Toggle Drain Queue | Enable/disable queue draining |
 | `Ctrl+s` | Toggle Sweep | Enable/disable sweep mode |
+| `!` | Toggle Sweep Movement | Enable/disable independent sweep crosshair direction (requires Sweep mode), initializes to current normal movement |
 | `Shift+\|` | Cycle Sweep Row Mode (SWP) | Cycle sweep row filter: `Nrm` → `Odd` → `Even` → `Rnd` |
 | `Ctrl+t` | Cycle Tilt (TLT) | Cycle sweep crosshair angle: `\|` → `/` → `\` |
 | `Ctrl+o` | Toggle Drone | Enable/disable drone mode |
@@ -291,10 +305,6 @@ it comprised of
 | `Shift+_` / `Shift+Underscore` | Cycle Scale Mode Down | Previous musical scale (applies to active keyboard) |
 | `=` / `Equal` | Increase Root Note | Next root note (applies to active keyboard) |
 | `-` / `Minus` | Decrease Root Note | Previous root note (applies to active keyboard) |
-| `)` | Cycle Left Scale Mode Up | Next scale for left keyboard (always targets left keyboard) |
-| `(` | Cycle Left Scale Mode Down | Previous scale for left keyboard (always targets left keyboard) |
-| `0` | Increase Left Root Note | Next root note for left keyboard (always targets left keyboard) |
-| `9` | Decrease Left Root Note | Previous root note for left keyboard (always targets left keyboard) |
 | `~` | Toggle Spatial Keyboard | Switch between top keyboard `[  ∧  ]` (x-axis, horizontal) and left keyboard `[  ∨  ]` (y-axis, vertical) |
 
 ## UI & Navigation
