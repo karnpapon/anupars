@@ -436,15 +436,14 @@ impl Playhead {
     let is_drone = !self.modes.drone_mode.load(Ordering::Relaxed);
     self.modes.drone_mode.store(is_drone, Ordering::Relaxed);
 
-    let area = {
-      let a = self.area.lock().unwrap();
-      *a
-    };
+    // let area = {
+    //   let a = self.area.lock().unwrap();
+    //   *a
+    // };
     let drone_x = if is_drone {
       let x = 0; // relative offset from area.left()
       self.modes.drone_x.store(x, Ordering::Relaxed);
       self.modes.drone_channel.store(1, Ordering::Relaxed);
-      self.midi_handler.trigger_drone_at_x(x, &area);
       x
     } else {
       self.midi_handler.release_drone_notes_with_tail();
