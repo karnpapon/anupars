@@ -358,6 +358,20 @@ impl CommandManager {
           .unwrap();
         Ok(None)
       }
+      Command::CycleSweepOutputMode => {
+        self
+          .playhead_tx_cloned
+          .send(playhead::Message::CycleSweepOutputMode())
+          .unwrap();
+        Ok(None)
+      }
+      Command::AdjustSweepCC(adj) => {
+        self
+          .playhead_tx_cloned
+          .send(playhead::Message::AdjustSweepCC(*adj))
+          .unwrap();
+        Ok(None)
+      }
       Command::ToggleSpatialKeyboard => {
         s.call_on_name(
           consts::canvas_editor_section_view,

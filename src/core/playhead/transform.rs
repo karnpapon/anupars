@@ -372,12 +372,23 @@ impl Playhead {
         } else {
           None
         };
+        // LFO phase [0.0, 1.0) derived from sweep position within playhead area.
+        // Waveform shape comes for free from sweep movement type:
+        //   Forward = sawtooth up, Reverse = sawtooth down,
+        //   Pendulum = triangle,    Random  = S&H
+        let cc_value = {
+          let area_left = area.left() as f32;
+          let area_w = area.width().max(1) as f32;
+          let phase = ((sweep_abs_x as f32 - area_left) / area_w).clamp(0.0, 1.0);
+          (phase * 127.0) as u8
+        };
         self.midi_handler.trigger_midi_if_matched_sweep(
           curr_running_playhead,
           sweep_abs_x,
           active_pos_y,
           area_right,
           exclude,
+          cc_value,
         );
 
         for idx in self.midi_handler.sweep_matched_indexes(

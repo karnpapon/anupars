@@ -42,6 +42,9 @@ fn default_keybindings() -> HashMap<String, Vec<Command>> {
   kb.insert("Ctrl+z".into(), vec![Command::ToggleFreeze]);
   kb.insert("Ctrl+t".into(), vec![Command::CycleTilt]);
   kb.insert("Pipe".into(), vec![Command::CycleSweepMode]);
+  kb.insert("@".into(), vec![Command::CycleSweepOutputMode]);
+  kb.insert("[".into(), vec![Command::AdjustSweepCC(Adjustment::Decrease)]);
+  kb.insert("]".into(), vec![Command::AdjustSweepCC(Adjustment::Increase)]);
   kb.insert("Shift+Plus".into(), vec![Command::ChangeScaleMode(Adjustment::Increase)]);
   kb.insert("Shift+Underscore".into(), vec![Command::ChangeScaleMode(Adjustment::Decrease)]);
   kb.insert("Equal".into(), vec![Command::ChangeRootNote(Adjustment::Increase)]);

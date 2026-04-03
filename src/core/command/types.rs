@@ -37,6 +37,8 @@ pub enum Command {
   CycleSweepMode,
   ToggleSpatialKeyboard,
   ToggleSweepMovement,
+  CycleSweepOutputMode,
+  AdjustSweepCC(Adjustment),
 }
 
 impl fmt::Display for Command {
@@ -71,7 +73,9 @@ impl fmt::Display for Command {
       | Self::ToggleFreeze
       | Self::ToggleRandom
       | Self::ToggleSpatialKeyboard
-      | Self::ToggleSweepMovement => vec![],
+      | Self::ToggleSweepMovement
+      | Self::CycleSweepOutputMode
+      | Self::AdjustSweepCC(_) => vec![],
     };
     repr_tokens.append(&mut extras_args);
     write!(f, "{}", repr_tokens.join(" "))
@@ -110,6 +114,8 @@ impl Command {
       Self::ToggleFreeze => "togglefreeze",
       Self::ToggleSpatialKeyboard => "togglekeyboard",
       Self::ToggleSweepMovement => "togglesweepmovement",
+      Self::CycleSweepOutputMode => "cyclesweepoutputmode",
+      Self::AdjustSweepCC(_) => "adjustsweepcc",
     }
   }
 }

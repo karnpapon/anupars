@@ -5,6 +5,7 @@ use cursive::views::TextView;
 
 use super::movement::Movement;
 use super::types::Direction;
+use super::types::SweepOutputMode;
 use super::types::SweepRowMode;
 use crate::app::AppMode;
 use crate::core::command::types::Adjustment;
@@ -74,13 +75,28 @@ impl Playhead {
 
     let base = if sweep {
       let sweep_row = *self.sweep_row_mode.lock().unwrap();
-      if sweep_row == SweepRowMode::Normal {
+      let sweep_output = *self.modes.sweep_output_mode.lock().unwrap();
+      let cc_number = self.modes.sweep_cc_number.load(Ordering::Relaxed);
+      let sweep_str = &format!("{}", AppMode::Sweep).to_uppercase();
+
+      let row_suffix = if sweep_row != SweepRowMode::Normal {
+        format!("<{}>", sweep_row.label())
+      } else {
+        String::new()
+      };
+
+      let output_suffix = match sweep_output {
+        SweepOutputMode::Note => String::new(),
+        SweepOutputMode::CC => format!("<cc{}>", cc_number),
+        SweepOutputMode::Both => format!("<cc{}+>", cc_number),
+      };
+
+      if row_suffix.is_empty() && output_suffix.is_empty() {
         base
       } else {
-        let sweep_str = &format!("{}", AppMode::Sweep).to_uppercase();
         base.replace(
           sweep_str.as_str(),
-          &format!("{}<{}>", sweep_str, sweep_row.label()),
+          &format!("{}{}{}", sweep_str, row_suffix, output_suffix),
         )
       }
     } else {
@@ -329,6 +345,56 @@ impl Playhead {
           |canvas: &mut Canvas<GridEditor>| {
             let editor = canvas.state_mut();
             editor.playhead_ui.sweep_row_mode = new_mode;
+          },
+        );
+        siv.call_on_name(consts::mode_unit_view, |view: &mut TextView| {
+          view.set_content(mode_status);
+        });
+      }))
+      .unwrap();
+  }
+
+  pub fn cycle_sweep_output_mode(&self) {
+    let mut mode = self.modes.sweep_output_mode.lock().unwrap();
+    *mode = mode.cycle_next();
+    let new_mode = *mode;
+    drop(mode);
+
+    let mode_status = self.build_mode_status_string();
+    let cb_sink = self.cb_sink.clone();
+
+    cb_sink
+      .send(Box::new(move |siv| {
+        siv.call_on_name(
+          consts::canvas_editor_section_view,
+          |canvas: &mut Canvas<GridEditor>| {
+            canvas.state_mut().playhead_ui.sweep_output_mode = new_mode;
+          },
+        );
+        siv.call_on_name(consts::mode_unit_view, |view: &mut TextView| {
+          view.set_content(mode_status);
+        });
+      }))
+      .unwrap();
+  }
+
+  pub fn adjust_sweep_cc(&self, adj: Adjustment) {
+    let current = self.modes.sweep_cc_number.load(Ordering::Relaxed);
+    let next = match adj {
+      Adjustment::Increase => current.saturating_add(1).min(127),
+      Adjustment::Decrease => current.saturating_sub(1),
+    };
+    self.modes.sweep_cc_number.store(next, Ordering::Relaxed);
+
+    let mode_status = self.build_mode_status_string();
+    let cb_sink = self.cb_sink.clone();
+
+    cb_sink
+      .send(Box::new(move |siv| {
+        siv.call_on_name(
+          consts::canvas_editor_section_view,
+          |canvas: &mut Canvas<GridEditor>| {
+            canvas.state_mut().playhead_ui.sweep_cc_number = next;
           },
         );
         siv.call_on_name(consts::mode_unit_view, |view: &mut TextView| {

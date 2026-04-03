@@ -94,6 +94,11 @@ pub enum Message {
   SetMsgConfig(MidiMsg),  // ? maybe obsolete, TBD
   ClearMsgConfig(),
   TriggerWithPosition(TriggerParams),
+  ControlChange {
+    channel: u8,
+    cc_number: u8,
+    cc_value: u8,
+  },
   SwitchDevice(usize),
   Panic(),
   SetTempo(usize),
@@ -240,6 +245,18 @@ impl Midi {
 
   fn handle_enable_clock_input(&self, en: bool) {
     self.clock_input_enabled.store(en, Ordering::Relaxed);
+  }
+
+  fn handle_control_change(&self, channel: u8, cc_number: u8, cc_value: u8) {
+    if let Ok(mut conn_out) = self.out_device.lock() {
+      if let Some(connection_out) = conn_out.as_mut() {
+        let _ = connection_out.send(&[
+          u8::from(MidiStatusMsg::ControlChange) + (channel & 0x0F),
+          cc_number,
+          cc_value,
+        ]);
+      }
+    }
   }
 
   fn handle_connect_input(&self, port_index: usize) {
@@ -751,6 +768,13 @@ impl Midi {
             }
             Message::TriggerWithPosition(params) => {
               self.handle_trigger_with_position(params);
+            }
+            Message::ControlChange {
+              channel,
+              cc_number,
+              cc_value,
+            } => {
+              self.handle_control_change(channel, cc_number, cc_value);
             }
             Message::SetTempo(bpm) => {
               self.handle_set_tempo(bpm);

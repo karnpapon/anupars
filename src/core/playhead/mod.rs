@@ -468,6 +468,12 @@ impl Playhead {
             Message::SetSweepMovement(mv) => {
               self.set_sweep_movement(mv);
             }
+            Message::CycleSweepOutputMode() => {
+              self.cycle_sweep_output_mode();
+            }
+            Message::AdjustSweepCC(adj) => {
+              self.adjust_sweep_cc(adj);
+            }
             Message::ToggleSpatialKeyboard() => {
               let prev = self.modes.keyboard_top_active.load(Ordering::Relaxed);
               self

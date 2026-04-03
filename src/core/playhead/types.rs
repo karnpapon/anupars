@@ -1,6 +1,6 @@
 use std::collections::BTreeSet;
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicBool, AtomicUsize};
+use std::sync::atomic::{AtomicBool, AtomicU8, AtomicUsize};
 use std::sync::{Arc, Mutex};
 
 use cursive::Vec2;
@@ -19,6 +19,33 @@ use std::hash::Hasher;
 use super::movement::Movement;
 use super::queue::QueueManager;
 use super::tilt::TiltMode;
+
+/// Sweep output mode: controls whether sweep triggers notes, CC, or both.
+#[derive(Clone, Copy, Debug, PartialEq, Default)]
+pub enum SweepOutputMode {
+  #[default]
+  Note,
+  CC,
+  Both,
+}
+
+impl SweepOutputMode {
+  pub fn cycle_next(self) -> Self {
+    match self {
+      SweepOutputMode::Note => SweepOutputMode::CC,
+      SweepOutputMode::CC => SweepOutputMode::Both,
+      SweepOutputMode::Both => SweepOutputMode::Note,
+    }
+  }
+
+  pub fn label(&self) -> &'static str {
+    match self {
+      SweepOutputMode::Note => "",
+      SweepOutputMode::CC => "cc",
+      SweepOutputMode::Both => "cc+",
+    }
+  }
+}
 
 /// Sweep row filter mode: which rows the vertical crosshair draws on and triggers MIDI from.
 #[derive(Clone, Copy, Debug, PartialEq, Default)]
@@ -121,6 +148,8 @@ pub struct PlayheadUI {
   pub sweep_row_mode: SweepRowMode,
   pub sweep_movement: Option<Movement>,
   pub sweep_x: usize,
+  pub sweep_output_mode: SweepOutputMode,
+  pub sweep_cc_number: u8,
   pub drone_mode: bool,
   pub drone_x: usize,
   pub drone_channel: usize,
@@ -154,6 +183,8 @@ impl PlayheadUI {
       sweep_row_mode: SweepRowMode::default(),
       sweep_movement: None,
       sweep_x: 0,
+      sweep_output_mode: SweepOutputMode::default(),
+      sweep_cc_number: 74,
       drone_mode: false,
       drone_x: 0,
       drone_channel: 1,
@@ -213,6 +244,8 @@ pub enum Message {
   ToggleSpatialKeyboard(),
   ToggleSweepMovementMode(),
   SetSweepMovement(Movement),
+  CycleSweepOutputMode(),
+  AdjustSweepCC(types::Adjustment),
 }
 
 /// Grid and layout state shared across playhead subsystems.
@@ -268,6 +301,8 @@ pub struct ModeFlags {
   pub sweep_mode: Arc<AtomicBool>,
   pub sweep_movement: Arc<Mutex<Option<Movement>>>,
   pub sweep_x: Arc<AtomicUsize>,
+  pub sweep_output_mode: Arc<Mutex<SweepOutputMode>>,
+  pub sweep_cc_number: Arc<AtomicU8>,
   pub drone_mode: Arc<AtomicBool>,
   pub drone_x: Arc<AtomicUsize>,
   /// MIDI channel for drone line (1-indexed, 1-16). Channel 1 is the default.
@@ -290,6 +325,8 @@ impl ModeFlags {
       sweep_mode: Arc::new(AtomicBool::new(false)),
       sweep_movement: Arc::new(Mutex::new(None)),
       sweep_x: Arc::new(AtomicUsize::new(0)),
+      sweep_output_mode: Arc::new(Mutex::new(SweepOutputMode::default())),
+      sweep_cc_number: Arc::new(AtomicU8::new(74)),
       drone_mode: Arc::new(AtomicBool::new(false)),
       drone_x: Arc::new(AtomicUsize::new(0)),
       drone_channel: Arc::new(AtomicUsize::new(1)),

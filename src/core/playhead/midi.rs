@@ -10,6 +10,7 @@ use crate::core::playhead::tilt::TiltMode;
 use crate::core::playhead::types::GridState;
 use crate::core::playhead::types::ModeFlags;
 use crate::core::playhead::types::MusicState;
+use crate::core::playhead::types::SweepOutputMode;
 use crate::core::playhead::types::SweepRowMode;
 use crate::core::{consts, engine::regex::Match, io::midi, tonal::scale};
 use crate::view::rect::Rect;
@@ -229,6 +230,7 @@ impl MidiTriggerHandler {
     active_pos_y: usize,
     area_right: usize,
     exclude: Option<(usize, u8)>,
+    cc_value: u8,
   ) {
     if !self.modes.sweep_mode.load(Ordering::Relaxed) {
       return;
@@ -319,26 +321,43 @@ impl MidiTriggerHandler {
       }
     }
 
+    let output_mode = *self.modes.sweep_output_mode.lock().unwrap();
+    let cc_number = self.modes.sweep_cc_number.load(Ordering::Relaxed);
+
     for ((note_pos, _), (_, y, tilt_x)) in best {
-      let _ = self
-        .midi_tx
-        .send(midi::Message::TriggerWithPosition(midi::TriggerParams {
-          y_position: note_pos,
-          grid_height,
-          x_position: tilt_x,
-          grid_width,
-          grid_v_splits: self.grid.v_splits.load(Ordering::Relaxed),
-          grid_h_splits: self.grid.h_splits.load(Ordering::Relaxed),
-          scale_mode: x_scale_mode,
-          scale_root_offset,
-          bpm: current_tempo,
-          trigger_pos_y: y,
-          active_pos_y,
-          distance_to_next: default_length,
-          hold: false,
-          is_sweep: true,
-          div,
-        }));
+      let col_idx = (tilt_x / col_w).min(v.saturating_sub(1));
+      let row_idx = (y / row_h).min(h.saturating_sub(1));
+      let channel = (row_idx * v + col_idx) as u8;
+
+      if matches!(output_mode, SweepOutputMode::CC | SweepOutputMode::Both) {
+        let _ = self.midi_tx.send(midi::Message::ControlChange {
+          channel,
+          cc_number,
+          cc_value,
+        });
+      }
+
+      if matches!(output_mode, SweepOutputMode::Note | SweepOutputMode::Both) {
+        let _ = self
+          .midi_tx
+          .send(midi::Message::TriggerWithPosition(midi::TriggerParams {
+            y_position: note_pos,
+            grid_height,
+            x_position: tilt_x,
+            grid_width,
+            grid_v_splits: self.grid.v_splits.load(Ordering::Relaxed),
+            grid_h_splits: self.grid.h_splits.load(Ordering::Relaxed),
+            scale_mode: x_scale_mode,
+            scale_root_offset,
+            bpm: current_tempo,
+            trigger_pos_y: y,
+            active_pos_y,
+            distance_to_next: default_length,
+            hold: false,
+            is_sweep: true,
+            div,
+          }));
+      }
     }
   }
 
