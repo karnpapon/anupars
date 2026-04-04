@@ -149,8 +149,9 @@ impl Playhead {
 
   pub fn toggle_sweep_movement_mode(&self) {
     let mut sweep_movement = self.modes.sweep_movement.lock().unwrap();
-    if sweep_movement.is_some() {
+    let init_x: Option<usize> = if sweep_movement.is_some() {
       *sweep_movement = None;
+      None
     } else {
       // Only activate when sweep mode is on.
       if !self.modes.sweep_mode.load(Ordering::Relaxed) {
@@ -158,7 +159,10 @@ impl Playhead {
       }
       let current = *self.movement.lock().unwrap();
       *sweep_movement = Some(current);
-    }
+      let abs_x = self.pos.lock().unwrap().x + self.actived_pos.lock().unwrap().x;
+      self.modes.sweep_x.store(abs_x, Ordering::Relaxed);
+      Some(abs_x)
+    };
     let new_val = *sweep_movement;
     drop(sweep_movement);
 
@@ -170,6 +174,9 @@ impl Playhead {
           consts::canvas_editor_section_view,
           |canvas: &mut Canvas<GridEditor>| {
             canvas.state_mut().playhead_ui.sweep_movement = new_val;
+            if let Some(x) = init_x {
+              canvas.state_mut().playhead_ui.sweep_x = x;
+            }
           },
         );
         siv.call_on_name(consts::movement_unit_view, |view: &mut TextView| {
