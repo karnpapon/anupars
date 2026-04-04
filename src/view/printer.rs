@@ -309,6 +309,7 @@ impl<T: Printable + Copy> Matrix<T> {
     let style_dim = dim_style();
     let style_highlight = Style::highlight();
     let style_none = Style::none();
+    let style_light = Style::from(ColorStyle::front(ColorType::rgb(255, 255, 255)));
     let style_xhair_dim = Style::from_color_style(ColorStyle::front(ColorType::rgb(80, 80, 80)));
     let style_aimed_bg = Style::from_color_style(ColorStyle::new(
       ColorType::rgb(255, 255, 255),
@@ -329,6 +330,20 @@ impl<T: Printable + Copy> Matrix<T> {
         map
       })
       .unwrap_or_default();
+
+    let crosshair_nearest_match: HashMap<usize, usize> = {
+      let mut map: HashMap<usize, (usize, usize)> = HashMap::new();
+      for &idx in match_map.keys() {
+        let mx = idx % self.width;
+        let my = idx / self.width;
+        let dist = (my as i32 - active_absolute_pos.y as i32).unsigned_abs() as usize;
+        let entry = map.entry(mx).or_insert((dist, my));
+        if dist < entry.0 {
+          *entry = (dist, my);
+        }
+      }
+      map.into_iter().map(|(x, (_, y))| (x, y)).collect()
+    };
 
     // single str buff reused across all cells
     let mut tmp = String::with_capacity(4);
@@ -367,6 +382,12 @@ impl<T: Printable + Copy> Matrix<T> {
           final_ch = '|';
           final_style = if is_regex_match && !is_in_playhead_area {
             style_highlight
+          } else if crosshair_nearest_match.get(&x).is_some_and(|&sel_y| {
+            let lo = active_absolute_pos.y.min(sel_y);
+            let hi = active_absolute_pos.y.max(sel_y);
+            y >= lo && y <= hi
+          }) {
+            style_light
           } else {
             style_xhair_dim
           };
