@@ -41,3 +41,6 @@ pub static main_section_view: &str = "main_section_view";
 // --- canvas grid spacing ---
 pub static GRID_ROW_SPACING: usize = 9;
 pub static GRID_COL_SPACING: usize = 9;
+
+pub static REST_CHAR: char = ':';
+pub static EMPTY_CHAR: char = '.';

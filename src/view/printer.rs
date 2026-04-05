@@ -9,6 +9,7 @@ use crate::core::engine::regex::Match;
 use crate::core::playhead::tilt::TiltMode;
 use crate::core::playhead::types::SweepRowMode;
 use crate::core::playhead::PlayheadUI;
+use crate::view::consts::{EMPTY_CHAR, REST_CHAR};
 use std::collections::HashMap;
 
 #[derive(Clone, Default, Debug)]
@@ -65,8 +66,8 @@ impl Printable for char {
 
   fn display_char(&self, pos: cursive::XY<usize>) -> char {
     match *self {
-      '\0' if self.should_rest(pos) => ':',
-      '\0' => '.',
+      '\0' if self.should_rest(pos) => REST_CHAR,
+      '\0' => EMPTY_CHAR,
       c => c,
     }
   }
