@@ -770,8 +770,6 @@ fn draw(canvas: &GridEditor, printer: &Printer) {
   };
   let grid_printer = printer.offset((x_offset, y_offset));
 
-  canvas.grid.print(&grid_printer, &canvas.playhead_ui);
-
   let sep_style = Style::from(ColorStyle::front(ColorType::rgb(100, 100, 100)));
 
   let col_w = if canvas.playhead_ui.grid_v_splits >= 2 {
@@ -805,9 +803,32 @@ fn draw(canvas: &GridEditor, printer: &Printer) {
 
   let playhead_area = canvas.playhead_ui.playhead_area;
 
+  canvas.grid.print(&grid_printer, &canvas.playhead_ui);
+
+  // Compute crosshair x for the special-cell skip below.
+  let pui = &canvas.playhead_ui;
+  let crosshair_abs_x = if pui.sweep_movement.is_some() {
+    pui.sweep_x
+  } else {
+    pui.playhead_pos.x + pui.actived_pos.x
+  };
+
+  // draw separators after grid.print, ensure the special overlay (crosshair,
+  // drone line, regex match) stay visible
+  let is_special = |x: usize, y: usize| -> bool {
+    let is_crosshair =
+      pui.sweep_mode && pui.sweep_row_mode.is_row_active(y) && x == crosshair_abs_x;
+    let is_drone = pui.drone_mode && x == playhead_area.left() + pui.drone_x;
+    let is_match = pui
+      .text_matcher
+      .as_ref()
+      .is_some_and(|m| m.contains_key(&(y * canvas.grid.width + x)));
+    is_crosshair || is_drone || is_match
+  };
+
   for &sep_x in &sep_xs {
     for y in 0..canvas.grid.height {
-      if playhead_area.contains((sep_x, y).into()) {
+      if playhead_area.contains((sep_x, y).into()) || is_special(sep_x, y) {
         continue;
       }
       let ch = if sep_ys.contains(&y) { "┼" } else { "│" };
@@ -819,7 +840,7 @@ fn draw(canvas: &GridEditor, printer: &Printer) {
 
   for &sep_y in &sep_ys {
     for x in 0..canvas.grid.width {
-      if playhead_area.contains((x, sep_y).into()) {
+      if playhead_area.contains((x, sep_y).into()) || is_special(x, sep_y) {
         continue;
       }
       let ch = if sep_xs.contains(&x) { "┼" } else { "─" };
