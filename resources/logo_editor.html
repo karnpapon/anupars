@@ -1,0 +1,972 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Logo Editor</title>
+    <style>
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      body {
+        font-family: monospace;
+        background: #f5f5f5;
+        color: #222;
+        display: flex;
+        height: 100vh;
+        overflow: hidden;
+      }
+
+      #controls {
+        width: 280px;
+        min-width: 280px;
+        padding: 16px;
+        overflow-y: auto;
+        border-right: 1px solid #ddd;
+        background: #fff;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+
+      #preview {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        /* justify-content: center; */
+        gap: 16px;
+        padding: 24px;
+        position: relative;
+      }
+
+      #svg-container {
+        background: #fff;
+        padding: 16px;
+        border-radius: 4px;
+        border: 1px solid #ddd;
+        box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+        margin: auto;
+      }
+
+      .navbar-mock {
+        border-radius: 6px;
+        box-shadow: 0 1px 4px rgba(0,0,0,.08);
+        display: flex;
+        align-items: center;
+        padding: 0 20px;
+        height: 52px;
+        gap: 24px;
+        width: 100%;
+      }
+      #navbar-mock        { background: #fff; border: 1px solid #ddd; }
+      #navbar-mock-dark   { background: #0f0f0f; border: 1px solid #2a2a2a; box-shadow: 0 1px 6px rgba(0,0,0,.4); }
+      .nb-logo { display: flex; align-items: center; flex-shrink: 0; }
+      .nb-links { display: flex; gap: 20px; flex: 1; }
+      .nb-links a {
+        font-size: 13px; text-decoration: none;
+        font-family: sans-serif; cursor: default;
+      }
+      #navbar-mock     .nb-links a { color: #444; }
+      #navbar-mock     .nb-links a:hover { color: #000; }
+      #navbar-mock-dark .nb-links a { color: #aaa; }
+      #navbar-mock-dark .nb-links a:hover { color: #fff; }
+      .nb-cta {
+        font-size: 12px; padding: 6px 14px;
+        border: none; border-radius: 4px;
+        cursor: default; font-family: sans-serif;
+        white-space: nowrap; width: auto;
+      }
+      #navbar-mock      .nb-cta { background: #111; color: #fff; }
+      #navbar-mock      .nb-cta:hover { background: #333; }
+      #navbar-mock-dark .nb-cta { background: #fff; color: #000; }
+      #navbar-mock-dark .nb-cta:hover { background: #ddd; }
+      #preview-label {
+        font-size: 10px;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: #bbb;
+        align-self: flex-start;
+      }
+
+      h2 {
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+        color: #999;
+        margin-bottom: 4px;
+      }
+
+      .section {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+      .section-title {
+        font-size: 10px;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: #aaa;
+        padding-bottom: 4px;
+        border-bottom: 1px solid #eee;
+      }
+
+      .row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .row label {
+        width: 80px;
+        font-size: 12px;
+        flex-shrink: 0;
+        color: #666;
+      }
+      .row input[type="range"] {
+        flex: 1;
+        accent-color: #555;
+      }
+      .row select {
+        flex: 1;
+        font-family: monospace;
+        font-size: 12px;
+        padding: 2px 4px;
+        border: 1px solid #ccc;
+        border-radius: 3px;
+        background: #fafafa;
+        color: #222;
+      }
+      .row .val {
+        width: 36px;
+        text-align: right;
+        font-size: 12px;
+        color: #111;
+      }
+
+      #col-sliders,
+      #row-sliders {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+      .wave-toggle {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 12px;
+        color: #555;
+        cursor: pointer;
+        user-select: none;
+      }
+      .wave-toggle input[type="checkbox"] {
+        accent-color: #555;
+        cursor: pointer;
+      }
+      .wave-params {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+      .sliders-wrap.wave-on {
+        opacity: 0.35;
+        pointer-events: none;
+      }
+
+      button {
+        padding: 8px 12px;
+        background: #f0f0f0;
+        color: #333;
+        border: 1px solid #ccc;
+        border-radius: 3px;
+        cursor: pointer;
+        font-family: monospace;
+        font-size: 12px;
+        width: 100%;
+      }
+      button:hover {
+        background: #e4e4e4;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="controls">
+      <div class="section">
+        <div class="section-title">Grid</div>
+        <div class="row">
+          <label>NX</label>
+          <input type="range" id="s-nx" min="2" max="20" step="1" value="8" />
+          <span class="val" id="v-nx">8</span>
+        </div>
+        <div class="row">
+          <label>NY</label>
+          <input type="range" id="s-ny" min="2" max="20" step="1" value="8" />
+          <span class="val" id="v-ny">8</span>
+        </div>
+        <div class="row">
+          <label>BLOCK</label>
+          <input
+            type="range"
+            id="s-block"
+            min="4"
+            max="120"
+            step="2"
+            value="40"
+          />
+          <span class="val" id="v-block">40</span>
+        </div>
+        <div class="row">
+          <label>THICKNESS</label>
+          <input type="range" id="s-thick" min="1" max="8" step="1" value="1" />
+          <span class="val" id="v-thick">1</span>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-title">Shape</div>
+        <div class="row">
+          <label>Style</label>
+          <select id="s-shape">
+            <option value="rect">rect</option>
+            <option value="rounded">rounded</option>
+            <option value="ellipse">ellipse</option>
+            <option value="diamond">diamond</option>
+            <option value="wavy">wavy</option>
+          </select>
+        </div>
+        <div class="row" id="row-amplitude">
+          <label>Amplitude</label>
+          <input type="range" id="s-amp" min="1" max="40" step="1" value="8" />
+          <span class="val" id="v-amp">8</span>
+        </div>
+        <div class="row" id="row-waves">
+          <label>Waves</label>
+          <input
+            type="range"
+            id="s-waves"
+            min="1"
+            max="10"
+            step="1"
+            value="2"
+          />
+          <span class="val" id="v-waves">2</span>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-title">Column Widths</div>
+        <label class="wave-toggle">
+          <input type="checkbox" id="col-wave-on" /> Waveforms
+        </label>
+        <div class="wave-params" id="col-wave-params" style="display: none">
+          <div class="row">
+            <label>Shape</label
+            ><select id="cw-type">
+              <option value="sine">Sine</option>
+              <option value="sawtooth">Sawtooth</option>
+              <option value="revSawtooth">Rev. Sawtooth</option>
+              <option value="triangle">Triangle</option>
+            </select>
+          </div>
+          <div class="row">
+            <label>Base</label
+            ><input
+              type="range"
+              id="cw-base"
+              min="4"
+              max="200"
+              step="2"
+              value="40"
+            /><span class="val" id="vcw-base">40</span>
+          </div>
+          <div class="row">
+            <label>Amplitude</label
+            ><input
+              type="range"
+              id="cw-amp"
+              min="0"
+              max="100"
+              step="1"
+              value="20"
+            /><span class="val" id="vcw-amp">20</span>
+          </div>
+          <div class="row">
+            <label>Frequency</label
+            ><input
+              type="range"
+              id="cw-freq"
+              min="0.1"
+              max="5"
+              step="0.1"
+              value="1"
+            /><span class="val" id="vcw-freq">1</span>
+          </div>
+          <div class="row">
+            <label>Phase</label
+            ><input
+              type="range"
+              id="cw-phase"
+              min="0"
+              max="6.28"
+              step="0.05"
+              value="0"
+            /><span class="val" id="vcw-phase">0</span>
+          </div>
+        </div>
+        <div class="sliders-wrap" id="col-sliders-wrap">
+          <div id="col-sliders"></div>
+          <button id="btn-random-cols">Throw the dice</button>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-title">Row Heights</div>
+        <label class="wave-toggle">
+          <input type="checkbox" id="row-wave-on" /> Waveforms
+        </label>
+        <div class="wave-params" id="row-wave-params" style="display: none">
+          <div class="row">
+            <label>Shape</label
+            ><select id="rw-type">
+              <option value="sine">Sine</option>
+              <option value="sawtooth">Sawtooth</option>
+              <option value="revSawtooth">Rev. Sawtooth</option>
+              <option value="triangle">Triangle</option>
+            </select>
+          </div>
+          <div class="row">
+            <label>Base</label
+            ><input
+              type="range"
+              id="rw-base"
+              min="4"
+              max="200"
+              step="2"
+              value="40"
+            /><span class="val" id="vrw-base">40</span>
+          </div>
+          <div class="row">
+            <label>Amplitude</label
+            ><input
+              type="range"
+              id="rw-amp"
+              min="0"
+              max="100"
+              step="1"
+              value="20"
+            /><span class="val" id="vrw-amp">20</span>
+          </div>
+          <div class="row">
+            <label>Frequency</label
+            ><input
+              type="range"
+              id="rw-freq"
+              min="0.1"
+              max="5"
+              step="0.1"
+              value="1"
+            /><span class="val" id="vrw-freq">1</span>
+          </div>
+          <div class="row">
+            <label>Phase</label
+            ><input
+              type="range"
+              id="rw-phase"
+              min="0"
+              max="6.28"
+              step="0.05"
+              value="0"
+            /><span class="val" id="vrw-phase">0</span>
+          </div>
+        </div>
+        <div class="sliders-wrap" id="row-sliders-wrap">
+          <div id="row-sliders"></div>
+          <button id="btn-random-rows">Throw the dice</button>
+        </div>
+      </div>
+
+      <div class="section">
+        <button id="btn-reset-cols">Reset</button>
+        <button id="btn-export">Export SVG</button>
+      </div>
+    </div>
+
+    <div id="preview">
+      <div id="navbar-mock" class="navbar-mock">
+        <div class="nb-logo" id="navbar-logo"></div>
+        <nav class="nb-links">
+          <a>Docs</a>
+          <a>KeyBinding</a>
+          <a>Roadmap</a>
+        </nav>
+        <button class="nb-cta">Download</button>
+      </div>
+      <div id="navbar-mock-dark" class="navbar-mock">
+        <div class="nb-logo" id="navbar-logo-dark"></div>
+        <nav class="nb-links">
+          <a>Docs</a>
+          <a>KeyBinding</a>
+          <a>Roadmap</a>
+        </nav>
+        <button class="nb-cta">Download</button>
+      </div>
+      <div id="svg-container"></div>
+    </div>
+
+    <script>
+      let NX = 8;
+      let NY = 8;
+      let BLOCK = 40;
+      let THICKNESS = 1;
+      let COL_WIDTHS = Array(NX).fill(BLOCK);
+      let ROW_HEIGHTS = Array(NY).fill(BLOCK);
+      let SHAPE = "rect";
+      let AMPLITUDE = 8;
+      let WAVES = 2;
+
+      let COL_WAVE = false,
+        COL_WAVE_TYPE = "sine",
+        COL_WAVE_BASE = 40,
+        COL_WAVE_AMP = 20,
+        COL_WAVE_FREQ = 1,
+        COL_WAVE_PHASE = 0;
+      let ROW_WAVE = false,
+        ROW_WAVE_TYPE = "sine",
+        ROW_WAVE_BASE = 40,
+        ROW_WAVE_AMP = 20,
+        ROW_WAVE_FREQ = 1,
+        ROW_WAVE_PHASE = 0;
+
+      function waveValues(count, base, amp, freq, phase, type) {
+        return Array.from({ length: count }, (_, i) => {
+          const t =
+            ((((i / count) * freq + phase / (2 * Math.PI)) % 1) + 1) % 1;
+          let v;
+          switch (type) {
+            case "sawtooth":
+              v = 2 * t - 1;
+              break;
+            case "revSawtooth":
+              v = 1 - 2 * t;
+              break;
+            case "triangle":
+              v = 1 - 4 * Math.abs(t - 0.5);
+              break;
+            default:
+              v = Math.sin((2 * Math.PI * freq * i) / count + phase);
+          }
+          return Math.max(2, Math.round(base + amp * v));
+        });
+      }
+
+      let _colX = [],
+        _rowY = [],
+        _totalW = 0,
+        _totalH = 0,
+        _activeColW = [],
+        _activeRowH = [];
+      let _hovCol = -1,
+        _hovRow = -1;
+
+      function updateHighlight() {
+        const g = document.getElementById("hl");
+        if (!g) return;
+        let html = "";
+        if (_hovCol >= 0 && _hovCol < NX)
+          html += `<rect x="${_colX[_hovCol]}" y="0" width="${_activeColW[_hovCol]}" height="${_totalH}" fill="rgba(255,160,0,0.22)"/>`;
+        if (_hovRow >= 0 && _hovRow < NY)
+          html += `<rect x="0" y="${_rowY[_hovRow]}" width="${_totalW}" height="${_activeRowH[_hovRow]}" fill="rgba(255,160,0,0.22)"/>`;
+        g.innerHTML = html;
+      }
+
+      function cellShape(x, y, w, h) {
+        if (SHAPE === "rect") {
+          return `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="#000"/>`;
+        }
+        if (SHAPE === "rounded") {
+          const r = Math.min(AMPLITUDE, w / 2, h / 2);
+          return `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${r}" fill="#000"/>`;
+        }
+        if (SHAPE === "ellipse") {
+          return `<ellipse cx="${x + w / 2}" cy="${y + h / 2}" rx="${w / 2}" ry="${h / 2}" fill="#000"/>`;
+        }
+        if (SHAPE === "diamond") {
+          const cx = x + w / 2,
+            cy = y + h / 2;
+          return `<polygon points="${cx},${y} ${x + w},${cy} ${cx},${y + h} ${x},${cy}" fill="#000"/>`;
+        }
+        if (SHAPE === "wavy") {
+          const n = WAVES,
+            a = AMPLITUDE;
+          function wavyEdge(x1, y1, x2, y2, nx, ny) {
+            let d = "";
+            for (let i = 0; i < n; i++) {
+              const t1 = (i + 0.5) / n,
+                t2 = (i + 1) / n;
+              const sign = i % 2 === 0 ? 1 : -1;
+              const qx = x1 + (x2 - x1) * t1 + nx * a * sign;
+              const qy = y1 + (y2 - y1) * t1 + ny * a * sign;
+              const ex = x1 + (x2 - x1) * t2;
+              const ey = y1 + (y2 - y1) * t2;
+              d += `Q${qx},${qy} ${ex},${ey} `;
+            }
+            return d;
+          }
+          const d =
+            `M${x},${y} ` +
+            wavyEdge(x, y, x + w, y, 0, -1) +
+            wavyEdge(x + w, y, x + w, y + h, 1, 0) +
+            wavyEdge(x + w, y + h, x, y + h, 0, 1) +
+            wavyEdge(x, y + h, x, y, -1, 0) +
+            "Z";
+          return `<path d="${d}" fill="#000"/>`;
+        }
+        return "";
+      }
+
+      function bresenham(x0, y0, x1, y1) {
+        const pts = [];
+        const dx = Math.abs(x1 - x0),
+          dy = Math.abs(y1 - y0);
+        let x = x0,
+          y = y0;
+        const sx = x1 > x0 ? 1 : -1,
+          sy = y1 > y0 ? 1 : -1;
+        if (dx >= dy) {
+          let err = Math.floor(dx / 2);
+          while (x !== x1) {
+            pts.push([x, y]);
+            err -= dy;
+            if (err < 0) {
+              y += sy;
+              err += dx;
+            }
+            x += sx;
+          }
+          pts.push([x, y]);
+        } else {
+          let err = Math.floor(dy / 2);
+          while (y !== y1) {
+            pts.push([x, y]);
+            err -= dx;
+            if (err < 0) {
+              x += sx;
+              err += dy;
+            }
+            y += sy;
+          }
+          pts.push([x, y]);
+        }
+        return pts;
+      }
+
+      function key(col, row) {
+        return col + "," + row;
+      }
+
+      function expand(cells, dc, dr, t, nx, ny) {
+        const result = new Set(cells.map(([c, r]) => key(c, r)));
+        for (const [col, row] of cells) {
+          for (let k = 1; k < t; k++) {
+            const nc = col + dc * k,
+              nr = row + dr * k;
+            if (nc >= 0 && nc < nx && nr >= 0 && nr < ny)
+              result.add(key(nc, nr));
+          }
+        }
+        return result;
+      }
+
+      function render() {
+        const nx = NX,
+          ny = NY,
+          block = BLOCK,
+          t = THICKNESS;
+
+        const activeColW = COL_WAVE
+          ? waveValues(
+              nx,
+              COL_WAVE_BASE,
+              COL_WAVE_AMP,
+              COL_WAVE_FREQ,
+              COL_WAVE_PHASE,
+              COL_WAVE_TYPE,
+            )
+          : COL_WIDTHS;
+        const activeRowH = ROW_WAVE
+          ? waveValues(
+              ny,
+              ROW_WAVE_BASE,
+              ROW_WAVE_AMP,
+              ROW_WAVE_FREQ,
+              ROW_WAVE_PHASE,
+              ROW_WAVE_TYPE,
+            )
+          : ROW_HEIGHTS;
+
+        // col offsets
+        const colX = [];
+        let cx = 0;
+        for (const w of activeColW) {
+          colX.push(cx);
+          cx += w;
+        }
+        const width = cx;
+
+        // row offsets
+        const rowY = [];
+        let ry = 0;
+        for (const h of activeRowH) {
+          rowY.push(ry);
+          ry += h;
+        }
+        const height = ry;
+
+        const left_diag = bresenham(0, ny - 1, nx - 1, 0);
+        const right_vert = bresenham(nx - 1, ny - 1, nx - 1, 1);
+        const bottom_horz = bresenham(0, ny - 1, nx - 1, ny - 1);
+        const top_horz = bresenham(0, 0, nx - 2, 0);
+        const tail = bresenham(
+          Math.floor(nx / 2),
+          Math.floor(ny / 2),
+          nx - 1,
+          ny - 1,
+        );
+
+        const lit = new Set([
+          ...expand(left_diag, 1, 0, t, nx, ny),
+          ...expand(right_vert, -1, 0, t, nx, ny),
+          ...expand(bottom_horz, 0, -1, t, nx, ny),
+          ...expand(top_horz, 0, 1, t, nx, ny),
+          // ...expand(tail, -1, 0, t, nx, ny),
+        ]);
+        // top_horz leaves last col, right_vert starts from row 1 — clear the corner left_diag reaches
+        lit.delete(key(nx - 1, 0));
+        lit.delete(key(nx - 1, ny - 1));
+        // shift top-left block down one row
+        lit.delete(key(0, 0));
+        lit.delete(key(1, 0));
+        lit.add(key(0, 1));
+        lit.add(key(1, 1));
+
+        let rects = "";
+        for (let row = 0; row < ny; row++) {
+          for (let col = 0; col < nx; col++) {
+            if (lit.has(key(col, row))) {
+              const x = colX[col],
+                y = rowY[row],
+                w = activeColW[col],
+                h = activeRowH[row];
+              rects += cellShape(x, y, w, h);
+            }
+          }
+        }
+
+        _colX = colX;
+        _rowY = rowY;
+        _totalW = width;
+        _totalH = height;
+        _activeColW = activeColW;
+        _activeRowH = activeRowH;
+
+        const svgMarkup = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">${rects}<g id="hl"></g></svg>`;
+        document.getElementById("svg-container").innerHTML = svgMarkup;
+        updateHighlight();
+
+        // Navbar logo: scale down to 18px tall, preserve aspect ratio
+        const navHeight = 18;
+        const navWidth =
+          width > 0 ? Math.round((navHeight / height) * width) : 0;
+        const navSvg = (fill) =>
+          `<svg xmlns="http://www.w3.org/2000/svg" width="${navWidth}" height="${navHeight}" viewBox="0 0 ${width} ${height}">${rects.replaceAll('fill="#000"', `fill="${fill}"`)}</svg>`;
+        document.getElementById("navbar-logo").innerHTML      = navSvg("#000");
+        document.getElementById("navbar-logo-dark").innerHTML = navSvg("#fff");
+      }
+
+      function rebuildColSliders() {
+        // grow/shrink COL_WIDTHS to match NX
+        while (COL_WIDTHS.length < NX) COL_WIDTHS.push(BLOCK);
+        COL_WIDTHS.length = NX;
+
+        const container = document.getElementById("col-sliders");
+        container.innerHTML = "";
+        for (let i = 0; i < NX; i++) {
+          const row = document.createElement("div");
+          row.className = "row";
+          row.innerHTML = `
+      <label>col ${i}</label>
+      <input type="range" min="4" max="200" step="2" value="${COL_WIDTHS[i]}" data-col="${i}">
+      <span class="val" id="vcol-${i}">${COL_WIDTHS[i]}</span>`;
+          container.appendChild(row);
+          row.querySelector("input").addEventListener("input", (e) => {
+            const c = +e.target.dataset.col;
+            COL_WIDTHS[c] = +e.target.value;
+            document.getElementById(`vcol-${c}`).textContent = COL_WIDTHS[c];
+            render();
+          });
+          row.addEventListener("mouseenter", () => {
+            _hovCol = i;
+            updateHighlight();
+          });
+          row.addEventListener("mouseleave", () => {
+            _hovCol = -1;
+            updateHighlight();
+          });
+        }
+      }
+
+      function rebuildRowSliders() {
+        while (ROW_HEIGHTS.length < NY) ROW_HEIGHTS.push(BLOCK);
+        ROW_HEIGHTS.length = NY;
+
+        const container = document.getElementById("row-sliders");
+        container.innerHTML = "";
+        for (let i = 0; i < NY; i++) {
+          const row = document.createElement("div");
+          row.className = "row";
+          row.innerHTML = `
+      <label>row ${i}</label>
+      <input type="range" min="4" max="200" step="2" value="${ROW_HEIGHTS[i]}" data-row="${i}">
+      <span class="val" id="vrow-${i}">${ROW_HEIGHTS[i]}</span>`;
+          container.appendChild(row);
+          row.querySelector("input").addEventListener("input", (e) => {
+            const r = +e.target.dataset.row;
+            ROW_HEIGHTS[r] = +e.target.value;
+            document.getElementById(`vrow-${r}`).textContent = ROW_HEIGHTS[r];
+            render();
+          });
+          row.addEventListener("mouseenter", () => {
+            _hovRow = i;
+            updateHighlight();
+          });
+          row.addEventListener("mouseleave", () => {
+            _hovRow = -1;
+            updateHighlight();
+          });
+        }
+      }
+
+      function wire(id, valId, setter) {
+        const el = document.getElementById(id);
+        const vEl = document.getElementById(valId);
+        el.addEventListener("input", () => {
+          setter(+el.value);
+          vEl.textContent = el.value;
+          render();
+        });
+      }
+
+      wire("s-nx", "v-nx", (v) => {
+        NX = v;
+        rebuildColSliders();
+      });
+      wire("s-ny", "v-ny", (v) => {
+        NY = v;
+        rebuildRowSliders();
+      });
+      function updateShapeRows() {
+        const hasAmp = ["rounded", "wavy"].includes(SHAPE);
+        const hasWaves = SHAPE === "wavy";
+        document.getElementById("row-amplitude").style.display = hasAmp
+          ? ""
+          : "none";
+        document.getElementById("row-waves").style.display = hasWaves
+          ? ""
+          : "none";
+      }
+
+      document.getElementById("s-shape").addEventListener("change", (e) => {
+        SHAPE = e.target.value;
+        updateShapeRows();
+        render();
+      });
+      wire("s-amp", "v-amp", (v) => {
+        AMPLITUDE = v;
+      });
+      wire("s-waves", "v-waves", (v) => {
+        WAVES = v;
+      });
+
+      wire("s-block", "v-block", (v) => {
+        BLOCK = v;
+      });
+      wire("s-thick", "v-thick", (v) => {
+        THICKNESS = v;
+      });
+
+      // ── wave controls ───────────────────────────────────────────────────────
+      function setupWave(
+        checkId,
+        paramsId,
+        wrapId,
+        getState,
+        setOn,
+        baseId,
+        ampId,
+        freqId,
+        phaseId,
+        vBaseId,
+        vAmpId,
+        vFreqId,
+        vPhaseId,
+        setBase,
+        setAmp,
+        setFreq,
+        setPhase,
+      ) {
+        const check = document.getElementById(checkId);
+        const params = document.getElementById(paramsId);
+        const wrap = document.getElementById(wrapId);
+        check.addEventListener("change", () => {
+          setOn(check.checked);
+          params.style.display = check.checked ? "" : "none";
+          wrap.classList.toggle("wave-on", check.checked);
+          render();
+        });
+        wire(baseId, vBaseId, (v) => {
+          setBase(v);
+        });
+        wire(ampId, vAmpId, (v) => {
+          setAmp(v);
+        });
+        wire(freqId, vFreqId, (v) => {
+          setFreq(v);
+        });
+        wire(phaseId, vPhaseId, (v) => {
+          setPhase(v);
+        });
+      }
+
+      setupWave(
+        "col-wave-on",
+        "col-wave-params",
+        "col-sliders-wrap",
+        () => COL_WAVE,
+        (v) => {
+          COL_WAVE = v;
+        },
+        "cw-base",
+        "cw-amp",
+        "cw-freq",
+        "cw-phase",
+        "vcw-base",
+        "vcw-amp",
+        "vcw-freq",
+        "vcw-phase",
+        (v) => {
+          COL_WAVE_BASE = v;
+        },
+        (v) => {
+          COL_WAVE_AMP = v;
+        },
+        (v) => {
+          COL_WAVE_FREQ = v;
+        },
+        (v) => {
+          COL_WAVE_PHASE = v;
+        },
+      );
+
+      setupWave(
+        "row-wave-on",
+        "row-wave-params",
+        "row-sliders-wrap",
+        () => ROW_WAVE,
+        (v) => {
+          ROW_WAVE = v;
+        },
+        "rw-base",
+        "rw-amp",
+        "rw-freq",
+        "rw-phase",
+        "vrw-base",
+        "vrw-amp",
+        "vrw-freq",
+        "vrw-phase",
+        (v) => {
+          ROW_WAVE_BASE = v;
+        },
+        (v) => {
+          ROW_WAVE_AMP = v;
+        },
+        (v) => {
+          ROW_WAVE_FREQ = v;
+        },
+        (v) => {
+          ROW_WAVE_PHASE = v;
+        },
+      );
+
+      document.getElementById("cw-type").addEventListener("change", (e) => {
+        COL_WAVE_TYPE = e.target.value;
+        render();
+      });
+      document.getElementById("rw-type").addEventListener("change", (e) => {
+        ROW_WAVE_TYPE = e.target.value;
+        render();
+      });
+
+      function rndInt(min, max, step = 1) {
+        const steps = Math.floor((max - min) / step);
+        return min + Math.round(Math.random() * steps) * step;
+      }
+
+      document
+        .getElementById("btn-random-cols")
+        .addEventListener("click", () => {
+          COL_WIDTHS = Array.from({ length: NX }, () => rndInt(4, 120, 2));
+          rebuildColSliders();
+          render();
+        });
+
+      document
+        .getElementById("btn-random-rows")
+        .addEventListener("click", () => {
+          ROW_HEIGHTS = Array.from({ length: NY }, () => rndInt(4, 120, 2));
+          rebuildRowSliders();
+          render();
+        });
+
+      document
+        .getElementById("btn-reset-cols")
+        .addEventListener("click", () => {
+          COL_WIDTHS = Array(NX).fill(BLOCK);
+          ROW_HEIGHTS = Array(NY).fill(BLOCK);
+          rebuildColSliders();
+          rebuildRowSliders();
+          render();
+        });
+
+      document.getElementById("btn-export").addEventListener("click", () => {
+        const svg = document.getElementById("svg-container").innerHTML;
+        const blob = new Blob([svg], { type: "image/svg+xml" });
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        a.download = "logo.svg";
+        a.click();
+        URL.revokeObjectURL(a.href);
+      });
+
+      NX = 8;
+      NY = 8;
+      BLOCK = 40;
+      THICKNESS = 1;
+      COL_WIDTHS = [40, 40, 20, 80, 20, 40, 40, 60];
+      ROW_HEIGHTS = Array(NY).fill(BLOCK);
+
+      document.getElementById("s-nx").value = NX;
+      document.getElementById("v-nx").textContent = NX;
+      document.getElementById("s-ny").value = NY;
+      document.getElementById("v-ny").textContent = NY;
+      document.getElementById("s-block").value = BLOCK;
+      document.getElementById("v-block").textContent = BLOCK;
+      document.getElementById("s-thick").value = THICKNESS;
+      document.getElementById("v-thick").textContent = THICKNESS;
+
+      rebuildColSliders();
+      rebuildRowSliders();
+      updateShapeRows();
+      render();
+    </script>
+  </body>
+</html>
