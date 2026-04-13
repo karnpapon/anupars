@@ -902,9 +902,12 @@ fn on_event(canvas: &mut GridEditor, event: Event) -> EventResult {
 
     // detect leaked SGR mouse escape sequences eg. `[<35;74;24M`
     // aka. Mouse Drag + Pressing ESC thingy
+    // Return Ignored so `[` still propagates to the command handler
+    // (AdjustSweepCC Decrease). The state is set to track whether this
+    // is really an SGR leak (next char `<` will confirm).
     Event::Char('[') => {
       canvas.sgr_leak_state = 1;
-      EventResult::consumed()
+      EventResult::Ignored
     }
     Event::Char('<') if canvas.sgr_leak_state == 1 => {
       canvas.sgr_leak_state = 2;
