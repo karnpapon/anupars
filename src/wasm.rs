@@ -291,6 +291,7 @@ struct WasmCtx {
   regex_handler: crate::core::engine::regex::RegExpHandler,
   regex_cache: RegexCache,
   metronome: Metronome,
+  midi: crate::core::io::midi::Midi,
   clock_accum_ms: f64,
   clock_tick: usize,
 }
@@ -323,6 +324,9 @@ impl WasmCtx {
 
     // 5. Drain the regex handler
     self.regex_handler.wasm_tick(&mut self.regex_cache);
+
+    // 6. Process MIDI messages and fire pending note-offs
+    self.midi.wasm_tick(self.clock_tick);
   }
 }
 
@@ -420,6 +424,7 @@ pub fn wasm_init(cols: u32, rows: u32) {
   let regex_tx = components.regex_handler.tx.clone();
   let regex_handler = components.regex_handler;
   let metronome = components.metronome;
+  let midi = components.midi;
 
   // Build the runner with our custom backend
   let backend = Box::new(XtermJsBackend::new(cols as usize, rows as usize));
@@ -431,6 +436,7 @@ pub fn wasm_init(cols: u32, rows: u32) {
     regex_handler,
     regex_cache: RegexCache::new(),
     metronome,
+    midi,
     clock_accum_ms: 0.0,
     clock_tick: 0,
   };
@@ -504,4 +510,16 @@ pub fn wasm_send_mouse(kind: u8, button: u8, col: u32, row: u32) {
 #[wasm_bindgen]
 pub fn wasm_resize(cols: u32, rows: u32) {
   RESIZE_STAGE.with(|s| *s.borrow_mut() = Some((cols as usize, rows as usize)));
+}
+
+/// Pop one raw MIDI message (3 bytes) from the output queue.
+/// Returns `undefined` when the queue is empty.
+/// JS: `let msg; while ((msg = wasm_take_midi_message()) !== undefined) midiOut.send(msg);`
+#[wasm_bindgen]
+pub fn wasm_take_midi_message() -> Option<Vec<u8>> {
+  CTX.with(|c| {
+    c.borrow_mut()
+      .as_mut()
+      .and_then(|ctx| ctx.midi.out_queue.pop_front())
+  })
 }
