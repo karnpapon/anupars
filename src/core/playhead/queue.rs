@@ -100,6 +100,12 @@ pub struct QueueManager {
   drain_queue_mode: AtomicBool,
 }
 
+impl Default for QueueManager {
+  fn default() -> Self {
+    Self::new()
+  }
+}
+
 impl QueueManager {
   pub fn new() -> Self {
     QueueManager {

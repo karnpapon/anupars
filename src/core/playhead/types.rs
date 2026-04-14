@@ -162,6 +162,12 @@ pub struct PlayheadUI {
   pub keyboard_top_active: bool,
 }
 
+impl Default for PlayheadUI {
+  fn default() -> Self {
+    Self::new()
+  }
+}
+
 impl PlayheadUI {
   pub fn new() -> Self {
     PlayheadUI {
@@ -257,6 +263,12 @@ pub struct GridState {
   pub h_splits: Arc<AtomicUsize>,
 }
 
+impl Default for GridState {
+  fn default() -> Self {
+    Self::new()
+  }
+}
+
 impl GridState {
   pub fn new() -> Self {
     GridState {
@@ -277,6 +289,12 @@ pub struct MusicState {
   pub scale_root_top: Arc<Mutex<scale::ScaleRoot>>,
   pub scale_root_left: Arc<Mutex<scale::ScaleRoot>>,
   pub ratio: Arc<Mutex<(usize, usize)>>,
+}
+
+impl Default for MusicState {
+  fn default() -> Self {
+    Self::new()
+  }
 }
 
 impl MusicState {
@@ -314,6 +332,12 @@ pub struct ModeFlags {
   /// When true the top keyboard (scale_mode_top / scale_root_top) is active;
   /// when false the left keyboard (scale_mode_left / scale_root_left) is active.
   pub keyboard_top_active: Arc<AtomicBool>,
+}
+
+impl Default for ModeFlags {
+  fn default() -> Self {
+    Self::new()
+  }
 }
 
 impl ModeFlags {

@@ -4,10 +4,9 @@ use std::sync::mpsc::Receiver;
 use std::sync::mpsc::Sender;
 use std::sync::Arc;
 
-// use cursive::theme::{ColorStyle, ColorType, Style};
-// use cursive::utils::markup::StyledString;
 use cursive::views::TextView;
 use num_traits::ToPrimitive;
+#[cfg(not(target_arch = "wasm32"))]
 use std::time::Instant;
 
 use crate::core::consts;
@@ -70,6 +69,70 @@ impl Metronome {
     self.midi_tx = Some(midi_tx);
   }
 
+  /// WASM: read the currently stored `is_playing` flag.
+  #[cfg(target_arch = "wasm32")]
+  pub fn wasm_is_playing(&self) -> bool {
+    self.is_playing.load(Ordering::Relaxed)
+  }
+
+  /// WASM: read the currently stored BPM.
+  #[cfg(target_arch = "wasm32")]
+  pub fn wasm_current_bpm(&self) -> f64 {
+    self.current_bpm.load(Ordering::Relaxed) as f64
+  }
+
+  /// WASM: drain pending control messages (StartStop, Tempo, …) without
+  /// touching the Clock or spawning anything.
+  #[cfg(target_arch = "wasm32")]
+  pub fn wasm_tick(&self) {
+    while let Ok(msg) = self.rx.try_recv() {
+      match msg {
+        Message::StartStop => {
+          self.is_playing.fetch_xor(true, Ordering::SeqCst);
+        }
+        Message::Reset => {
+          self.current_position.store(0, Ordering::Relaxed);
+        }
+        Message::Tempo(tempo) => {
+          let bpm = tempo.to_integer() as usize;
+          self.current_bpm.store(bpm, Ordering::Relaxed);
+          let _ = self.playhead_tx.send(playhead::Message::SetTempo(bpm));
+          let _ = self
+            .cb_sink
+            .send(Box::new(move |siv: &mut cursive::Cursive| {
+              siv.call_on_name(
+                crate::core::consts::bpm_status_unit_view,
+                |v: &mut TextView| {
+                  v.set_content(crate::core::utils::build_bpm_status_str(bpm));
+                },
+              );
+            }));
+        }
+        Message::NudgeTempo(nudge) => {
+          let old_bpm = self.current_bpm.load(Ordering::Relaxed);
+          let new_bpm = (old_bpm as i64 + nudge.to_integer()).max(20).min(999) as usize;
+          self.current_bpm.store(new_bpm, Ordering::Relaxed);
+          let _ = self.playhead_tx.send(playhead::Message::SetTempo(new_bpm));
+          let _ = self
+            .cb_sink
+            .send(Box::new(move |siv: &mut cursive::Cursive| {
+              siv.call_on_name(
+                crate::core::consts::bpm_status_unit_view,
+                |v: &mut TextView| {
+                  v.set_content(crate::core::utils::build_bpm_status_str(new_bpm));
+                },
+              );
+            }));
+        }
+        Message::Tap => { /* simplified: ignore in WASM */ }
+        Message::ExternalClock(_) => { /* no external MIDI in WASM */ }
+        // These are normally sent by the internal Clock; ignore in WASM.
+        Message::Time(_) | Message::Signature(_) => {}
+      }
+    }
+  }
+
+  #[cfg(not(target_arch = "wasm32"))]
   pub fn run(self) {
     let clock = Arc::new(clock::Clock::new());
     let metronome_tx_cloned = self.tx.clone();

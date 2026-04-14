@@ -29,15 +29,17 @@ pub struct Signature {
   pub bars_per_loop: Tick,
 }
 
-impl Signature {
-  pub fn default() -> Self {
+impl Default for Signature {
+  fn default() -> Self {
     Self {
       ticks_per_beat: Ratio::from_integer(DEFAULT_TICKS_PER_BEAT),
       beats_per_bar: Ratio::from_integer(DEFAULT_BEATS_PER_BAR),
       bars_per_loop: Ratio::from_integer(DEFAULT_BARS_PER_LOOP),
     }
   }
+}
 
+impl Signature {
   #[allow(dead_code)]
   pub fn ticks_per_beat(&self) -> Tick {
     self.ticks_per_beat
@@ -245,6 +247,12 @@ pub enum Message {
   StartStop,
   Signature(Signature),
   Tap,
+}
+
+impl Default for Clock {
+  fn default() -> Self {
+    Self::new()
+  }
 }
 
 impl Clock {

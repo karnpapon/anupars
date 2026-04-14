@@ -15,8 +15,11 @@ use num_traits::FromPrimitive;
 use std::rc::Rc;
 use std::sync::mpsc::Sender;
 use std::sync::{Arc, Mutex};
+#[cfg(not(target_arch = "wasm32"))]
 use std::thread;
-use std::time::{Duration, Instant};
+#[cfg(not(target_arch = "wasm32"))]
+use std::time::Duration;
+use std::time::Instant;
 
 use consts::{DEFAULT_TEMPO, MANIFESTO_TEXT, TEMPO_CHECK_INTERVAL_MS, TEMPO_RESET_DELAY_MS};
 
@@ -100,6 +103,10 @@ pub struct Application {
   /// for tracking holding keypress
   pub last_key_time: Arc<Mutex<Option<Instant>>>,
   pub current_tempo: Arc<Mutex<usize>>,
+
+  // WASM-only: the Arc<Playhead> so wasm.rs can call wasm_tick()/wasm_tick_ui()
+  #[cfg(target_arch = "wasm32")]
+  pub playhead: std::sync::Arc<Playhead>,
 }
 
 /// Initialize the default cursive theme with simple borders and terminal colors
@@ -127,7 +134,13 @@ pub fn initialize_components() -> Application {
 
   let playhead_area =
     std::sync::Arc::new(Playhead::new(midi.tx.clone(), cursive.cb_sink().clone()));
+
+  #[cfg(not(target_arch = "wasm32"))]
   let playhead_tx = std::sync::Arc::clone(&playhead_area).run(regex_handler.tx.clone());
+
+  #[cfg(target_arch = "wasm32")]
+  let playhead_tx = std::sync::Arc::clone(&playhead_area).wasm_setup(regex_handler.tx.clone());
+
   let mut metronome = Metronome::new(cursive.cb_sink().clone(), playhead_tx.clone());
 
   metronome.set_midi_tx(midi.tx.clone());
@@ -158,6 +171,8 @@ pub fn initialize_components() -> Application {
     metronome,
     last_key_time,
     current_tempo,
+    #[cfg(target_arch = "wasm32")]
+    playhead: playhead_area,
   }
 }
 
@@ -226,6 +241,7 @@ pub fn setup_ui(components: &mut Application) {
 }
 
 /// Spawn a background thread to monitor key press timing and reset tempo
+#[cfg(not(target_arch = "wasm32"))]
 fn spawn_tempo_monitor_thread(
   last_key_time: Arc<Mutex<Option<Instant>>>,
   current_tempo: Arc<Mutex<usize>>,
@@ -251,6 +267,7 @@ fn spawn_tempo_monitor_thread(
 }
 
 /// Spawn all background worker threads
+#[cfg(not(target_arch = "wasm32"))]
 pub fn spawn_background_threads(
   last_key_time: Arc<Mutex<Option<Instant>>>,
   current_tempo: Arc<Mutex<usize>>,

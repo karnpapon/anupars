@@ -37,6 +37,7 @@ use crate::core::io::midi;
 use crate::core::playhead;
 use crate::core::tonal::scale;
 use crate::core::utils;
+#[cfg(not(target_arch = "wasm32"))]
 use midir;
 
 use super::grid::GridEditor;
@@ -122,7 +123,8 @@ impl Menubar {
 
   pub fn build_menu_app(midi_devices: &[(String, usize)], midi_tx: Sender<midi::Message>) -> Tree {
     // Persist MIDI state for later full-menubar rebuilds.
-    let midi_input_devices = {
+    #[cfg(not(target_arch = "wasm32"))]
+    let midi_input_devices: Vec<(String, usize)> = {
       match midir::MidiInput::new("anupars-query") {
         Err(_) => Vec::new(),
         Ok(inp) => inp
@@ -138,6 +140,8 @@ impl Menubar {
           .collect::<Vec<_>>(),
       }
     };
+    #[cfg(target_arch = "wasm32")]
+    let midi_input_devices: Vec<(String, usize)> = Vec::new();
     let state = MIDI_MENU_STATE.get_or_init(|| {
       Mutex::new((
         midi_devices.to_vec(),

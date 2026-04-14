@@ -5,6 +5,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::mpsc::{channel, Sender};
 use std::sync::Arc;
 use std::sync::Mutex;
+#[cfg(not(target_arch = "wasm32"))]
 use std::thread;
 
 use cursive::views::{Canvas, TextView};
@@ -99,6 +100,11 @@ pub struct Playhead {
   pub sym_state: Arc<SymSpellState>,
 
   cb_sink: cursive::CbSink,
+
+  /// WASM only: the receiver for the playhead message channel, stored here
+  /// because `run()` would normally give it to a background thread.
+  #[cfg(target_arch = "wasm32")]
+  pub wasm_rx: std::sync::Mutex<Option<std::sync::mpsc::Receiver<Message>>>,
 }
 
 impl Playhead {
@@ -162,6 +168,8 @@ impl Playhead {
       match_span_remaining: Arc::new(AtomicUsize::new(0)),
       sym_state: Arc::new(SymSpellState::new()),
       cb_sink,
+      #[cfg(target_arch = "wasm32")]
+      wasm_rx: std::sync::Mutex::new(None),
     }
   }
 
@@ -322,6 +330,288 @@ impl Playhead {
     }));
   }
 
+  /// WASM: set up channels without spawning any threads.
+  /// Returns the `Sender` for keybindings; the `Receiver` is stored inside
+  /// the `Playhead` and drained by `wasm_tick()` each frame.
+  #[cfg(target_arch = "wasm32")]
+  pub fn wasm_setup(self: Arc<Self>, _regex_tx: Sender<regex::Message>) -> Sender<Message> {
+    let (tx, rx) = channel();
+    *self.wasm_rx.lock().unwrap() = Some(rx);
+    tx
+  }
+
+  /// WASM: drain pending messages from the channel and process them.
+  #[cfg(target_arch = "wasm32")]
+  pub fn wasm_tick(self: &Arc<Self>) {
+    let guard = self.wasm_rx.lock().unwrap();
+    if let Some(rx) = guard.as_ref() {
+      while let Ok(control_message) = rx.try_recv() {
+        match control_message {
+          Message::Move(direction, canvas_size) => {
+            self.handle_movement(direction, 1, canvas_size);
+          }
+          Message::Leap(direction, canvas_size) => {
+            let leap_steps = match direction {
+              Direction::Up | Direction::Down => 4,
+              Direction::Left | Direction::Right => 8,
+              Direction::Idle => 0,
+            };
+            self.handle_movement(direction, leap_steps, canvas_size);
+          }
+          Message::SetCurrentPos(position, offset) => {
+            self.handle_set_current_pos(position, offset);
+          }
+          Message::UpdateInfoStatusView() => {
+            self.handle_update_info_status_view();
+          }
+          Message::SetGridArea(current_pos) => {
+            self.handle_set_grid_area(current_pos);
+          }
+          Message::SetActivePos(tick) => {
+            self.handle_set_active_pos(tick);
+          }
+          Message::Scale(dir) => {
+            self.handle_scale(dir);
+          }
+          Message::SetMatcher(matcher) => {
+            self.handle_set_matcher(matcher);
+          }
+          Message::SetGridSize(width, height) => {
+            self.handle_set_grid_size(width, height);
+          }
+          Message::SetScaleModeLeft(scale_mode) => {
+            self.handle_set_scale_mode_left(scale_mode);
+          }
+          Message::SetScaleRootTop(scale_root) => {
+            self.handle_set_scale_root_top(scale_root);
+          }
+          Message::SetScaleModeTop(scale_mode) => {
+            self.handle_set_scale_mode_top(scale_mode);
+          }
+          Message::ToggleAccumulationMode() => {
+            self.handle_toggle_accumulation_mode();
+          }
+          Message::SetTempo(bpm) => {
+            self.handle_set_tempo(bpm);
+          }
+          Message::SetRatio(new_ratio) => {
+            self.handle_set_ratio(new_ratio);
+          }
+          Message::ToggleForwardMode() => {
+            self.switch_movement(movement::Movement::Forward);
+          }
+          Message::ToggleReverseMode() => {
+            self.switch_movement(movement::Movement::Reverse);
+          }
+          Message::ToggleArpeggiatorMode() => {
+            self.toggle_arpeggiator_mode();
+          }
+          Message::ToggleRandomMode() => {
+            self.switch_movement(movement::Movement::Random);
+          }
+          Message::TogglePendulumMode() => {
+            self.switch_movement(movement::Movement::Pendulum);
+          }
+          Message::ToggleEventOperatorMode() => {
+            self.toggle_event_operator_mode();
+          }
+          Message::ToggleDrainQueueMode() => {
+            self.toggle_drain_queue_mode();
+          }
+          Message::ToggleSweepMode() => {
+            self.toggle_sweep_mode();
+          }
+          Message::ToggleDroneMode() => {
+            self.toggle_drone_mode();
+          }
+          Message::MoveDrone(dir) => {
+            self.move_drone(dir);
+          }
+          Message::CycleDroneChannel(adj) => {
+            self.cycle_drone_channel(adj);
+          }
+          Message::ToggleDynLengthMode() => {
+            self.toggle_dyn_length_mode();
+          }
+          Message::ToggleFreezeMode() => {
+            self.toggle_freeze_mode();
+          }
+          Message::CycleScaleRootTop(dir) => {
+            self.cycle_scale_root(dir);
+          }
+          Message::CycleScaleMode(dir) => {
+            self.cycle_scale_mode(dir);
+          }
+          Message::CycleScaleRootLeft(dir) => {
+            self.cycle_scale_root_left(dir);
+          }
+          Message::CycleScaleModeLeft(dir) => {
+            self.cycle_scale_mode_left(dir);
+          }
+          Message::ClearQueue() => {
+            self.handle_clear_queue();
+          }
+          Message::SetGridSplits(v, h) => {
+            self.handle_set_grid_splits(v, h);
+          }
+          Message::CycleTiltMode() => {
+            self.cycle_tilt_mode();
+          }
+          Message::CycleSweepRowMode() => {
+            self.cycle_sweep_row_mode();
+          }
+          Message::StartAim() => {
+            self.handle_start_aim();
+          }
+          Message::UpdateAim(direction, canvas_size, step) => {
+            self.handle_update_aim(direction, canvas_size, step);
+          }
+          Message::CommitAim() => {
+            self.handle_commit_aim();
+          }
+          Message::CancelAim() => {
+            self.handle_cancel_aim();
+          }
+          Message::ToggleSweepMovementMode() => {
+            self.toggle_sweep_movement_mode();
+          }
+          Message::SetSweepMovement(mv) => {
+            self.set_sweep_movement(mv);
+          }
+          Message::CycleSweepOutputMode() => {
+            self.cycle_sweep_output_mode();
+          }
+          Message::AdjustSweepCC(adj) => {
+            self.adjust_sweep_cc(adj);
+          }
+          Message::ToggleSpatialKeyboard() => {
+            let prev = self.modes.keyboard_top_active.load(Ordering::Relaxed);
+            self
+              .modes
+              .keyboard_top_active
+              .store(!prev, Ordering::Relaxed);
+          }
+        }
+      }
+    }
+  }
+
+  /// WASM: process queued UI updates and animation frames, flushing them to cb_sink.
+  #[cfg(target_arch = "wasm32")]
+  pub fn wasm_tick_ui(self: &Arc<Self>, regex_tx: &Sender<regex::Message>) {
+    use crate::core::engine::symspell::AnimTick;
+
+    let anim_tick: Option<AnimTick> = self.sym_state.advance_anim_frame();
+
+    let updates: Vec<crate::core::playhead::UIUpdate> = {
+      let mut queue = self.ui_update_queue.lock().unwrap();
+      queue.drain(..).collect()
+    };
+
+    if updates.is_empty() && anim_tick.is_none() {
+      return;
+    }
+
+    let sym_state_cb = Arc::clone(&self.sym_state);
+    let regex_tx_cb = regex_tx.clone();
+
+    let _ = self.cb_sink.send(Box::new(move |siv| {
+      let sym_state = sym_state_cb;
+      let regex_tx = regex_tx_cb;
+
+      if let Some(tick) = anim_tick {
+        sym_state.render_anim_tick(siv, tick, &regex_tx);
+      }
+
+      for update in updates {
+        match update {
+          UIUpdate::ActivePos(active_pos) => {
+            siv.call_on_name(
+              crate::core::consts::canvas_editor_section_view,
+              move |canvas: &mut cursive::views::Canvas<crate::view::grid::GridEditor>| {
+                let editor = canvas.state_mut();
+                editor.playhead_ui.actived_pos = active_pos;
+              },
+            );
+          }
+          UIUpdate::AccumulationCounter(count, total) => {
+            siv.call_on_name(
+              crate::core::consts::input_status_unit_view,
+              move |view: &mut cursive::views::TextView| {
+                view.set_content(format!("@ {}/{}", count, total));
+              },
+            );
+          }
+          UIUpdate::PlayheadPosAndArea(pos, area) => {
+            siv.call_on_name(
+              crate::core::consts::canvas_editor_section_view,
+              move |canvas: &mut cursive::views::Canvas<crate::view::grid::GridEditor>| {
+                let editor = canvas.state_mut();
+                editor.playhead_ui.playhead_pos = pos;
+                editor.playhead_ui.playhead_area = area;
+              },
+            );
+            siv.call_on_name(
+              crate::core::consts::pos_status_unit_view,
+              move |view: &mut cursive::views::TextView| {
+                view.set_content(crate::core::utils::build_pos_status_str(pos));
+              },
+            );
+            let area_size = area.size();
+            siv.call_on_name(
+              crate::core::consts::len_status_unit_view,
+              move |view: &mut cursive::views::TextView| {
+                view.set_content(crate::core::utils::build_len_status_str((
+                  area_size.x,
+                  area_size.y,
+                )));
+              },
+            );
+          }
+          UIUpdate::ChnStatus(chn_str) => {
+            siv.call_on_name(
+              crate::core::consts::chn_status_unit_view,
+              |view: &mut cursive::views::TextView| {
+                view.set_content(chn_str);
+              },
+            );
+          }
+          UIUpdate::GridSplits(v, h) => {
+            siv.call_on_name(
+              crate::core::consts::canvas_editor_section_view,
+              move |canvas: &mut cursive::views::Canvas<crate::view::grid::GridEditor>| {
+                let editor = canvas.state_mut();
+                editor.playhead_ui.grid_v_splits = v;
+                editor.playhead_ui.grid_h_splits = h;
+              },
+            );
+          }
+          UIUpdate::AimedArea(aimed_area) => {
+            siv.call_on_name(
+              crate::core::consts::canvas_editor_section_view,
+              move |canvas: &mut cursive::views::Canvas<crate::view::grid::GridEditor>| {
+                let editor = canvas.state_mut();
+                editor.playhead_ui.aimed_area = aimed_area;
+              },
+            );
+          }
+          UIUpdate::TmpAppendSpace => sym_state.handle_buf_append_space(siv),
+          UIUpdate::TmpAppend(idx) => sym_state.handle_buf_append(siv, idx),
+          UIUpdate::RplCycle(old_area) => sym_state.handle_rpl_cycle(siv, old_area),
+          UIUpdate::SweepX(x) => {
+            siv.call_on_name(
+              crate::core::consts::canvas_editor_section_view,
+              |canvas: &mut cursive::views::Canvas<crate::view::grid::GridEditor>| {
+                canvas.state_mut().playhead_ui.sweep_x = x;
+              },
+            );
+          }
+        }
+      }
+    }));
+  }
+
+  #[cfg(not(target_arch = "wasm32"))]
   pub fn run(self: Arc<Self>, regex_tx: Sender<regex::Message>) -> Sender<Message> {
     let (tx, rx) = channel();
 

@@ -1,8 +1,11 @@
+#[cfg(not(target_arch = "wasm32"))]
 use midir::{MidiInput, MidiInputConnection, MidiOutput, MidiOutputConnection, MidiOutputPort};
+#[cfg(not(target_arch = "wasm32"))]
 use std::error::Error;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::{Arc, Mutex};
+#[cfg(not(target_arch = "wasm32"))]
 use std::thread;
 // use std::time::Duration;
 
@@ -145,6 +148,7 @@ impl MidiMsg {
   }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 pub struct Midi {
   pub midi: Mutex<Option<MidiOutput>>,
   pub out_device: Mutex<Option<MidiOutputConnection>>,
@@ -166,6 +170,17 @@ pub struct Midi {
   ext_clock_callback: Mutex<Option<Box<dyn Fn(u8) + Send>>>,
 }
 
+/// WASM stub: no real MIDI hardware, just keeps channels alive.
+#[cfg(target_arch = "wasm32")]
+pub struct Midi {
+  pub tx: Sender<Message>,
+  pub rx: Receiver<Message>,
+  pub msg_config_list: Arc<Mutex<Vec<MidiMsg>>>,
+  #[allow(dead_code)]
+  clock_input_enabled: Arc<AtomicBool>,
+}
+
+#[cfg(not(target_arch = "wasm32"))]
 impl Midi {
   fn handle_push(&self, stack_tx: std::sync::mpsc::Sender<stack::Message>, midi_msg: MidiMsg) {
     let _ = stack_tx.send(stack::Message::Push(midi_msg));
@@ -667,6 +682,13 @@ pub fn convert_to_midi_note_num(octave: u8, note: f32) -> (u8, f32) {
   (midi_note, pitch_bend_cents)
 }
 
+#[cfg(not(target_arch = "wasm32"))]
+impl Default for Midi {
+  fn default() -> Self {
+    Self::new()
+  }
+}
+
 impl Midi {
   pub fn init(&mut self) -> Result<(), Box<dyn Error>> {
     let midi_out = MidiOutput::new("MIDI Output")?;
@@ -819,5 +841,43 @@ impl Midi {
         }
       })
       .expect("Failed to spawn midi-processor thread");
+  }
+}
+
+// ── WASM stub implementation ──────────────────────────────────────────────────
+#[cfg(target_arch = "wasm32")]
+impl Midi {
+  pub fn new() -> Self {
+    let (tx, rx) = channel();
+    Self {
+      tx,
+      rx,
+      msg_config_list: Arc::new(Mutex::new(Vec::new())),
+      clock_input_enabled: Arc::new(AtomicBool::new(false)),
+    }
+  }
+
+  pub fn init(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+    Ok(())
+  }
+
+  pub fn run(self) {
+    // No-op in WASM — MIDI output is silenced.
+  }
+
+  pub fn get_available_devices(&self) -> Vec<(String, usize)> {
+    vec![]
+  }
+
+  pub fn out_device_name(&self) -> String {
+    "none (WASM)".to_string()
+  }
+
+  pub fn enable_clock(&self, _enabled: bool) {}
+
+  pub fn set_ext_clock_handler(&self, _cb: impl Fn(u8) + Send + 'static) {}
+
+  pub fn trigger(&self, _midi_msg: &MidiMsg, _down: bool) -> Result<(), &str> {
+    Ok(())
   }
 }

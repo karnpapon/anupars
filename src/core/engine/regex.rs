@@ -19,13 +19,13 @@ const MAX_INPUT_LEN: usize = 10_000;
 /// Abort matching if a single `captures_iter` pass takes longer than this.
 const MATCH_TIMEOUT: Duration = Duration::from_millis(50);
 
-struct RegexCache {
+pub(crate) struct RegexCache {
   last_pattern: String,
   compiled: Option<Regex>,
 }
 
 impl RegexCache {
-  fn new() -> Self {
+  pub(crate) fn new() -> Self {
     Self {
       last_pattern: String::new(),
       compiled: None,
@@ -178,6 +178,80 @@ impl RegExpHandler {
     }
 
     Ok(matches)
+  }
+
+  /// WASM: process one batch of pending messages without blocking.
+  #[cfg(target_arch = "wasm32")]
+  pub fn wasm_tick(&self, cache: &mut RegexCache) {
+    while let Ok(control_message) = self.rx.try_recv() {
+      match control_message {
+        Message::Clear => {
+          let _ = self.cb_sink.send(Box::new(move |s| {
+            let _ = s
+              .call_on_name(
+                crate::core::consts::canvas_editor_section_view,
+                |c: &mut cursive::views::Canvas<crate::view::grid::GridEditor>| {
+                  c.state_mut()
+                    .playhead_tx
+                    .send(crate::core::playhead::Message::SetMatcher(None))
+                },
+              )
+              .unwrap();
+            s.call_on_name(
+              crate::core::consts::regex_matches_amount_unit_view,
+              |c: &mut cursive::views::TextView| c.set_content("-"),
+            );
+          }));
+        }
+        Message::Solve(data) => {
+          let result = Self::process_event(&data, cache);
+          self
+            .cb_sink
+            .send(Box::new(move |s| {
+              let res = match result {
+                Ok(matches) => {
+                  let total_matches = matches.len();
+                  let mm = if matches.is_empty() {
+                    None
+                  } else {
+                    Some(matches)
+                  };
+                  let _ = s
+                    .call_on_name(
+                      crate::core::consts::canvas_editor_section_view,
+                      |c: &mut cursive::views::Canvas<crate::view::grid::GridEditor>| {
+                        c.state_mut()
+                          .playhead_tx
+                          .send(crate::core::playhead::Message::SetMatcher(mm))
+                      },
+                    )
+                    .unwrap();
+                  s.call_on_name(
+                    crate::core::consts::regex_matches_amount_unit_view,
+                    |c: &mut cursive::views::TextView| c.set_content(total_matches.to_string()),
+                  );
+                  "".to_string()
+                }
+                Err(err) => err.message,
+              };
+              if !res.is_empty() {
+                s.call_on_name(
+                  crate::core::consts::regex_err_display_unit_view,
+                  |c: &mut cursive::views::TextView| c.set_content(res),
+                )
+                .unwrap()
+              } else {
+                s.call_on_name(
+                  crate::core::consts::regex_err_display_unit_view,
+                  |c: &mut cursive::views::TextView| c.set_content("-"),
+                )
+                .unwrap();
+              }
+            }))
+            .unwrap();
+        }
+      }
+    }
   }
 
   pub fn run(self) {

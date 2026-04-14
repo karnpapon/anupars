@@ -29,6 +29,12 @@ pub struct Program {
   pub top_section: Console,
 }
 
+impl Default for Program {
+  fn default() -> Self {
+    Self::new()
+  }
+}
+
 impl Program {
   pub fn new() -> Self {
     Program {

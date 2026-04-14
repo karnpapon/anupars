@@ -18,6 +18,12 @@ pub struct PositionCalculator {
   pub text_matcher: Arc<Mutex<Option<HashMap<usize, Match>>>>,
 }
 
+impl Default for PositionCalculator {
+  fn default() -> Self {
+    Self::new()
+  }
+}
+
 impl PositionCalculator {
   pub fn new() -> Self {
     PositionCalculator {
