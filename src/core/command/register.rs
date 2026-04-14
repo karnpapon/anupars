@@ -138,8 +138,11 @@ impl CommandManager {
           Adjustment::Decrease => -1,
         };
 
-        let mut last_press = self.last_key_time.lock().unwrap();
-        *last_press = Some(Instant::now());
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+          let mut last_press = self.last_key_time.lock().unwrap();
+          *last_press = Some(Instant::now());
+        }
 
         let mut tempo = self.temp_tempo.lock().unwrap();
         *tempo = ((*tempo as isize) + nudge) as usize;

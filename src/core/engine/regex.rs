@@ -134,9 +134,11 @@ impl RegExpHandler {
     let (byte_to_char, char_to_grid) = build_index_tables(text, data.grid_width);
 
     let mut matches = HashMap::new();
+    #[cfg(not(target_arch = "wasm32"))]
     let deadline = Instant::now();
 
     for cap in regex.captures_iter(text) {
+      #[cfg(not(target_arch = "wasm32"))]
       if deadline.elapsed() > MATCH_TIMEOUT {
         return Err(RegexError {
           id: "timeout".to_string(),
@@ -421,7 +423,7 @@ mod tests {
 
   #[test]
   fn char_to_grid_no_newlines() {
-    // text: "abcd", grid_width: 10 — one row, no wrapping
+    // text: "abcd", grid_width: 10 - one row, no wrapping
     let (_, c2g) = build_index_tables("abcd", 10);
     assert_eq!(c2g, vec![0, 1, 2, 3]);
   }

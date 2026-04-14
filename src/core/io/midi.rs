@@ -689,6 +689,7 @@ impl Default for Midi {
   }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl Midi {
   pub fn init(&mut self) -> Result<(), Box<dyn Error>> {
     let midi_out = MidiOutput::new("MIDI Output")?;
@@ -862,7 +863,7 @@ impl Midi {
   }
 
   pub fn run(self) {
-    // No-op in WASM — MIDI output is silenced.
+    // No-op in WASM - MIDI output is silenced.
   }
 
   pub fn get_available_devices(&self) -> Vec<(String, usize)> {

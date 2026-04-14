@@ -11,7 +11,7 @@ use std::collections::VecDeque;
 use std::sync::mpsc::Sender;
 use std::sync::Arc;
 
-use cursive::event::{Event, Key};
+use cursive::event::{Event, Key, MouseButton, MouseEvent};
 use cursive::style::{BaseColor, Color, ColorPair, Effect};
 use cursive::Vec2;
 use wasm_bindgen::prelude::*;
@@ -39,6 +39,7 @@ struct ScreenCell {
   ch: char,
   fg: Color,
   bg: Color,
+  reverse: bool,
 }
 
 impl Default for ScreenCell {
@@ -47,6 +48,7 @@ impl Default for ScreenCell {
       ch: ' ',
       fg: Color::Dark(BaseColor::White),
       bg: Color::Dark(BaseColor::Black),
+      reverse: false,
     }
   }
 }
@@ -58,6 +60,7 @@ struct BackendState {
   cursor: Vec2,
   fg: Color,
   bg: Color,
+  reverse: bool,
 }
 
 impl BackendState {
@@ -69,6 +72,7 @@ impl BackendState {
       cursor: Vec2::zero(),
       fg: Color::Dark(BaseColor::White),
       bg: Color::Dark(BaseColor::Black),
+      reverse: false,
     }
   }
 
@@ -94,16 +98,27 @@ impl BackendState {
 
     let mut prev_fg: Option<Color> = None;
     let mut prev_bg: Option<Color> = None;
+    let mut prev_reverse: Option<bool> = None;
 
     for row in 0..self.rows {
       for col in 0..self.cols {
         let cell = &self.cells[row * self.cols + col];
-        let need_color =
-          prev_fg.map_or(true, |f| f != cell.fg) || prev_bg.map_or(true, |b| b != cell.bg);
+        let need_color = prev_fg.map_or(true, |f| f != cell.fg)
+          || prev_bg.map_or(true, |b| b != cell.bg)
+          || prev_reverse.map_or(true, |r| r != cell.reverse);
         if need_color {
-          out.push_str(&ansi_color(cell.fg, cell.bg));
+          if cell.reverse {
+            // Reset all then enable reverse video - the terminal inverts its
+            // own default colours, giving white-bg/dark-text for the cursor.
+            out.push_str("\x1b[0m\x1b[7m");
+          } else {
+            // Reset (clears any lingering reverse) then set explicit colours.
+            out.push_str("\x1b[0m");
+            out.push_str(&ansi_color(cell.fg, cell.bg));
+          }
           prev_fg = Some(cell.fg);
           prev_bg = Some(cell.bg);
+          prev_reverse = Some(cell.reverse);
         }
         let ch = if cell.ch == '\0' { ' ' } else { cell.ch };
         out.push(ch);
@@ -212,10 +227,16 @@ impl cursive::backend::Backend for XtermJsBackend {
     let cy = s.cursor.y;
     let fg = s.fg;
     let bg = s.bg;
+    let reverse = s.reverse;
     let n = text.chars().count();
     for (i, ch) in text.chars().enumerate() {
       if let Some(idx) = s.cell_idx(cx + i, cy) {
-        s.cells[idx] = ScreenCell { ch, fg, bg };
+        s.cells[idx] = ScreenCell {
+          ch,
+          fg,
+          bg,
+          reverse,
+        };
       }
     }
     s.cursor.x += n;
@@ -229,6 +250,7 @@ impl cursive::backend::Backend for XtermJsBackend {
         ch: ' ',
         fg,
         bg: color,
+        reverse: false,
       };
     }
     s.cursor = Vec2::zero();
@@ -245,8 +267,17 @@ impl cursive::backend::Backend for XtermJsBackend {
     prev
   }
 
-  fn set_effect(&self, _effect: Effect) {}
-  fn unset_effect(&self, _effect: Effect) {}
+  fn set_effect(&self, effect: Effect) {
+    if effect == Effect::Reverse {
+      self.state.borrow_mut().reverse = true;
+    }
+  }
+
+  fn unset_effect(&self, effect: Effect) {
+    if effect == Effect::Reverse {
+      self.state.borrow_mut().reverse = false;
+    }
+  }
   fn name(&self) -> &str {
     "xterm.js"
   }
@@ -322,6 +353,11 @@ fn parse_key(s: &str) -> Vec<Event> {
     "\x1b[5~" => out.push(Event::Key(Key::PageUp)),
     "\x1b[6~" => out.push(Event::Key(Key::PageDown)),
     "\x1b[2~" => out.push(Event::Key(Key::Ins)),
+    // Alt+arrow keys (xterm modifier format)
+    "\x1b[1;3A" => out.push(Event::Alt(Key::Up)),
+    "\x1b[1;3B" => out.push(Event::Alt(Key::Down)),
+    "\x1b[1;3C" => out.push(Event::Alt(Key::Right)),
+    "\x1b[1;3D" => out.push(Event::Alt(Key::Left)),
     s => {
       let bytes = s.as_bytes();
       if bytes.len() == 1 {
@@ -332,8 +368,31 @@ fn parse_key(s: &str) -> Vec<Event> {
         } else if b >= 0x20 {
           out.push(Event::Char(b as char));
         }
+      } else if bytes.len() >= 2 && bytes[0] == b'\x1b' {
+        // Alt+key: xterm.js sends ESC followed by the key sequence
+        let rest = &s[1..];
+        let rest_bytes = rest.as_bytes();
+        if rest_bytes.len() == 1 {
+          let b = rest_bytes[0];
+          if b >= 1 && b <= 26 {
+            // Alt+Ctrl+letter
+            out.push(Event::AltChar((b'a' + b - 1) as char));
+          } else if b >= 0x20 && b < 0x7f {
+            // Alt+printable ASCII
+            out.push(Event::AltChar(b as char));
+          }
+        } else {
+          // Alt+multi-char: parse the inner sequence and wrap in Alt
+          for ev in parse_key(rest) {
+            match ev {
+              Event::Key(k) => out.push(Event::Alt(k)),
+              Event::Char(c) => out.push(Event::AltChar(c)),
+              other => out.push(other),
+            }
+          }
+        }
       } else {
-        // Multi-byte UTF-8 or unknown escape
+        // Multi-byte UTF-8 (emoji, accented chars, etc.)
         for ch in s.chars() {
           if !ch.is_control() {
             out.push(Event::Char(ch));
@@ -381,7 +440,7 @@ pub fn wasm_init(cols: u32, rows: u32) {
 }
 
 /// Advance one frame. Call at ~60 fps from `requestAnimationFrame`.
-/// `elapsed_ms` — milliseconds since the previous call.
+/// `elapsed_ms` - milliseconds since the previous call.
 #[wasm_bindgen]
 pub fn wasm_step(elapsed_ms: f64) {
   // Tick all background processing (clock, playhead, regex, UI queue)
@@ -413,6 +472,32 @@ pub fn wasm_send_key(key: String) {
 #[wasm_bindgen]
 pub fn wasm_render() -> String {
   ANSI_OUTPUT.with(|a| a.borrow().clone())
+}
+
+/// Forward a mouse event from the browser.
+/// `kind`   – 0 = press, 1 = hold/drag, 2 = release
+/// `button` – 0 = left, 1 = middle, 2 = right
+/// `col`, `row` – terminal cell coordinates (0-based)
+#[wasm_bindgen]
+pub fn wasm_send_mouse(kind: u8, button: u8, col: u32, row: u32) {
+  let btn = match button {
+    1 => MouseButton::Middle,
+    2 => MouseButton::Right,
+    _ => MouseButton::Left,
+  };
+  let event = match kind {
+    0 => MouseEvent::Press(btn),
+    1 => MouseEvent::Hold(btn),
+    2 => MouseEvent::Release(btn),
+    _ => return,
+  };
+  EVENT_STAGE.with(|e| {
+    e.borrow_mut().push_back(Event::Mouse {
+      offset: Vec2::zero(),
+      position: Vec2::new(col as usize, row as usize),
+      event,
+    });
+  });
 }
 
 /// Notify the backend of a terminal resize.

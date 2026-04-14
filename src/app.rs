@@ -7,6 +7,8 @@ use crate::core::io::midi;
 use crate::core::playhead::{Message as PlayheadMessage, Playhead};
 use crate::core::timing::metronome::{Message, Metronome};
 use crate::view::menubar::{set_contents, Menubar};
+#[cfg(target_arch = "wasm32")]
+use cursive::theme::{BaseColor, Color, PaletteColor};
 use cursive::theme::{BorderStyle, Palette};
 use cursive::views::TextView;
 use cursive::Cursive;
@@ -112,6 +114,18 @@ pub struct Application {
 /// Initialize the default cursive theme with simple borders and terminal colors
 fn init_cursive_theme(cursive: &mut Cursive) {
   let palette = Palette::terminal_default();
+
+  // In WASM the backend stores raw Color values - TerminalDefault is emitted
+  // as \x1b[39m/\x1b[49m which xterm.js renders identically for all cells,
+  // making highlighted cells indistinguishable from normal ones.
+  // Set explicit colors so the highlight contrast is visible.
+  #[cfg(target_arch = "wasm32")]
+  {
+    palette[PaletteColor::Highlight] = Color::Dark(BaseColor::White);
+    palette[PaletteColor::HighlightText] = Color::Dark(BaseColor::Black);
+    palette[PaletteColor::HighlightInactive] = Color::Dark(BaseColor::White);
+  }
+
   cursive.set_theme(cursive::theme::Theme {
     shadow: false,
     borders: BorderStyle::Simple,
