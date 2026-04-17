@@ -113,7 +113,8 @@ pub struct Application {
 
 /// Initialize the default cursive theme with simple borders and terminal colors
 fn init_cursive_theme(cursive: &mut Cursive) {
-  let palette = Palette::terminal_default();
+  #[allow(unused_mut)] // mut is required by the wasm32 cfg block below
+  let mut palette = Palette::terminal_default();
 
   // In WASM the backend stores raw Color values - TerminalDefault is emitted
   // as \x1b[39m/\x1b[49m which xterm.js renders identically for all cells,

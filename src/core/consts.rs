@@ -59,15 +59,22 @@ pub static DEFAULT_APP_FILENAME: &str = "contents";
 // workaround since `format!` cannot be calculated at build-time (eg. for `static` or `const`)
 // https://users.rust-lang.org/t/how-to-avoid-recalculating-a-formatted-string-at-runtime/44895
 pub fn app_empty_dir() -> &'static str {
-  lazy_static! {
-    static ref value: String = format!(
-      "empty directory!\n\nto getting start, try adding any text file format (eg .txt, .md, .rtf) to {:?}\n",
-      dirs::home_dir()
-        .map(|p| p.join(DEFAULT_APP_DIRECTORY).join(DEFAULT_APP_FILENAME))
-        .unwrap(),
-    );
+  #[cfg(not(target_arch = "wasm32"))]
+  {
+    lazy_static! {
+      static ref value: String = format!(
+        "empty directory!\n\nto getting start, try adding any text file format (eg .txt, .md, .rtf) to {:?}\n",
+        dirs::home_dir()
+          .map(|p| p.join(DEFAULT_APP_DIRECTORY).join(DEFAULT_APP_FILENAME))
+          .unwrap_or_default(),
+      );
+    }
+    &value
   }
-  &value
+  #[cfg(target_arch = "wasm32")]
+  {
+    "empty directory!\n\nfile access is not available in the browser.\n"
+  }
 }
 
 // View identifier constants are now defined in `view::consts`.

@@ -512,6 +512,17 @@ pub fn wasm_resize(cols: u32, rows: u32) {
   RESIZE_STAGE.with(|s| *s.borrow_mut() = Some((cols as usize, rows as usize)));
 }
 
+/// Load text content into the grid editor (WASM file picker replacement).
+/// Call this from JS after reading a file with `showOpenFilePicker`.
+#[wasm_bindgen]
+pub fn wasm_load_file(contents: String) {
+  RUNNER.with(|r| {
+    if let Some(runner) = r.borrow_mut().as_mut() {
+      crate::view::menubar::set_contents(runner, contents);
+    }
+  });
+}
+
 /// Pop one raw MIDI message (3 bytes) from the output queue.
 /// Returns `undefined` when the queue is empty.
 /// JS: `let msg; while ((msg = wasm_take_midi_message()) !== undefined) midiOut.send(msg);`
