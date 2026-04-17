@@ -512,6 +512,23 @@ pub fn wasm_resize(cols: u32, rows: u32) {
   RESIZE_STAGE.with(|s| *s.borrow_mut() = Some((cols as usize, rows as usize)));
 }
 
+/// Set the regex input field and trigger pattern matching.
+/// Equivalent to the user typing into the "RGXP" input in the console.
+#[wasm_bindgen]
+pub fn wasm_set_input(pattern: String) {
+  RUNNER.with(|r| {
+    if let Some(runner) = r.borrow_mut().as_mut() {
+      let cb = runner.call_on_name(
+        crate::view::consts::regex_input_unit_view,
+        |v: &mut cursive::views::EditView| v.set_content(pattern),
+      );
+      if let Some(cb) = cb {
+        cb(runner);
+      }
+    }
+  });
+}
+
 /// Load text content into the grid editor (WASM file picker replacement).
 /// Call this from JS after reading a file with `showOpenFilePicker`.
 #[wasm_bindgen]
