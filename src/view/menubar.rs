@@ -342,7 +342,17 @@ fn rebuild_menubar(siv: &mut Cursive) {
     .add_subtree("view", menu_view)
     .add_subtree("help", menu_help)
     .add_delimiter()
-    .add_leaf("quit", |s| s.quit());
+    .add_leaf("quit", |s| {
+      #[cfg(not(target_arch = "wasm32"))]
+      s.quit();
+      #[cfg(target_arch = "wasm32")]
+      s.add_layer(
+        Dialog::info(
+          "\"quit\" is only available in the terminal-based app.\n\nclose the browser tab to exit.",
+        )
+        .title("quit"),
+      );
+    });
 }
 
 fn toggle_clock_out(
@@ -427,6 +437,7 @@ fn build_scale_root_menu_top() -> cursive::menu::Tree {
   })
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn dialog_file_explorer() -> OnEventView<ResizedView<Dialog>> {
   let default_path = get_default_database_path();
   let paths = fs::read_dir(default_path.unwrap())
@@ -442,15 +453,20 @@ fn dialog_file_explorer() -> OnEventView<ResizedView<Dialog>> {
   OnEventView::new(Dialog::around(listed_files_view(paths)).max_width(200)).on_event(
     Event::Key(Key::Esc),
     |s| {
-      // Menubar::show_file_explorer_view(s, false)
       s.pop_layer();
     },
   )
 }
 
 pub fn build_file_explorer_view(siv: &mut Cursive) {
+  #[cfg(not(target_arch = "wasm32"))]
   siv.add_layer(
     HideableView::new(dialog_file_explorer()).with_name(consts::file_explorer_unit_view),
+  );
+
+  #[cfg(target_arch = "wasm32")]
+  siv.add_layer(
+    Dialog::info("currently, insert a file not supported in browser").title("insert file"),
   );
 }
 

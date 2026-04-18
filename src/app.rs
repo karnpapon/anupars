@@ -10,6 +10,8 @@ use crate::view::menubar::{set_contents, Menubar};
 #[cfg(target_arch = "wasm32")]
 use cursive::theme::{BaseColor, Color, PaletteColor};
 use cursive::theme::{BorderStyle, Palette};
+#[cfg(target_arch = "wasm32")]
+use cursive::views::Dialog;
 use cursive::views::TextView;
 use cursive::Cursive;
 use num_rational::Ratio;
@@ -233,7 +235,17 @@ pub fn setup_ui(components: &mut Application) {
     .add_subtree("view", menu_view)
     .add_subtree("help", menu_help)
     .add_delimiter()
-    .add_leaf("quit", |s| s.quit());
+    .add_leaf("quit", |s| {
+      #[cfg(not(target_arch = "wasm32"))]
+      s.quit();
+      #[cfg(target_arch = "wasm32")]
+      s.add_layer(
+        Dialog::info(
+          "\"quit\" is only available in the terminal-based app.\n\nclose the browser tab to exit.",
+        )
+        .title("quit"),
+      );
+    });
 
   components.cursive.add_layer(main_view);
 
