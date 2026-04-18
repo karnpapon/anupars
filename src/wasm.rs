@@ -1,5 +1,3 @@
-/// WASM entry-point for anupars.
-///
 /// Exports four functions that JavaScript drives:
 ///   wasm_init(cols, rows)   – set up the whole application
 ///   wasm_step(elapsed_ms)   – advance one frame (~60 fps)
@@ -21,8 +19,6 @@ use crate::core::engine::regex::RegexCache;
 use crate::core::playhead::{Message as PlayheadMessage, Playhead};
 use crate::core::timing::metronome::Metronome;
 
-// ─── Thread-local staging buffers (declared early, used everywhere) ───────────
-
 thread_local! {
   /// Events pushed by `wasm_send_key`, drained by `poll_event`.
   static EVENT_STAGE: RefCell<VecDeque<Event>> = RefCell::new(VecDeque::new());
@@ -31,8 +27,6 @@ thread_local! {
   /// Last rendered ANSI frame, read by `wasm_render`.
   static ANSI_OUTPUT: RefCell<String> = RefCell::new(String::new());
 }
-
-// ─── Backend state ────────────────────────────────────────────────────────────
 
 #[derive(Clone)]
 struct ScreenCell {
@@ -177,8 +171,6 @@ fn ansi_bg(c: Color) -> String {
   }
 }
 
-// ─── Custom cursive Backend ───────────────────────────────────────────────────
-
 struct XtermJsBackend {
   state: RefCell<BackendState>,
 }
@@ -283,8 +275,6 @@ impl cursive::backend::Backend for XtermJsBackend {
   }
 }
 
-// ─── WASM application context ─────────────────────────────────────────────────
-
 struct WasmCtx {
   playhead: Arc<Playhead>,
   regex_tx: Sender<crate::core::engine::regex::Message>,
@@ -330,15 +320,11 @@ impl WasmCtx {
   }
 }
 
-// ─── Thread-local runner storage ─────────────────────────────────────────────
-
 thread_local! {
   static RUNNER: RefCell<Option<cursive::CursiveRunner<cursive::Cursive>>> =
     RefCell::new(None);
   static CTX: RefCell<Option<WasmCtx>> = RefCell::new(None);
 }
-
-// ─── Key parsing ──────────────────────────────────────────────────────────────
 
 fn parse_key(s: &str) -> Vec<Event> {
   let mut out = Vec::new();
@@ -407,8 +393,6 @@ fn parse_key(s: &str) -> Vec<Event> {
   }
   out
 }
-
-// ─── Public WASM API ──────────────────────────────────────────────────────────
 
 /// Initialise the application. Call once before anything else.
 /// `cols` and `rows` should match your xterm.js terminal dimensions.
