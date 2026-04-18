@@ -134,8 +134,13 @@ impl RegExpHandler {
     let (byte_to_char, char_to_grid) = build_index_tables(text, data.grid_width);
 
     let mut matches = HashMap::new();
+
     #[cfg(not(target_arch = "wasm32"))]
     let deadline = Instant::now();
+    #[cfg(target_arch = "wasm32")]
+    let deadline_ms = web_sys::window()
+      .and_then(|w| w.performance())
+      .map(|p| p.now() + MATCH_TIMEOUT.as_millis() as f64);
 
     for cap in regex.captures_iter(text) {
       #[cfg(not(target_arch = "wasm32"))]
@@ -146,6 +151,20 @@ impl RegExpHandler {
           name: "TimeoutError".to_string(),
           message: "matching timed out".to_string(),
         });
+      }
+      #[cfg(target_arch = "wasm32")]
+      if let Some(dl) = deadline_ms {
+        if web_sys::window()
+          .and_then(|w| w.performance())
+          .map_or(false, |p| p.now() > dl)
+        {
+          return Err(RegexError {
+            id: "timeout".to_string(),
+            warning: true,
+            name: "TimeoutError".to_string(),
+            message: "matching timed out".to_string(),
+          });
+        }
       }
 
       let groups: Vec<MatchGroup> = cap

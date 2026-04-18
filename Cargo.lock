@@ -71,6 +71,7 @@ dependencies = [
  "rosc",
  "symspell_rs",
  "wasm-bindgen",
+ "web-sys",
 ]
 
 [[package]]
