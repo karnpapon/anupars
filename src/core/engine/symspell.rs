@@ -64,6 +64,19 @@ impl SymSpellState {
         .expect("Failed to spawn symspell loader thread");
     }
 
+    #[cfg(target_arch = "wasm32")]
+    {
+      const DICT: &str = include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/data/frequency_dictionary_en_10k.txt"
+      ));
+      let mut inner = SymSpell::new(2, None, 7, 1);
+      for line in DICT.lines() {
+        inner.load_dictionary_line(line, 0, 1, " ");
+      }
+      *symspell.lock().unwrap() = Some(inner);
+    }
+
     SymSpellState {
       buf_buf: Arc::new(Mutex::new(AllocRingBuffer::new(consts::TMP_BUF_SIZE))),
       rpl_state: Arc::new(Mutex::new(RplPendingState::Empty)),
