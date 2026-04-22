@@ -17,7 +17,7 @@ use wasm_bindgen::prelude::*;
 use crate::app::{initialize_components, setup_ui};
 use crate::core::engine::regex::RegexCache;
 use crate::core::playhead::{Message as PlayheadMessage, Playhead};
-use crate::core::timing::metronome::Metronome;
+use crate::core::timing::metronome::{Message as MetronomeMessage, Metronome};
 
 thread_local! {
   /// Events pushed by `wasm_send_key`, drained by `poll_event`.
@@ -121,7 +121,7 @@ impl BackendState {
         out.push_str("\r\n");
       }
     }
-    out.push_str("\x1b[0m\x1b[?25h");
+    out.push_str("\x1b[0m\x1b[?25l");
     out
   }
 }
@@ -281,13 +281,28 @@ struct WasmCtx {
   regex_handler: crate::core::engine::regex::RegExpHandler,
   regex_cache: RegexCache,
   metronome: Metronome,
+  metronome_tx: Sender<MetronomeMessage>,
   midi: crate::core::io::midi::Midi,
   clock_accum_ms: f64,
   clock_tick: usize,
+  current_tempo: std::sync::Arc<std::sync::Mutex<usize>>,
+  committed_tempo: usize,
 }
 
 impl WasmCtx {
   fn tick(&mut self, elapsed_ms: f64) {
+    // poll the current tempo and send an update if it has changed since the last tick
+    {
+      let current = *self.current_tempo.lock().unwrap();
+      if current != self.committed_tempo {
+        self.committed_tempo = current;
+        use num_rational::Ratio;
+        let _ = self
+          .metronome_tx
+          .send(MetronomeMessage::Tempo(Ratio::from_integer(current as i64)));
+      }
+    }
+
     // 1. Drain metronome control messages (StartStop, Tempo, …)
     self.metronome.wasm_tick();
 
@@ -407,8 +422,11 @@ pub fn wasm_init(cols: u32, rows: u32) {
   let playhead = components.playhead;
   let regex_tx = components.regex_handler.tx.clone();
   let regex_handler = components.regex_handler;
+  let metronome_tx = components.metronome.tx.clone();
   let metronome = components.metronome;
   let midi = components.midi;
+  let current_tempo = std::sync::Arc::clone(&components.current_tempo);
+  let committed_tempo = *current_tempo.lock().unwrap();
 
   // Build the runner with our custom backend
   let backend = Box::new(XtermJsBackend::new(cols as usize, rows as usize));
@@ -420,9 +438,12 @@ pub fn wasm_init(cols: u32, rows: u32) {
     regex_handler,
     regex_cache: RegexCache::new(),
     metronome,
+    metronome_tx,
     midi,
     clock_accum_ms: 0.0,
     clock_tick: 0,
+    current_tempo,
+    committed_tempo,
   };
 
   RUNNER.with(|r| *r.borrow_mut() = Some(runner));
