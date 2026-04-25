@@ -1,9 +1,3 @@
-/// Exports four functions that JavaScript drives:
-///   wasm_init(cols, rows)   – set up the whole application
-///   wasm_step(elapsed_ms)   – advance one frame (~60 fps)
-///   wasm_send_key(key_str)  – forward a key string from xterm.js
-///   wasm_render()           – returns the ANSI string to write to xterm.js
-///   wasm_resize(cols, rows) – notify the backend of a terminal resize
 use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::sync::mpsc::Sender;
@@ -125,8 +119,6 @@ impl BackendState {
     out
   }
 }
-
-// Color helpers
 
 fn ansi_color(fg: Color, bg: Color) -> String {
   format!("{}{}", ansi_fg(fg), ansi_bg(bg))
@@ -410,7 +402,7 @@ fn parse_key(s: &str) -> Vec<Event> {
 }
 
 /// Initialise the application. Call once before anything else.
-/// `cols` and `rows` should match your xterm.js terminal dimensions.
+/// `cols` and `rows` should match xterm.js terminal dimensions.
 #[wasm_bindgen]
 pub fn wasm_init(cols: u32, rows: u32) {
   console_error_panic_hook::set_once();
@@ -418,7 +410,6 @@ pub fn wasm_init(cols: u32, rows: u32) {
   let mut components = initialize_components();
   setup_ui(&mut components);
 
-  // Extract parts needed for the WASM context
   let playhead = components.playhead;
   let regex_tx = components.regex_handler.tx.clone();
   let regex_handler = components.regex_handler;
@@ -461,7 +452,7 @@ pub fn wasm_step(elapsed_ms: f64) {
     }
   });
 
-  // Let cursive process all pending events + cb_sink callbacks, then redraw
+  // process all pending events + cb_sink callbacks, then redraw
   RUNNER.with(|r| {
     if let Some(runner) = r.borrow_mut().as_mut() {
       runner.process_events();
@@ -534,8 +525,6 @@ pub fn wasm_set_input(pattern: String) {
   });
 }
 
-/// Load text content into the grid editor (WASM file picker replacement).
-/// Call this from JS after reading a file with `showOpenFilePicker`.
 #[wasm_bindgen]
 pub fn wasm_load_file(contents: String) {
   RUNNER.with(|r| {
