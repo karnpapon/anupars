@@ -1,7 +1,9 @@
 use std::io::{self, Write};
 
 use crossterm::cursor::{Hide, MoveTo, Show};
-use crossterm::style::{Color as CColor, Print, ResetColor, SetBackgroundColor, SetForegroundColor};
+use crossterm::style::{
+  Color as CColor, Print, ResetColor, SetBackgroundColor, SetForegroundColor,
+};
 use crossterm::QueueableCommand;
 
 use super::buffer::ScreenBuffer;

@@ -307,6 +307,7 @@ fn spawn_tempo_monitor_thread(
 }
 
 /// Spawn all background worker threads
+#[allow(clippy::too_many_arguments)]
 #[cfg(not(target_arch = "wasm32"))]
 pub fn spawn_background_threads(
   last_key_time: Arc<Mutex<Option<Instant>>>,

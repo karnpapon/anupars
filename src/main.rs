@@ -1,8 +1,8 @@
 #![cfg(not(target_arch = "wasm32"))]
 
 mod app;
-mod app_state;
 mod app_event;
+mod app_state;
 mod core;
 mod terminal;
 mod view;

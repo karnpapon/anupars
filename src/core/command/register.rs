@@ -154,7 +154,9 @@ impl CommandManager {
           .send(playhead::Message::SetTempo(temp))
           .unwrap();
 
-        let _ = self.ui_tx.send(UIUpdate::BpmDisplay(utils::build_bpm_status_str(temp)));
+        let _ = self
+          .ui_tx
+          .send(UIUpdate::BpmDisplay(utils::build_bpm_status_str(temp)));
 
         Ok(None)
       }

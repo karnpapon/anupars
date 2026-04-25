@@ -101,6 +101,10 @@ impl Playhead {
     let mut ratio = self.music.ratio.lock().unwrap();
     *ratio = new_ratio;
     drop(ratio);
-    let _ = self.ui_tx.send(UIUpdate::RatioStatus(utils::build_ratio_status_str(new_ratio)));
+    let _ = self
+      .ui_tx
+      .send(UIUpdate::RatioStatus(utils::build_ratio_status_str(
+        new_ratio,
+      )));
   }
 }

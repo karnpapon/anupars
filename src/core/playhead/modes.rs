@@ -127,8 +127,12 @@ impl Playhead {
     *movement = new_movement;
     drop(movement);
 
-    let _ = self.ui_tx.send(UIUpdate::MovementStatus(self.build_movement_status_string()));
-    let _ = self.ui_tx.send(UIUpdate::ModeStatus(self.build_mode_status_string()));
+    let _ = self.ui_tx.send(UIUpdate::MovementStatus(
+      self.build_movement_status_string(),
+    ));
+    let _ = self
+      .ui_tx
+      .send(UIUpdate::ModeStatus(self.build_mode_status_string()));
   }
 
   pub fn toggle_sweep_movement_mode(&self) {
@@ -154,7 +158,9 @@ impl Playhead {
     if let Some(x) = init_x {
       let _ = self.ui_tx.send(UIUpdate::SweepX(x));
     }
-    let _ = self.ui_tx.send(UIUpdate::MovementStatus(self.build_movement_status_string()));
+    let _ = self.ui_tx.send(UIUpdate::MovementStatus(
+      self.build_movement_status_string(),
+    ));
   }
 
   pub fn set_sweep_movement(&self, new_movement: Movement) {
@@ -162,8 +168,12 @@ impl Playhead {
     *sweep_movement = Some(new_movement);
     drop(sweep_movement);
 
-    let _ = self.ui_tx.send(UIUpdate::CanvasSweepMovement(Some(new_movement)));
-    let _ = self.ui_tx.send(UIUpdate::MovementStatus(self.build_movement_status_string()));
+    let _ = self
+      .ui_tx
+      .send(UIUpdate::CanvasSweepMovement(Some(new_movement)));
+    let _ = self.ui_tx.send(UIUpdate::MovementStatus(
+      self.build_movement_status_string(),
+    ));
   }
 
   pub fn toggle_arpeggiator_mode(&self) {
@@ -175,7 +185,9 @@ impl Playhead {
       .store(is_arp, Ordering::Relaxed);
 
     let _ = self.ui_tx.send(UIUpdate::CanvasArpeggiatorMode(is_arp));
-    let _ = self.ui_tx.send(UIUpdate::ModeStatus(self.build_mode_status_string()));
+    let _ = self
+      .ui_tx
+      .send(UIUpdate::ModeStatus(self.build_mode_status_string()));
   }
 
   pub fn toggle_event_operator_mode(&self) {
@@ -185,8 +197,12 @@ impl Playhead {
       .event_operator_mode
       .store(is_event_op, Ordering::Relaxed);
 
-    let _ = self.ui_tx.send(UIUpdate::CanvasEventOperatorMode(is_event_op));
-    let _ = self.ui_tx.send(UIUpdate::ModeStatus(self.build_mode_status_string()));
+    let _ = self
+      .ui_tx
+      .send(UIUpdate::CanvasEventOperatorMode(is_event_op));
+    let _ = self
+      .ui_tx
+      .send(UIUpdate::ModeStatus(self.build_mode_status_string()));
   }
 
   pub fn toggle_drain_queue_mode(&self) {
@@ -194,7 +210,9 @@ impl Playhead {
     self.queue_manager.set_drain_queue_mode(is_drain);
 
     let _ = self.ui_tx.send(UIUpdate::CanvasDrainQueueMode(is_drain));
-    let _ = self.ui_tx.send(UIUpdate::ModeStatus(self.build_mode_status_string()));
+    let _ = self
+      .ui_tx
+      .send(UIUpdate::ModeStatus(self.build_mode_status_string()));
   }
 
   pub fn toggle_sweep_mode(&self) {
@@ -202,7 +220,9 @@ impl Playhead {
     self.modes.sweep_mode.store(is_sweep, Ordering::Relaxed);
 
     let _ = self.ui_tx.send(UIUpdate::CanvasSweepMode(is_sweep));
-    let _ = self.ui_tx.send(UIUpdate::ModeStatus(self.build_mode_status_string()));
+    let _ = self
+      .ui_tx
+      .send(UIUpdate::ModeStatus(self.build_mode_status_string()));
   }
 
   pub fn cycle_tilt_mode(&self) {
@@ -212,7 +232,9 @@ impl Playhead {
     drop(tilt);
 
     let _ = self.ui_tx.send(UIUpdate::CanvasTiltMode(new_tilt));
-    let _ = self.ui_tx.send(UIUpdate::TiltStatus(new_tilt.print_tilts()));
+    let _ = self
+      .ui_tx
+      .send(UIUpdate::TiltStatus(new_tilt.print_tilts()));
   }
 
   pub fn cycle_sweep_row_mode(&self) {
@@ -222,7 +244,9 @@ impl Playhead {
     drop(mode);
 
     let _ = self.ui_tx.send(UIUpdate::CanvasSweepRowMode(new_mode));
-    let _ = self.ui_tx.send(UIUpdate::ModeStatus(self.build_mode_status_string()));
+    let _ = self
+      .ui_tx
+      .send(UIUpdate::ModeStatus(self.build_mode_status_string()));
   }
 
   pub fn cycle_sweep_output_mode(&self) {
@@ -232,7 +256,9 @@ impl Playhead {
     drop(mode);
 
     let _ = self.ui_tx.send(UIUpdate::CanvasSweepOutputMode(new_mode));
-    let _ = self.ui_tx.send(UIUpdate::ModeStatus(self.build_mode_status_string()));
+    let _ = self
+      .ui_tx
+      .send(UIUpdate::ModeStatus(self.build_mode_status_string()));
   }
 
   pub fn adjust_sweep_cc(&self, adj: Adjustment) {
@@ -244,7 +270,9 @@ impl Playhead {
     self.modes.sweep_cc_number.store(next, Ordering::Relaxed);
 
     let _ = self.ui_tx.send(UIUpdate::CanvasSweepCcNumber(next));
-    let _ = self.ui_tx.send(UIUpdate::ModeStatus(self.build_mode_status_string()));
+    let _ = self
+      .ui_tx
+      .send(UIUpdate::ModeStatus(self.build_mode_status_string()));
   }
 
   pub fn toggle_dyn_length_mode(&self) {
@@ -254,7 +282,9 @@ impl Playhead {
       .dyn_length_mode
       .store(is_dyn_length, Ordering::Relaxed);
 
-    let _ = self.ui_tx.send(UIUpdate::ModeStatus(self.build_mode_status_string()));
+    let _ = self
+      .ui_tx
+      .send(UIUpdate::ModeStatus(self.build_mode_status_string()));
   }
 
   pub fn toggle_freeze_mode(&self) {
@@ -267,7 +297,9 @@ impl Playhead {
     }
 
     let _ = self.ui_tx.send(UIUpdate::CanvasFreezeMode(is_freeze));
-    let _ = self.ui_tx.send(UIUpdate::ModeStatus(self.build_mode_status_string()));
+    let _ = self
+      .ui_tx
+      .send(UIUpdate::ModeStatus(self.build_mode_status_string()));
   }
 
   pub fn cycle_drone_channel(&self, dir: Adjustment) {
@@ -300,7 +332,9 @@ impl Playhead {
     self.midi_handler.trigger_drone_at_x(drone_x, &area);
 
     let _ = self.ui_tx.send(UIUpdate::CanvasDroneChannel(new_ch));
-    let _ = self.ui_tx.send(UIUpdate::ModeStatus(self.build_mode_status_string()));
+    let _ = self
+      .ui_tx
+      .send(UIUpdate::ModeStatus(self.build_mode_status_string()));
   }
 
   pub fn toggle_drone_mode(&self) {
@@ -317,9 +351,13 @@ impl Playhead {
       self.modes.drone_x.load(Ordering::Relaxed)
     };
 
-    let _ = self.ui_tx.send(UIUpdate::CanvasDroneMode(is_drone, drone_x));
+    let _ = self
+      .ui_tx
+      .send(UIUpdate::CanvasDroneMode(is_drone, drone_x));
     let _ = self.ui_tx.send(UIUpdate::CanvasDroneChannel(1));
-    let _ = self.ui_tx.send(UIUpdate::ModeStatus(self.build_mode_status_string()));
+    let _ = self
+      .ui_tx
+      .send(UIUpdate::ModeStatus(self.build_mode_status_string()));
   }
 
   /// Move the drone line left or right within the playhead area bounds.
@@ -359,9 +397,13 @@ impl Playhead {
       self.queue_manager.clear_all();
     }
 
-    let _ = self.ui_tx.send(UIUpdate::CanvasAccumulationMode(is_enabled));
+    let _ = self
+      .ui_tx
+      .send(UIUpdate::CanvasAccumulationMode(is_enabled));
     let _ = self.ui_tx.send(UIUpdate::InputStatus("-".to_string()));
-    let _ = self.ui_tx.send(UIUpdate::ModeStatus(self.build_mode_status_string()));
+    let _ = self
+      .ui_tx
+      .send(UIUpdate::ModeStatus(self.build_mode_status_string()));
   }
 }
 

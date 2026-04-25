@@ -19,9 +19,9 @@ use crate::core::engine::regex::RegexCache;
 use crate::core::engine::symspell::SymSpellState;
 use crate::core::playhead::{Message as PlayheadMessage, Playhead, UIUpdate};
 use crate::core::timing::metronome::{Message as MetronomeMessage, Metronome};
-use crate::view::ui_processor::apply_ui_update_cursive;
 use crate::terminal::buffer::ScreenBuffer;
 use crate::terminal::cell::{Cell as TermCell, Color as TermColor};
+use crate::view::ui_processor::apply_ui_update_cursive;
 
 thread_local! {
   /// Events pushed by `wasm_send_key`, drained by `poll_event`.
@@ -206,7 +206,14 @@ impl cursive::backend::Backend for XtermJsBackend {
     for (i, ch) in text.chars().enumerate() {
       let x = cx + i;
       if x < w && cy < h {
-        s.buf.cells[cy * w + x] = TermCell { ch, fg, bg, reverse, bold: false, underline: false };
+        s.buf.cells[cy * w + x] = TermCell {
+          ch,
+          fg,
+          bg,
+          reverse,
+          bold: false,
+          underline: false,
+        };
       }
     }
     s.cursor.x += n;
@@ -217,7 +224,14 @@ impl cursive::backend::Backend for XtermJsBackend {
     let fg = from_cursive_color(s.fg);
     let bg = from_cursive_color(color);
     for cell in s.buf.cells.iter_mut() {
-      *cell = TermCell { ch: ' ', fg, bg, reverse: false, bold: false, underline: false };
+      *cell = TermCell {
+        ch: ' ',
+        fg,
+        bg,
+        reverse: false,
+        bold: false,
+        underline: false,
+      };
     }
     s.cursor = Vec2::zero();
   }

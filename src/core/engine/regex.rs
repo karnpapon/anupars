@@ -88,7 +88,12 @@ pub struct RegExpHandler {
 impl RegExpHandler {
   pub fn new(ui_tx: Sender<UIUpdate>, playhead_tx: Sender<playhead::Message>) -> Self {
     let (tx, rx) = channel();
-    Self { tx, rx, ui_tx, playhead_tx }
+    Self {
+      tx,
+      rx,
+      ui_tx,
+      playhead_tx,
+    }
   }
 
   fn process_event(
@@ -217,9 +222,15 @@ impl RegExpHandler {
         match result {
           Ok(matches) => {
             let total_matches = matches.len();
-            let mm = if matches.is_empty() { None } else { Some(matches) };
+            let mm = if matches.is_empty() {
+              None
+            } else {
+              Some(matches)
+            };
             let _ = self.playhead_tx.send(playhead::Message::SetMatcher(mm));
-            let _ = self.ui_tx.send(UIUpdate::RegexMatchCount(total_matches.to_string()));
+            let _ = self
+              .ui_tx
+              .send(UIUpdate::RegexMatchCount(total_matches.to_string()));
             let _ = self.ui_tx.send(UIUpdate::RegexError("-".to_string()));
           }
           Err(err) => {

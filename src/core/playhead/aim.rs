@@ -55,7 +55,9 @@ impl Playhead {
 
       let chn_str = self.compute_chn_str(target_pos);
 
-      let _ = self.ui_tx.send(UIUpdate::PlayheadPosAndArea(target_pos, aimed_area));
+      let _ = self
+        .ui_tx
+        .send(UIUpdate::PlayheadPosAndArea(target_pos, aimed_area));
       let _ = self.ui_tx.send(UIUpdate::AimedArea(None));
       let _ = self.ui_tx.send(UIUpdate::ChnStatus(chn_str));
     } else {

@@ -28,21 +28,30 @@ pub fn apply_ui_update_cursive(
   match update {
     // --- existing canvas geometry updates ---
     UIUpdate::ActivePos(active_pos) => {
-      siv.call_on_name(consts::canvas_editor_section_view, move |canvas: &mut Canvas<GridEditor>| {
-        canvas.state_mut().playhead_ui.actived_pos = active_pos;
-      });
+      siv.call_on_name(
+        consts::canvas_editor_section_view,
+        move |canvas: &mut Canvas<GridEditor>| {
+          canvas.state_mut().playhead_ui.actived_pos = active_pos;
+        },
+      );
     }
     UIUpdate::AccumulationCounter(count, total) => {
-      siv.call_on_name(consts::input_status_unit_view, move |view: &mut TextView| {
-        view.set_content(format!("@ {}/{}", count, total));
-      });
+      siv.call_on_name(
+        consts::input_status_unit_view,
+        move |view: &mut TextView| {
+          view.set_content(format!("@ {}/{}", count, total));
+        },
+      );
     }
     UIUpdate::PlayheadPosAndArea(pos, area) => {
-      siv.call_on_name(consts::canvas_editor_section_view, move |canvas: &mut Canvas<GridEditor>| {
-        let editor = canvas.state_mut();
-        editor.playhead_ui.playhead_pos = pos;
-        editor.playhead_ui.playhead_area = area;
-      });
+      siv.call_on_name(
+        consts::canvas_editor_section_view,
+        move |canvas: &mut Canvas<GridEditor>| {
+          let editor = canvas.state_mut();
+          editor.playhead_ui.playhead_pos = pos;
+          editor.playhead_ui.playhead_area = area;
+        },
+      );
       siv.call_on_name(consts::pos_status_unit_view, move |view: &mut TextView| {
         view.set_content(utils::build_pos_status_str(pos));
       });
@@ -57,24 +66,33 @@ pub fn apply_ui_update_cursive(
       });
     }
     UIUpdate::GridSplits(v, h) => {
-      siv.call_on_name(consts::canvas_editor_section_view, move |canvas: &mut Canvas<GridEditor>| {
-        let editor = canvas.state_mut();
-        editor.playhead_ui.grid_v_splits = v;
-        editor.playhead_ui.grid_h_splits = h;
-      });
+      siv.call_on_name(
+        consts::canvas_editor_section_view,
+        move |canvas: &mut Canvas<GridEditor>| {
+          let editor = canvas.state_mut();
+          editor.playhead_ui.grid_v_splits = v;
+          editor.playhead_ui.grid_h_splits = h;
+        },
+      );
     }
     UIUpdate::AimedArea(aimed_area) => {
-      siv.call_on_name(consts::canvas_editor_section_view, move |canvas: &mut Canvas<GridEditor>| {
-        canvas.state_mut().playhead_ui.aimed_area = aimed_area;
-      });
+      siv.call_on_name(
+        consts::canvas_editor_section_view,
+        move |canvas: &mut Canvas<GridEditor>| {
+          canvas.state_mut().playhead_ui.aimed_area = aimed_area;
+        },
+      );
     }
     UIUpdate::TmpAppendSpace => sym_state.handle_buf_append_space(siv),
     UIUpdate::TmpAppend(idx) => sym_state.handle_buf_append(siv, idx),
     UIUpdate::RplCycle(old_area) => sym_state.handle_rpl_cycle(siv, old_area),
     UIUpdate::SweepX(x) => {
-      siv.call_on_name(consts::canvas_editor_section_view, |canvas: &mut Canvas<GridEditor>| {
-        canvas.state_mut().playhead_ui.sweep_x = x;
-      });
+      siv.call_on_name(
+        consts::canvas_editor_section_view,
+        |canvas: &mut Canvas<GridEditor>| {
+          canvas.state_mut().playhead_ui.sweep_x = x;
+        },
+      );
     }
 
     // --- status-bar text updates ---
@@ -119,135 +137,213 @@ pub fn apply_ui_update_cursive(
       });
     }
     UIUpdate::RegexMatchCount(s) => {
-      siv.call_on_name(consts::regex_matches_amount_unit_view, |view: &mut TextView| {
-        view.set_content(s);
-      });
+      siv.call_on_name(
+        consts::regex_matches_amount_unit_view,
+        |view: &mut TextView| {
+          view.set_content(s);
+        },
+      );
     }
     UIUpdate::RegexError(s) => {
-      siv.call_on_name(consts::regex_err_display_unit_view, |view: &mut TextView| {
-        view.set_content(s);
-      });
+      siv.call_on_name(
+        consts::regex_err_display_unit_view,
+        |view: &mut TextView| {
+          view.set_content(s);
+        },
+      );
     }
 
     // --- canvas field updates ---
-    UIUpdate::TextMatcher { matcher, regex_indexes } => {
-      siv.call_on_name(consts::canvas_editor_section_view, move |canvas: &mut Canvas<GridEditor>| {
-        let editor = canvas.state_mut();
-        editor.playhead_ui.text_matcher = matcher;
-        editor.playhead_ui.regex_indexes = regex_indexes;
-      });
+    UIUpdate::TextMatcher {
+      matcher,
+      regex_indexes,
+    } => {
+      siv.call_on_name(
+        consts::canvas_editor_section_view,
+        move |canvas: &mut Canvas<GridEditor>| {
+          let editor = canvas.state_mut();
+          editor.playhead_ui.text_matcher = matcher;
+          editor.playhead_ui.regex_indexes = regex_indexes;
+        },
+      );
     }
     UIUpdate::QueueManagerUpdate(qm) => {
-      siv.call_on_name(consts::canvas_editor_section_view, move |canvas: &mut Canvas<GridEditor>| {
-        canvas.state_mut().playhead_ui.queue_manager = qm;
-      });
+      siv.call_on_name(
+        consts::canvas_editor_section_view,
+        move |canvas: &mut Canvas<GridEditor>| {
+          canvas.state_mut().playhead_ui.queue_manager = qm;
+        },
+      );
     }
     UIUpdate::CanvasPlayheadPos(pos) => {
-      siv.call_on_name(consts::canvas_editor_section_view, move |canvas: &mut Canvas<GridEditor>| {
-        canvas.state_mut().playhead_ui.playhead_pos = pos;
-      });
+      siv.call_on_name(
+        consts::canvas_editor_section_view,
+        move |canvas: &mut Canvas<GridEditor>| {
+          canvas.state_mut().playhead_ui.playhead_pos = pos;
+        },
+      );
     }
     UIUpdate::CanvasPlayheadArea(area) => {
-      siv.call_on_name(consts::canvas_editor_section_view, move |canvas: &mut Canvas<GridEditor>| {
-        canvas.state_mut().playhead_ui.playhead_area = area;
-      });
+      siv.call_on_name(
+        consts::canvas_editor_section_view,
+        move |canvas: &mut Canvas<GridEditor>| {
+          canvas.state_mut().playhead_ui.playhead_area = area;
+        },
+      );
     }
     UIUpdate::CanvasArpeggiatorMode(v) => {
-      siv.call_on_name(consts::canvas_editor_section_view, move |canvas: &mut Canvas<GridEditor>| {
-        canvas.state_mut().playhead_ui.arpeggiator_mode = v;
-      });
+      siv.call_on_name(
+        consts::canvas_editor_section_view,
+        move |canvas: &mut Canvas<GridEditor>| {
+          canvas.state_mut().playhead_ui.arpeggiator_mode = v;
+        },
+      );
     }
     UIUpdate::CanvasAccumulationMode(v) => {
-      siv.call_on_name(consts::canvas_editor_section_view, move |canvas: &mut Canvas<GridEditor>| {
-        canvas.state_mut().playhead_ui.accumulation_mode = v;
-      });
+      siv.call_on_name(
+        consts::canvas_editor_section_view,
+        move |canvas: &mut Canvas<GridEditor>| {
+          canvas.state_mut().playhead_ui.accumulation_mode = v;
+        },
+      );
     }
     UIUpdate::CanvasEventOperatorMode(v) => {
-      siv.call_on_name(consts::canvas_editor_section_view, move |canvas: &mut Canvas<GridEditor>| {
-        canvas.state_mut().playhead_ui.event_operator_mode = v;
-      });
+      siv.call_on_name(
+        consts::canvas_editor_section_view,
+        move |canvas: &mut Canvas<GridEditor>| {
+          canvas.state_mut().playhead_ui.event_operator_mode = v;
+        },
+      );
     }
     UIUpdate::CanvasDrainQueueMode(v) => {
-      siv.call_on_name(consts::canvas_editor_section_view, move |canvas: &mut Canvas<GridEditor>| {
-        canvas.state_mut().playhead_ui.drain_queue_mode = v;
-      });
+      siv.call_on_name(
+        consts::canvas_editor_section_view,
+        move |canvas: &mut Canvas<GridEditor>| {
+          canvas.state_mut().playhead_ui.drain_queue_mode = v;
+        },
+      );
     }
     UIUpdate::CanvasSweepMode(v) => {
-      siv.call_on_name(consts::canvas_editor_section_view, move |canvas: &mut Canvas<GridEditor>| {
-        canvas.state_mut().playhead_ui.sweep_mode = v;
-      });
+      siv.call_on_name(
+        consts::canvas_editor_section_view,
+        move |canvas: &mut Canvas<GridEditor>| {
+          canvas.state_mut().playhead_ui.sweep_mode = v;
+        },
+      );
     }
     UIUpdate::CanvasSweepMovement(mv) => {
-      siv.call_on_name(consts::canvas_editor_section_view, move |canvas: &mut Canvas<GridEditor>| {
-        canvas.state_mut().playhead_ui.sweep_movement = mv;
-      });
+      siv.call_on_name(
+        consts::canvas_editor_section_view,
+        move |canvas: &mut Canvas<GridEditor>| {
+          canvas.state_mut().playhead_ui.sweep_movement = mv;
+        },
+      );
     }
     UIUpdate::CanvasSweepOutputMode(m) => {
-      siv.call_on_name(consts::canvas_editor_section_view, move |canvas: &mut Canvas<GridEditor>| {
-        canvas.state_mut().playhead_ui.sweep_output_mode = m;
-      });
+      siv.call_on_name(
+        consts::canvas_editor_section_view,
+        move |canvas: &mut Canvas<GridEditor>| {
+          canvas.state_mut().playhead_ui.sweep_output_mode = m;
+        },
+      );
     }
     UIUpdate::CanvasSweepCcNumber(n) => {
-      siv.call_on_name(consts::canvas_editor_section_view, move |canvas: &mut Canvas<GridEditor>| {
-        canvas.state_mut().playhead_ui.sweep_cc_number = n;
-      });
+      siv.call_on_name(
+        consts::canvas_editor_section_view,
+        move |canvas: &mut Canvas<GridEditor>| {
+          canvas.state_mut().playhead_ui.sweep_cc_number = n;
+        },
+      );
     }
     UIUpdate::CanvasSweepRowMode(m) => {
-      siv.call_on_name(consts::canvas_editor_section_view, move |canvas: &mut Canvas<GridEditor>| {
-        canvas.state_mut().playhead_ui.sweep_row_mode = m;
-      });
+      siv.call_on_name(
+        consts::canvas_editor_section_view,
+        move |canvas: &mut Canvas<GridEditor>| {
+          canvas.state_mut().playhead_ui.sweep_row_mode = m;
+        },
+      );
     }
     UIUpdate::CanvasTiltMode(t) => {
-      siv.call_on_name(consts::canvas_editor_section_view, move |canvas: &mut Canvas<GridEditor>| {
-        canvas.state_mut().playhead_ui.tilt_mode = t;
-      });
+      siv.call_on_name(
+        consts::canvas_editor_section_view,
+        move |canvas: &mut Canvas<GridEditor>| {
+          canvas.state_mut().playhead_ui.tilt_mode = t;
+        },
+      );
     }
     UIUpdate::CanvasFreezeMode(v) => {
-      siv.call_on_name(consts::canvas_editor_section_view, move |canvas: &mut Canvas<GridEditor>| {
-        canvas.state_mut().playhead_ui.freeze_mode = v;
-      });
+      siv.call_on_name(
+        consts::canvas_editor_section_view,
+        move |canvas: &mut Canvas<GridEditor>| {
+          canvas.state_mut().playhead_ui.freeze_mode = v;
+        },
+      );
     }
     UIUpdate::CanvasDroneMode(is_drone, drone_x) => {
-      siv.call_on_name(consts::canvas_editor_section_view, move |canvas: &mut Canvas<GridEditor>| {
-        let editor = canvas.state_mut();
-        editor.playhead_ui.drone_mode = is_drone;
-        editor.playhead_ui.drone_x = drone_x;
-      });
+      siv.call_on_name(
+        consts::canvas_editor_section_view,
+        move |canvas: &mut Canvas<GridEditor>| {
+          let editor = canvas.state_mut();
+          editor.playhead_ui.drone_mode = is_drone;
+          editor.playhead_ui.drone_x = drone_x;
+        },
+      );
     }
     UIUpdate::CanvasDroneX(x) => {
-      siv.call_on_name(consts::canvas_editor_section_view, move |canvas: &mut Canvas<GridEditor>| {
-        canvas.state_mut().playhead_ui.drone_x = x;
-      });
+      siv.call_on_name(
+        consts::canvas_editor_section_view,
+        move |canvas: &mut Canvas<GridEditor>| {
+          canvas.state_mut().playhead_ui.drone_x = x;
+        },
+      );
     }
     UIUpdate::CanvasDroneChannel(ch) => {
-      siv.call_on_name(consts::canvas_editor_section_view, move |canvas: &mut Canvas<GridEditor>| {
-        canvas.state_mut().playhead_ui.drone_channel = ch;
-      });
+      siv.call_on_name(
+        consts::canvas_editor_section_view,
+        move |canvas: &mut Canvas<GridEditor>| {
+          canvas.state_mut().playhead_ui.drone_channel = ch;
+        },
+      );
     }
     UIUpdate::CanvasScaleRootTop(r) => {
-      siv.call_on_name(consts::canvas_editor_section_view, move |canvas: &mut Canvas<GridEditor>| {
-        canvas.state_mut().playhead_ui.scale_root_top = r;
-      });
+      siv.call_on_name(
+        consts::canvas_editor_section_view,
+        move |canvas: &mut Canvas<GridEditor>| {
+          canvas.state_mut().playhead_ui.scale_root_top = r;
+        },
+      );
     }
     UIUpdate::CanvasScaleRootLeft(r) => {
-      siv.call_on_name(consts::canvas_editor_section_view, move |canvas: &mut Canvas<GridEditor>| {
-        canvas.state_mut().playhead_ui.scale_root_left = r;
-      });
+      siv.call_on_name(
+        consts::canvas_editor_section_view,
+        move |canvas: &mut Canvas<GridEditor>| {
+          canvas.state_mut().playhead_ui.scale_root_left = r;
+        },
+      );
     }
     UIUpdate::CanvasScaleModeTop(m) => {
-      siv.call_on_name(consts::canvas_editor_section_view, move |canvas: &mut Canvas<GridEditor>| {
-        canvas.state_mut().playhead_ui.scale_mode_top = m;
-      });
+      siv.call_on_name(
+        consts::canvas_editor_section_view,
+        move |canvas: &mut Canvas<GridEditor>| {
+          canvas.state_mut().playhead_ui.scale_mode_top = m;
+        },
+      );
     }
     UIUpdate::CanvasScaleModeLeft(m) => {
-      siv.call_on_name(consts::canvas_editor_section_view, move |canvas: &mut Canvas<GridEditor>| {
-        canvas.state_mut().playhead_ui.scale_mode_left = m;
-      });
+      siv.call_on_name(
+        consts::canvas_editor_section_view,
+        move |canvas: &mut Canvas<GridEditor>| {
+          canvas.state_mut().playhead_ui.scale_mode_left = m;
+        },
+      );
     }
     UIUpdate::CanvasKeyboardTopActive(v) => {
-      siv.call_on_name(consts::canvas_editor_section_view, move |canvas: &mut Canvas<GridEditor>| {
-        canvas.state_mut().playhead_ui.keyboard_top_active = v;
-      });
+      siv.call_on_name(
+        consts::canvas_editor_section_view,
+        move |canvas: &mut Canvas<GridEditor>| {
+          canvas.state_mut().playhead_ui.keyboard_top_active = v;
+        },
+      );
     }
   }
 }

@@ -197,8 +197,12 @@ impl Playhead {
     *actived = Vec2::zero();
     drop(actived);
 
-    let _ = self.ui_tx.send(UIUpdate::PlayheadPosAndArea(new_pos, new_area));
-    let _ = self.ui_tx.send(UIUpdate::ChnStatus(self.compute_chn_str(new_pos)));
+    let _ = self
+      .ui_tx
+      .send(UIUpdate::PlayheadPosAndArea(new_pos, new_area));
+    let _ = self
+      .ui_tx
+      .send(UIUpdate::ChnStatus(self.compute_chn_str(new_pos)));
 
     self.enqueue_sym_rpl_cycle(prev_area);
     self.enqueue_sym_space();

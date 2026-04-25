@@ -1,14 +1,9 @@
-#[derive(Clone, Copy, PartialEq, Debug)]
+#[derive(Clone, Copy, PartialEq, Debug, Default)]
 pub enum Color {
+  #[default]
   Reset,
   Rgb(u8, u8, u8),
   Indexed(u8),
-}
-
-impl Default for Color {
-  fn default() -> Self {
-    Color::Reset
-  }
 }
 
 #[derive(Clone, Copy, PartialEq, Debug)]

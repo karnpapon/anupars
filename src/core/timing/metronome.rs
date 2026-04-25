@@ -97,14 +97,18 @@ impl Metronome {
           let bpm = tempo.to_integer() as usize;
           self.current_bpm.store(bpm, Ordering::Relaxed);
           let _ = self.playhead_tx.send(playhead::Message::SetTempo(bpm));
-          let _ = self.ui_tx.send(UIUpdate::BpmDisplay(utils::build_bpm_status_str(bpm)));
+          let _ = self
+            .ui_tx
+            .send(UIUpdate::BpmDisplay(utils::build_bpm_status_str(bpm)));
         }
         Message::NudgeTempo(nudge) => {
           let old_bpm = self.current_bpm.load(Ordering::Relaxed);
           let new_bpm = (old_bpm as i64 + nudge.to_integer()).max(20).min(999) as usize;
           self.current_bpm.store(new_bpm, Ordering::Relaxed);
           let _ = self.playhead_tx.send(playhead::Message::SetTempo(new_bpm));
-          let _ = self.ui_tx.send(UIUpdate::BpmDisplay(utils::build_bpm_status_str(new_bpm)));
+          let _ = self
+            .ui_tx
+            .send(UIUpdate::BpmDisplay(utils::build_bpm_status_str(new_bpm)));
         }
         Message::Tap => { /* simplified: ignore in WASM */ }
         Message::ExternalClock(_) => { /* no external MIDI in WASM */ }
@@ -180,7 +184,9 @@ impl Metronome {
               consts::EXT_CLOCK_ACTIVE.store(false, Ordering::SeqCst);
               ext_beat_instant = None;
               let bpm = self.current_bpm.load(Ordering::Relaxed);
-              let _ = self.ui_tx.send(UIUpdate::BpmDisplay(utils::build_bpm_status_str(bpm)));
+              let _ = self
+                .ui_tx
+                .send(UIUpdate::BpmDisplay(utils::build_bpm_status_str(bpm)));
             }
             0xF8 => {
               // Timing clock: convert 24 PPQN to 16 internal ticks-per-beat

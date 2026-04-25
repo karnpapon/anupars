@@ -481,7 +481,9 @@ impl Playhead {
     drop(area);
 
     let _ = self.ui_tx.send(UIUpdate::InputStatus("-".to_string()));
-    let _ = self.ui_tx.send(UIUpdate::LenStatus(utils::build_len_status_str((w, h))));
+    let _ = self
+      .ui_tx
+      .send(UIUpdate::LenStatus(utils::build_len_status_str((w, h))));
     let _ = self.ui_tx.send(UIUpdate::CanvasPlayheadArea(playhead_area));
   }
 
@@ -495,7 +497,12 @@ impl Playhead {
     drop(area);
 
     let _ = self.ui_tx.send(UIUpdate::InputStatus("-".to_string()));
-    let _ = self.ui_tx.send(UIUpdate::LenStatus(utils::build_len_status_str((area_size.x, area_size.y))));
+    let _ = self
+      .ui_tx
+      .send(UIUpdate::LenStatus(utils::build_len_status_str((
+        area_size.x,
+        area_size.y,
+      ))));
     let _ = self.ui_tx.send(UIUpdate::CanvasPlayheadArea(playhead_area));
   }
 }

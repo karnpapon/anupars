@@ -238,8 +238,14 @@ impl Playhead {
     drop(area);
 
     let chn_str = self.compute_chn_str(Vec2::new(pos_x, pos_y));
-    let _ = self.ui_tx.send(UIUpdate::PosStatus(utils::build_pos_status_str((pos_x, pos_y).into())));
-    let _ = self.ui_tx.send(UIUpdate::LenStatus(utils::build_len_status_str((w, h))));
+    let _ = self
+      .ui_tx
+      .send(UIUpdate::PosStatus(utils::build_pos_status_str(
+        (pos_x, pos_y).into(),
+      )));
+    let _ = self
+      .ui_tx
+      .send(UIUpdate::LenStatus(utils::build_len_status_str((w, h))));
     let _ = self.ui_tx.send(UIUpdate::ChnStatus(chn_str));
   }
 
@@ -270,7 +276,9 @@ impl Playhead {
       .store(height, Ordering::Relaxed);
 
     let queue_manager_cloned = self.queue_manager.clone();
-    let _ = self.ui_tx.send(UIUpdate::QueueManagerUpdate(queue_manager_cloned));
+    let _ = self
+      .ui_tx
+      .send(UIUpdate::QueueManagerUpdate(queue_manager_cloned));
   }
 
   fn handle_set_grid_splits(&self, v: usize, h: usize) {
@@ -445,7 +453,10 @@ impl Playhead {
           Message::ToggleSpatialKeyboard() => {
             let prev = self.modes.keyboard_top_active.load(Ordering::Relaxed);
             let new_val = !prev;
-            self.modes.keyboard_top_active.store(new_val, Ordering::Relaxed);
+            self
+              .modes
+              .keyboard_top_active
+              .store(new_val, Ordering::Relaxed);
             let _ = self.ui_tx.send(UIUpdate::CanvasKeyboardTopActive(new_val));
           }
         }
@@ -602,7 +613,10 @@ impl Playhead {
             Message::ToggleSpatialKeyboard() => {
               let prev = self.modes.keyboard_top_active.load(Ordering::Relaxed);
               let new_val = !prev;
-              self.modes.keyboard_top_active.store(new_val, Ordering::Relaxed);
+              self
+                .modes
+                .keyboard_top_active
+                .store(new_val, Ordering::Relaxed);
               let _ = self.ui_tx.send(UIUpdate::CanvasKeyboardTopActive(new_val));
             }
           }
