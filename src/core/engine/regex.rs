@@ -5,13 +5,10 @@ use std::sync::mpsc::Sender;
 use std::time::Duration;
 use std::time::Instant;
 
-use cursive::views::Canvas;
-use cursive::views::TextView;
 use regex_lite::Regex;
 
-use crate::core::consts;
 use crate::core::playhead;
-use crate::view::grid::GridEditor;
+use crate::core::playhead::UIUpdate;
 
 /// Maximum text length (in bytes) we will attempt to match against.
 const MAX_INPUT_LEN: usize = 10_000;
@@ -84,13 +81,14 @@ pub struct EventData {
 pub struct RegExpHandler {
   pub tx: Sender<Message>,
   pub rx: Receiver<Message>,
-  cb_sink: cursive::CbSink,
+  ui_tx: Sender<UIUpdate>,
+  playhead_tx: Sender<playhead::Message>,
 }
 
 impl RegExpHandler {
-  pub fn new(cb_sink: cursive::CbSink) -> Self {
+  pub fn new(ui_tx: Sender<UIUpdate>, playhead_tx: Sender<playhead::Message>) -> Self {
     let (tx, rx) = channel();
-    Self { tx, rx, cb_sink }
+    Self { tx, rx, ui_tx, playhead_tx }
   }
 
   fn process_event(
@@ -204,157 +202,44 @@ impl RegExpHandler {
   /// WASM: process one batch of pending messages without blocking.
   #[cfg(target_arch = "wasm32")]
   pub fn wasm_tick(&self, cache: &mut RegexCache) {
-    while let Ok(control_message) = self.rx.try_recv() {
-      match control_message {
-        Message::Clear => {
-          let _ = self.cb_sink.send(Box::new(move |s| {
-            let _ = s
-              .call_on_name(
-                crate::core::consts::canvas_editor_section_view,
-                |c: &mut cursive::views::Canvas<crate::view::grid::GridEditor>| {
-                  c.state_mut()
-                    .playhead_tx
-                    .send(crate::core::playhead::Message::SetMatcher(None))
-                },
-              )
-              .unwrap();
-            s.call_on_name(
-              crate::core::consts::regex_matches_amount_unit_view,
-              |c: &mut cursive::views::TextView| c.set_content("-"),
-            );
-          }));
-        }
-        Message::Solve(data) => {
-          let result = Self::process_event(&data, cache);
-          self
-            .cb_sink
-            .send(Box::new(move |s| {
-              let res = match result {
-                Ok(matches) => {
-                  let total_matches = matches.len();
-                  let mm = if matches.is_empty() {
-                    None
-                  } else {
-                    Some(matches)
-                  };
-                  let _ = s
-                    .call_on_name(
-                      crate::core::consts::canvas_editor_section_view,
-                      |c: &mut cursive::views::Canvas<crate::view::grid::GridEditor>| {
-                        c.state_mut()
-                          .playhead_tx
-                          .send(crate::core::playhead::Message::SetMatcher(mm))
-                      },
-                    )
-                    .unwrap();
-                  s.call_on_name(
-                    crate::core::consts::regex_matches_amount_unit_view,
-                    |c: &mut cursive::views::TextView| c.set_content(total_matches.to_string()),
-                  );
-                  "".to_string()
-                }
-                Err(err) => err.message,
-              };
-              if !res.is_empty() {
-                s.call_on_name(
-                  crate::core::consts::regex_err_display_unit_view,
-                  |c: &mut cursive::views::TextView| c.set_content(res),
-                )
-                .unwrap()
-              } else {
-                s.call_on_name(
-                  crate::core::consts::regex_err_display_unit_view,
-                  |c: &mut cursive::views::TextView| c.set_content("-"),
-                )
-                .unwrap();
-              }
-            }))
-            .unwrap();
+    self.process_messages(cache);
+  }
+
+  fn handle_message(&self, control_message: Message, cache: &mut RegexCache) {
+    match control_message {
+      Message::Clear => {
+        let _ = self.playhead_tx.send(playhead::Message::SetMatcher(None));
+        let _ = self.ui_tx.send(UIUpdate::RegexMatchCount("-".to_string()));
+        let _ = self.ui_tx.send(UIUpdate::RegexError("-".to_string()));
+      }
+      Message::Solve(data) => {
+        let result = Self::process_event(&data, cache);
+        match result {
+          Ok(matches) => {
+            let total_matches = matches.len();
+            let mm = if matches.is_empty() { None } else { Some(matches) };
+            let _ = self.playhead_tx.send(playhead::Message::SetMatcher(mm));
+            let _ = self.ui_tx.send(UIUpdate::RegexMatchCount(total_matches.to_string()));
+            let _ = self.ui_tx.send(UIUpdate::RegexError("-".to_string()));
+          }
+          Err(err) => {
+            let _ = self.ui_tx.send(UIUpdate::RegexError(err.message));
+          }
         }
       }
     }
   }
 
+  fn process_messages(&self, cache: &mut RegexCache) {
+    while let Ok(msg) = self.rx.try_recv() {
+      self.handle_message(msg, cache);
+    }
+  }
+
   pub fn run(self) {
-    // Cache lives for the lifetime of this thread, one allocation, reused every solve.
     let mut cache = RegexCache::new();
-
-    for control_message in &self.rx {
-      match control_message {
-        Message::Clear => {
-          let _ = self.cb_sink.send(Box::new(move |s| {
-            let _ = s
-              .call_on_name(
-                consts::canvas_editor_section_view,
-                |c: &mut Canvas<GridEditor>| {
-                  c.state_mut()
-                    .playhead_tx
-                    .send(playhead::Message::SetMatcher(None))
-                },
-              )
-              .unwrap();
-
-            s.call_on_name(
-              consts::regex_matches_amount_unit_view,
-              |c: &mut TextView| c.set_content("-"),
-            );
-          }));
-        }
-        Message::Solve(data) => {
-          let result = Self::process_event(&data, &mut cache);
-
-          self
-            .cb_sink
-            .send(Box::new(move |s| {
-              let res = match result {
-                Ok(matches) => {
-                  let total_matches = matches.len();
-                  let mm = if matches.is_empty() {
-                    None
-                  } else {
-                    Some(matches)
-                  };
-
-                  let _ = s
-                    .call_on_name(
-                      consts::canvas_editor_section_view,
-                      |c: &mut Canvas<GridEditor>| {
-                        c.state_mut()
-                          .playhead_tx
-                          .send(playhead::Message::SetMatcher(mm))
-                      },
-                    )
-                    .unwrap();
-
-                  s.call_on_name(
-                    consts::regex_matches_amount_unit_view,
-                    |c: &mut TextView| c.set_content(total_matches.to_string()),
-                  );
-
-                  "".to_string()
-                }
-                Err(err) => err.message,
-              };
-
-              if !res.is_empty() {
-                // s.call_on_name(consts::display_view, |c: &mut TextView| {
-                //   c.set_content(res.clone())
-                // })
-                // .unwrap();
-                s.call_on_name(consts::regex_err_display_unit_view, |c: &mut TextView| {
-                  c.set_content(res)
-                })
-                .unwrap()
-              } else {
-                s.call_on_name(consts::regex_err_display_unit_view, |c: &mut TextView| {
-                  c.set_content("-")
-                })
-                .unwrap();
-              }
-            }))
-            .unwrap();
-        }
-      }
+    for msg in &self.rx {
+      self.handle_message(msg, &mut cache);
     }
   }
 }

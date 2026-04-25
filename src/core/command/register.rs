@@ -6,6 +6,7 @@ use std::time::Instant;
 
 use crate::app::UserData;
 use crate::core::playhead;
+use crate::core::playhead::UIUpdate;
 
 use crate::view::layout::Program;
 
@@ -29,7 +30,7 @@ pub struct CommandManager {
   bindings: RefCell<HashMap<String, Vec<Command>>>,
   pub program: Arc<Program>,
   metronome_sender: Sender<metronome::Message>,
-  cb_sink: cursive::CbSink,
+  ui_tx: Sender<UIUpdate>,
   temp_tempo: Arc<Mutex<usize>>,
   temp_ratio: Arc<Mutex<(usize, usize)>>,
   pub last_key_time: Arc<Mutex<Option<Instant>>>,
@@ -40,7 +41,7 @@ impl CommandManager {
   pub fn new(
     prog: Program,
     m_tx: Sender<metronome::Message>,
-    cb_sink: cursive::CbSink,
+    ui_tx: Sender<UIUpdate>,
     temp_tempo: Arc<Mutex<usize>>,
     last_key_time: Arc<Mutex<Option<Instant>>>,
     playhead_tx_cloned: Sender<playhead::Message>,
@@ -51,7 +52,7 @@ impl CommandManager {
       bindings,
       program: Arc::new(prog),
       metronome_sender: m_tx,
-      cb_sink,
+      ui_tx,
       temp_tempo,
       temp_ratio: Arc::new(Mutex::new(consts::DEFAULT_RATIO)),
       last_key_time,
@@ -153,15 +154,7 @@ impl CommandManager {
           .send(playhead::Message::SetTempo(temp))
           .unwrap();
 
-        self
-          .cb_sink
-          .send(Box::new(move |s| {
-            s.call_on_name(consts::bpm_status_unit_view, |view: &mut TextView| {
-              view.set_content(utils::build_bpm_status_str(temp));
-            })
-            .unwrap();
-          }))
-          .unwrap();
+        let _ = self.ui_tx.send(UIUpdate::BpmDisplay(utils::build_bpm_status_str(temp)));
 
         Ok(None)
       }

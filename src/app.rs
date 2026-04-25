@@ -4,7 +4,7 @@ use crate::core::command::register::CommandManager;
 use crate::core::consts;
 use crate::core::engine::regex::RegExpHandler;
 use crate::core::io::midi;
-use crate::core::playhead::{Message as PlayheadMessage, Playhead};
+use crate::core::playhead::{Message as PlayheadMessage, Playhead, UIUpdate};
 use crate::core::timing::metronome::{Message, Metronome};
 use crate::view::menubar::{set_contents, Menubar};
 #[cfg(target_arch = "wasm32")]
@@ -107,10 +107,15 @@ pub struct Application {
   /// for tracking holding keypress
   pub last_key_time: Arc<Mutex<Option<Instant>>>,
   pub current_tempo: Arc<Mutex<usize>>,
+  pub ui_tx: Sender<UIUpdate>,
+  #[cfg(not(target_arch = "wasm32"))]
+  pub sym_state: std::sync::Arc<crate::core::engine::symspell::SymSpellState>,
 
-  // WASM-only: the Arc<Playhead> so wasm.rs can call wasm_tick()/wasm_tick_ui()
+  // WASM-only: the Arc<Playhead> so wasm.rs can call wasm_tick()
   #[cfg(target_arch = "wasm32")]
   pub playhead: std::sync::Arc<Playhead>,
+
+  pub ui_rx: std::sync::mpsc::Receiver<UIUpdate>,
 }
 
 /// Initialize the default cursive theme with simple borders and terminal colors
@@ -144,21 +149,25 @@ pub fn initialize_components() -> Application {
   let mut midi = midi::Midi::new();
   midi.init().unwrap();
 
-  let regex_handler = RegExpHandler::new(cursive.cb_sink().clone());
   let last_key_time = Arc::new(Mutex::new(None));
   let current_tempo = Arc::new(Mutex::new(DEFAULT_TEMPO));
   let prog = Program::new();
 
-  let playhead_area =
-    std::sync::Arc::new(Playhead::new(midi.tx.clone(), cursive.cb_sink().clone()));
+  let (ui_tx, ui_rx) = std::sync::mpsc::channel::<UIUpdate>();
+
+  let playhead_area = std::sync::Arc::new(Playhead::new(midi.tx.clone(), ui_tx.clone()));
 
   #[cfg(not(target_arch = "wasm32"))]
-  let playhead_tx = std::sync::Arc::clone(&playhead_area).run(regex_handler.tx.clone());
+  let sym_state = std::sync::Arc::clone(&playhead_area.sym_state);
+
+  #[cfg(not(target_arch = "wasm32"))]
+  let playhead_tx = std::sync::Arc::clone(&playhead_area).run();
 
   #[cfg(target_arch = "wasm32")]
-  let playhead_tx = std::sync::Arc::clone(&playhead_area).wasm_setup(regex_handler.tx.clone());
+  let playhead_tx = std::sync::Arc::clone(&playhead_area).wasm_setup();
 
-  let mut metronome = Metronome::new(cursive.cb_sink().clone(), playhead_tx.clone());
+  let regex_handler = RegExpHandler::new(ui_tx.clone(), playhead_tx.clone());
+  let mut metronome = Metronome::new(ui_tx.clone(), playhead_tx.clone());
 
   metronome.set_midi_tx(midi.tx.clone());
   midi.enable_clock(false);
@@ -188,8 +197,12 @@ pub fn initialize_components() -> Application {
     metronome,
     last_key_time,
     current_tempo,
+    ui_tx,
+    #[cfg(not(target_arch = "wasm32"))]
+    sym_state,
     #[cfg(target_arch = "wasm32")]
     playhead: playhead_area,
+    ui_rx,
   }
 }
 
@@ -202,7 +215,7 @@ pub fn setup_ui(components: &mut Application) {
   let mut command_manager = CommandManager::new(
     components.program.clone(),
     metronome_tx.clone(),
-    components.cursive.cb_sink().clone(),
+    components.ui_tx.clone(),
     Arc::clone(&components.current_tempo),
     Arc::clone(&components.last_key_time),
     playhead_tx.clone(),
@@ -301,8 +314,13 @@ pub fn spawn_background_threads(
   metronome_tx: Sender<Message>,
   regex_handler: RegExpHandler,
   metronome: Metronome,
+  ui_rx: std::sync::mpsc::Receiver<UIUpdate>,
+  cb_sink: cursive::CbSink,
+  sym_state: std::sync::Arc<crate::core::engine::symspell::SymSpellState>,
 ) {
   spawn_tempo_monitor_thread(last_key_time, current_tempo, metronome_tx);
+
+  let regex_tx = regex_handler.tx.clone();
 
   thread::Builder::new()
     .name(consts::THREAD_NAME_REGEX_HANDLER.to_string())
@@ -313,4 +331,44 @@ pub fn spawn_background_threads(
     .name(consts::THREAD_NAME_METRONOME.to_string())
     .spawn(move || metronome.run())
     .expect("Failed to spawn metronome thread");
+
+  Playhead::spawn_ui_processor(ui_rx, cb_sink, sym_state, regex_tx);
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+#[allow(dead_code)]
+pub fn run_event_loop(
+  ui_rx: std::sync::mpsc::Receiver<crate::core::playhead::UIUpdate>,
+  renderer: &mut crate::terminal::Renderer,
+) -> std::io::Result<()> {
+  use crossterm::event::{poll, read, Event, KeyCode, KeyModifiers};
+  use std::time::Duration;
+
+  let mut state = crate::app_state::AppState::default();
+
+  loop {
+    if poll(Duration::from_millis(16))? {
+      match read()? {
+        Event::Key(key) => {
+          if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('c') {
+            break;
+          }
+        }
+        Event::Resize(w, h) => {
+          renderer.resize(w, h);
+          state.resize(w, h);
+        }
+        Event::Mouse(_) => {}
+        _ => {}
+      }
+    }
+
+    while let Ok(update) = ui_rx.try_recv() {
+      crate::app_state::apply_ui_update(update, &mut state);
+    }
+
+    // Phase 8: draw_frame(&state, renderer.current_mut())
+    renderer.flush(&mut std::io::stdout())?;
+  }
+  Ok(())
 }

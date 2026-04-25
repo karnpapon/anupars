@@ -1,16 +1,12 @@
 use std::sync::atomic::Ordering;
 
-use cursive::views::Canvas;
-use cursive::views::TextView;
-
 use super::movement::Movement;
 use super::types::Direction;
 use super::types::SweepOutputMode;
 use super::types::SweepRowMode;
+use super::types::UIUpdate;
 use crate::app::AppMode;
 use crate::core::command::types::Adjustment;
-use crate::core::consts;
-use crate::view::grid::GridEditor;
 
 use super::Playhead;
 
@@ -131,20 +127,8 @@ impl Playhead {
     *movement = new_movement;
     drop(movement);
 
-    let movement_status = self.build_movement_status_string();
-    let mode_status = self.build_mode_status_string();
-    let cb_sink = self.cb_sink.clone();
-
-    cb_sink
-      .send(Box::new(move |siv| {
-        siv.call_on_name(consts::mode_unit_view, |view: &mut TextView| {
-          view.set_content(mode_status);
-        });
-        siv.call_on_name(consts::movement_unit_view, |view: &mut TextView| {
-          view.set_content(movement_status);
-        });
-      }))
-      .unwrap();
+    let _ = self.ui_tx.send(UIUpdate::MovementStatus(self.build_movement_status_string()));
+    let _ = self.ui_tx.send(UIUpdate::ModeStatus(self.build_mode_status_string()));
   }
 
   pub fn toggle_sweep_movement_mode(&self) {
@@ -166,24 +150,11 @@ impl Playhead {
     let new_val = *sweep_movement;
     drop(sweep_movement);
 
-    let movement_status = self.build_movement_status_string();
-    let cb_sink = self.cb_sink.clone();
-    cb_sink
-      .send(Box::new(move |siv| {
-        siv.call_on_name(
-          consts::canvas_editor_section_view,
-          |canvas: &mut Canvas<GridEditor>| {
-            canvas.state_mut().playhead_ui.sweep_movement = new_val;
-            if let Some(x) = init_x {
-              canvas.state_mut().playhead_ui.sweep_x = x;
-            }
-          },
-        );
-        siv.call_on_name(consts::movement_unit_view, |view: &mut TextView| {
-          view.set_content(movement_status);
-        });
-      }))
-      .unwrap();
+    let _ = self.ui_tx.send(UIUpdate::CanvasSweepMovement(new_val));
+    if let Some(x) = init_x {
+      let _ = self.ui_tx.send(UIUpdate::SweepX(x));
+    }
+    let _ = self.ui_tx.send(UIUpdate::MovementStatus(self.build_movement_status_string()));
   }
 
   pub fn set_sweep_movement(&self, new_movement: Movement) {
@@ -191,21 +162,8 @@ impl Playhead {
     *sweep_movement = Some(new_movement);
     drop(sweep_movement);
 
-    let movement_status = self.build_movement_status_string();
-    let cb_sink = self.cb_sink.clone();
-    cb_sink
-      .send(Box::new(move |siv| {
-        siv.call_on_name(
-          consts::canvas_editor_section_view,
-          |canvas: &mut Canvas<GridEditor>| {
-            canvas.state_mut().playhead_ui.sweep_movement = Some(new_movement);
-          },
-        );
-        siv.call_on_name(consts::movement_unit_view, |view: &mut TextView| {
-          view.set_content(movement_status);
-        });
-      }))
-      .unwrap();
+    let _ = self.ui_tx.send(UIUpdate::CanvasSweepMovement(Some(new_movement)));
+    let _ = self.ui_tx.send(UIUpdate::MovementStatus(self.build_movement_status_string()));
   }
 
   pub fn toggle_arpeggiator_mode(&self) {
@@ -216,24 +174,8 @@ impl Playhead {
       .arpeggiator_mode
       .store(is_arp, Ordering::Relaxed);
 
-    let mode_status = self.build_mode_status_string();
-    let cb_sink = self.cb_sink.clone();
-
-    cb_sink
-      .send(Box::new(move |siv| {
-        siv.call_on_name(
-          consts::canvas_editor_section_view,
-          |canvas: &mut Canvas<GridEditor>| {
-            let editor = canvas.state_mut();
-            editor.playhead_ui.arpeggiator_mode = is_arp;
-          },
-        );
-
-        siv.call_on_name(consts::mode_unit_view, |view: &mut TextView| {
-          view.set_content(mode_status);
-        });
-      }))
-      .unwrap();
+    let _ = self.ui_tx.send(UIUpdate::CanvasArpeggiatorMode(is_arp));
+    let _ = self.ui_tx.send(UIUpdate::ModeStatus(self.build_mode_status_string()));
   }
 
   pub fn toggle_event_operator_mode(&self) {
@@ -243,72 +185,24 @@ impl Playhead {
       .event_operator_mode
       .store(is_event_op, Ordering::Relaxed);
 
-    let mode_status = self.build_mode_status_string();
-    let cb_sink = self.cb_sink.clone();
-
-    cb_sink
-      .send(Box::new(move |siv| {
-        siv.call_on_name(
-          consts::canvas_editor_section_view,
-          |canvas: &mut Canvas<GridEditor>| {
-            let editor = canvas.state_mut();
-            editor.playhead_ui.event_operator_mode = is_event_op;
-          },
-        );
-
-        siv.call_on_name(consts::mode_unit_view, |view: &mut TextView| {
-          view.set_content(mode_status);
-        });
-      }))
-      .unwrap();
+    let _ = self.ui_tx.send(UIUpdate::CanvasEventOperatorMode(is_event_op));
+    let _ = self.ui_tx.send(UIUpdate::ModeStatus(self.build_mode_status_string()));
   }
 
   pub fn toggle_drain_queue_mode(&self) {
     let is_drain = !self.queue_manager.is_drain_queue_mode();
     self.queue_manager.set_drain_queue_mode(is_drain);
 
-    let mode_status = self.build_mode_status_string();
-    let cb_sink = self.cb_sink.clone();
-
-    cb_sink
-      .send(Box::new(move |siv| {
-        siv.call_on_name(
-          consts::canvas_editor_section_view,
-          |canvas: &mut Canvas<GridEditor>| {
-            let editor = canvas.state_mut();
-            editor.playhead_ui.drain_queue_mode = is_drain;
-          },
-        );
-
-        siv.call_on_name(consts::mode_unit_view, |view: &mut TextView| {
-          view.set_content(mode_status);
-        });
-      }))
-      .unwrap();
+    let _ = self.ui_tx.send(UIUpdate::CanvasDrainQueueMode(is_drain));
+    let _ = self.ui_tx.send(UIUpdate::ModeStatus(self.build_mode_status_string()));
   }
 
   pub fn toggle_sweep_mode(&self) {
     let is_sweep = !self.modes.sweep_mode.load(Ordering::Relaxed);
     self.modes.sweep_mode.store(is_sweep, Ordering::Relaxed);
 
-    let mode_status = self.build_mode_status_string();
-    let cb_sink = self.cb_sink.clone();
-
-    cb_sink
-      .send(Box::new(move |siv| {
-        siv.call_on_name(
-          consts::canvas_editor_section_view,
-          |canvas: &mut Canvas<GridEditor>| {
-            let editor = canvas.state_mut();
-            editor.playhead_ui.sweep_mode = is_sweep;
-          },
-        );
-
-        siv.call_on_name(consts::mode_unit_view, |view: &mut TextView| {
-          view.set_content(mode_status);
-        });
-      }))
-      .unwrap();
+    let _ = self.ui_tx.send(UIUpdate::CanvasSweepMode(is_sweep));
+    let _ = self.ui_tx.send(UIUpdate::ModeStatus(self.build_mode_status_string()));
   }
 
   pub fn cycle_tilt_mode(&self) {
@@ -317,23 +211,8 @@ impl Playhead {
     let new_tilt = *tilt;
     drop(tilt);
 
-    let tilt_status = new_tilt.print_tilts();
-    let cb_sink = self.cb_sink.clone();
-
-    cb_sink
-      .send(Box::new(move |siv| {
-        siv.call_on_name(
-          consts::canvas_editor_section_view,
-          |canvas: &mut Canvas<GridEditor>| {
-            let editor = canvas.state_mut();
-            editor.playhead_ui.tilt_mode = new_tilt;
-          },
-        );
-        siv.call_on_name(consts::tilt_unit_view, |view: &mut TextView| {
-          view.set_content(tilt_status);
-        });
-      }))
-      .unwrap();
+    let _ = self.ui_tx.send(UIUpdate::CanvasTiltMode(new_tilt));
+    let _ = self.ui_tx.send(UIUpdate::TiltStatus(new_tilt.print_tilts()));
   }
 
   pub fn cycle_sweep_row_mode(&self) {
@@ -342,23 +221,8 @@ impl Playhead {
     let new_mode = *mode;
     drop(mode);
 
-    let mode_status = self.build_mode_status_string();
-    let cb_sink = self.cb_sink.clone();
-
-    cb_sink
-      .send(Box::new(move |siv| {
-        siv.call_on_name(
-          consts::canvas_editor_section_view,
-          |canvas: &mut Canvas<GridEditor>| {
-            let editor = canvas.state_mut();
-            editor.playhead_ui.sweep_row_mode = new_mode;
-          },
-        );
-        siv.call_on_name(consts::mode_unit_view, |view: &mut TextView| {
-          view.set_content(mode_status);
-        });
-      }))
-      .unwrap();
+    let _ = self.ui_tx.send(UIUpdate::CanvasSweepRowMode(new_mode));
+    let _ = self.ui_tx.send(UIUpdate::ModeStatus(self.build_mode_status_string()));
   }
 
   pub fn cycle_sweep_output_mode(&self) {
@@ -367,22 +231,8 @@ impl Playhead {
     let new_mode = *mode;
     drop(mode);
 
-    let mode_status = self.build_mode_status_string();
-    let cb_sink = self.cb_sink.clone();
-
-    cb_sink
-      .send(Box::new(move |siv| {
-        siv.call_on_name(
-          consts::canvas_editor_section_view,
-          |canvas: &mut Canvas<GridEditor>| {
-            canvas.state_mut().playhead_ui.sweep_output_mode = new_mode;
-          },
-        );
-        siv.call_on_name(consts::mode_unit_view, |view: &mut TextView| {
-          view.set_content(mode_status);
-        });
-      }))
-      .unwrap();
+    let _ = self.ui_tx.send(UIUpdate::CanvasSweepOutputMode(new_mode));
+    let _ = self.ui_tx.send(UIUpdate::ModeStatus(self.build_mode_status_string()));
   }
 
   pub fn adjust_sweep_cc(&self, adj: Adjustment) {
@@ -393,22 +243,8 @@ impl Playhead {
     };
     self.modes.sweep_cc_number.store(next, Ordering::Relaxed);
 
-    let mode_status = self.build_mode_status_string();
-    let cb_sink = self.cb_sink.clone();
-
-    cb_sink
-      .send(Box::new(move |siv| {
-        siv.call_on_name(
-          consts::canvas_editor_section_view,
-          |canvas: &mut Canvas<GridEditor>| {
-            canvas.state_mut().playhead_ui.sweep_cc_number = next;
-          },
-        );
-        siv.call_on_name(consts::mode_unit_view, |view: &mut TextView| {
-          view.set_content(mode_status);
-        });
-      }))
-      .unwrap();
+    let _ = self.ui_tx.send(UIUpdate::CanvasSweepCcNumber(next));
+    let _ = self.ui_tx.send(UIUpdate::ModeStatus(self.build_mode_status_string()));
   }
 
   pub fn toggle_dyn_length_mode(&self) {
@@ -418,16 +254,7 @@ impl Playhead {
       .dyn_length_mode
       .store(is_dyn_length, Ordering::Relaxed);
 
-    let mode_status = self.build_mode_status_string();
-    let cb_sink = self.cb_sink.clone();
-
-    cb_sink
-      .send(Box::new(move |siv| {
-        siv.call_on_name(consts::mode_unit_view, |view: &mut TextView| {
-          view.set_content(mode_status);
-        });
-      }))
-      .unwrap();
+    let _ = self.ui_tx.send(UIUpdate::ModeStatus(self.build_mode_status_string()));
   }
 
   pub fn toggle_freeze_mode(&self) {
@@ -439,24 +266,8 @@ impl Playhead {
       *self.frozen_active_pos.lock().unwrap() = current_pos;
     }
 
-    let mode_status = self.build_mode_status_string();
-    let cb_sink = self.cb_sink.clone();
-
-    cb_sink
-      .send(Box::new(move |siv| {
-        siv.call_on_name(
-          consts::canvas_editor_section_view,
-          |canvas: &mut Canvas<GridEditor>| {
-            let editor = canvas.state_mut();
-            editor.playhead_ui.freeze_mode = is_freeze;
-          },
-        );
-
-        siv.call_on_name(consts::mode_unit_view, |view: &mut TextView| {
-          view.set_content(mode_status);
-        });
-      }))
-      .unwrap();
+    let _ = self.ui_tx.send(UIUpdate::CanvasFreezeMode(is_freeze));
+    let _ = self.ui_tx.send(UIUpdate::ModeStatus(self.build_mode_status_string()));
   }
 
   pub fn cycle_drone_channel(&self, dir: Adjustment) {
@@ -488,31 +299,14 @@ impl Playhead {
     let drone_x = self.modes.drone_x.load(Ordering::Relaxed);
     self.midi_handler.trigger_drone_at_x(drone_x, &area);
 
-    let mode_status = self.build_mode_status_string();
-    let cb_sink = self.cb_sink.clone();
-    cb_sink
-      .send(Box::new(move |siv| {
-        siv.call_on_name(
-          consts::canvas_editor_section_view,
-          |canvas: &mut Canvas<GridEditor>| {
-            canvas.state_mut().playhead_ui.drone_channel = new_ch;
-          },
-        );
-        siv.call_on_name(consts::mode_unit_view, |view: &mut TextView| {
-          view.set_content(mode_status);
-        });
-      }))
-      .unwrap();
+    let _ = self.ui_tx.send(UIUpdate::CanvasDroneChannel(new_ch));
+    let _ = self.ui_tx.send(UIUpdate::ModeStatus(self.build_mode_status_string()));
   }
 
   pub fn toggle_drone_mode(&self) {
     let is_drone = !self.modes.drone_mode.load(Ordering::Relaxed);
     self.modes.drone_mode.store(is_drone, Ordering::Relaxed);
 
-    // let area = {
-    //   let a = self.area.lock().unwrap();
-    //   *a
-    // };
     let drone_x = if is_drone {
       let x = 0; // relative offset from area.left()
       self.modes.drone_x.store(x, Ordering::Relaxed);
@@ -523,25 +317,9 @@ impl Playhead {
       self.modes.drone_x.load(Ordering::Relaxed)
     };
 
-    let mode_status = self.build_mode_status_string();
-    let cb_sink = self.cb_sink.clone();
-
-    cb_sink
-      .send(Box::new(move |siv| {
-        siv.call_on_name(
-          consts::canvas_editor_section_view,
-          |canvas: &mut Canvas<GridEditor>| {
-            let editor = canvas.state_mut();
-            editor.playhead_ui.drone_mode = is_drone;
-            editor.playhead_ui.drone_x = drone_x;
-            editor.playhead_ui.drone_channel = 1;
-          },
-        );
-        siv.call_on_name(consts::mode_unit_view, |view: &mut TextView| {
-          view.set_content(mode_status);
-        });
-      }))
-      .unwrap();
+    let _ = self.ui_tx.send(UIUpdate::CanvasDroneMode(is_drone, drone_x));
+    let _ = self.ui_tx.send(UIUpdate::CanvasDroneChannel(1));
+    let _ = self.ui_tx.send(UIUpdate::ModeStatus(self.build_mode_status_string()));
   }
 
   /// Move the drone line left or right within the playhead area bounds.
@@ -566,17 +344,7 @@ impl Playhead {
     self.modes.drone_x.store(new_x, Ordering::Relaxed);
     self.midi_handler.trigger_drone_at_x(new_x, &area);
 
-    let cb_sink = self.cb_sink.clone();
-    cb_sink
-      .send(Box::new(move |siv| {
-        siv.call_on_name(
-          consts::canvas_editor_section_view,
-          |canvas: &mut Canvas<GridEditor>| {
-            canvas.state_mut().playhead_ui.drone_x = new_x;
-          },
-        );
-      }))
-      .unwrap();
+    let _ = self.ui_tx.send(UIUpdate::CanvasDroneX(new_x));
   }
 
   pub(super) fn handle_toggle_accumulation_mode(&self) {
@@ -591,28 +359,9 @@ impl Playhead {
       self.queue_manager.clear_all();
     }
 
-    let mode_status = self.build_mode_status_string();
-    let cb_sink = self.cb_sink.clone();
-
-    cb_sink
-      .send(Box::new(move |siv| {
-        siv.call_on_name(
-          consts::canvas_editor_section_view,
-          |canvas: &mut Canvas<GridEditor>| {
-            let editor = canvas.state_mut();
-            editor.playhead_ui.accumulation_mode = is_enabled;
-          },
-        );
-
-        siv.call_on_name(consts::input_status_unit_view, |view: &mut TextView| {
-          view.set_content("-");
-        });
-
-        siv.call_on_name(consts::mode_unit_view, |view: &mut TextView| {
-          view.set_content(mode_status);
-        });
-      }))
-      .unwrap();
+    let _ = self.ui_tx.send(UIUpdate::CanvasAccumulationMode(is_enabled));
+    let _ = self.ui_tx.send(UIUpdate::InputStatus("-".to_string()));
+    let _ = self.ui_tx.send(UIUpdate::ModeStatus(self.build_mode_status_string()));
   }
 }
 

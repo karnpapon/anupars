@@ -1,14 +1,9 @@
 use crate::core::io::midi;
 
-use super::Playhead;
+use super::{Playhead, UIUpdate};
 
 pub fn make_playhead() -> Playhead {
-  let (tx, _rx) = std::sync::mpsc::channel::<midi::Message>();
-  let siv = cursive::Cursive::new();
-  let ph = Playhead::new(tx, siv.cb_sink().clone());
-  // Forget `siv` so its cb_sink receiver is never dropped. Any code under test
-  // that calls `cb_sink.send(...)` would otherwise panic on a closed channel.
-  // Leaking one Cursive per test is acceptable in an ephemeral test process.
-  std::mem::forget(siv);
-  ph
+  let (midi_tx, _midi_rx) = std::sync::mpsc::channel::<midi::Message>();
+  let (ui_tx, _ui_rx) = std::sync::mpsc::channel::<UIUpdate>();
+  Playhead::new(midi_tx, ui_tx)
 }

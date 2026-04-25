@@ -1,3 +1,9 @@
+/// Exports functions that JavaScript drives:
+///   wasm_init(cols, rows)   - set up the whole application
+///   wasm_step(elapsed_ms)   - advance one frame (~60 fps)
+///   wasm_send_key(key_str)  - forward a key string from xterm.js
+///   wasm_render()           - returns the ANSI string to write to xterm.js
+///   wasm_resize(cols, rows) - notify the backend of a terminal resize
 use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::sync::mpsc::Sender;
@@ -10,8 +16,12 @@ use wasm_bindgen::prelude::*;
 
 use crate::app::{initialize_components, setup_ui};
 use crate::core::engine::regex::RegexCache;
-use crate::core::playhead::{Message as PlayheadMessage, Playhead};
+use crate::core::engine::symspell::SymSpellState;
+use crate::core::playhead::{Message as PlayheadMessage, Playhead, UIUpdate};
 use crate::core::timing::metronome::{Message as MetronomeMessage, Metronome};
+use crate::view::ui_processor::apply_ui_update_cursive;
+use crate::terminal::buffer::ScreenBuffer;
+use crate::terminal::cell::{Cell as TermCell, Color as TermColor};
 
 thread_local! {
   /// Events pushed by `wasm_send_key`, drained by `poll_event`.
@@ -22,30 +32,22 @@ thread_local! {
   static ANSI_OUTPUT: RefCell<String> = RefCell::new(String::new());
 }
 
-#[derive(Clone)]
-struct ScreenCell {
-  ch: char,
-  fg: Color,
-  bg: Color,
-  reverse: bool,
-}
-
-impl Default for ScreenCell {
-  fn default() -> Self {
-    ScreenCell {
-      ch: ' ',
-      fg: Color::Dark(BaseColor::White),
-      bg: Color::Dark(BaseColor::Black),
-      reverse: false,
-    }
+// Convert a cursive Color to our terminal TermColor.
+fn from_cursive_color(c: Color) -> TermColor {
+  match c {
+    Color::Dark(b) => TermColor::Indexed(base_idx(b)),
+    Color::Light(b) => TermColor::Indexed(8 + base_idx(b)),
+    Color::Rgb(r, g, b) => TermColor::Rgb(r, g, b),
+    Color::RgbLowRes(r, g, b) => TermColor::Indexed(16 + 36 * r + 6 * g + b),
+    _ => TermColor::Reset,
   }
 }
 
 struct BackendState {
-  cols: usize,
-  rows: usize,
-  cells: Vec<ScreenCell>,
+  buf: ScreenBuffer,
   cursor: Vec2,
+  // Current pen color kept as cursive types for backend trait compatibility,
+  // converted to TermColor when writing into cells.
   fg: Color,
   bg: Color,
   reverse: bool,
@@ -54,9 +56,7 @@ struct BackendState {
 impl BackendState {
   fn new(cols: usize, rows: usize) -> Self {
     Self {
-      cols,
-      rows,
-      cells: vec![ScreenCell::default(); cols * rows],
+      buf: ScreenBuffer::new(cols as u16, rows as u16),
       cursor: Vec2::zero(),
       fg: Color::Dark(BaseColor::White),
       bg: Color::Dark(BaseColor::Black),
@@ -65,32 +65,24 @@ impl BackendState {
   }
 
   fn resize(&mut self, cols: usize, rows: usize) {
-    self.cols = cols;
-    self.rows = rows;
-    self.cells = vec![ScreenCell::default(); cols * rows];
+    self.buf.resize(cols as u16, rows as u16);
     self.cursor = Vec2::zero();
   }
 
-  fn cell_idx(&self, x: usize, y: usize) -> Option<usize> {
-    if x < self.cols && y < self.rows {
-      Some(y * self.cols + x)
-    } else {
-      None
-    }
-  }
-
   fn render_ansi(&self) -> String {
-    let mut out = String::with_capacity(self.cols * self.rows * 8);
+    let cols = self.buf.width as usize;
+    let rows = self.buf.height as usize;
+    let mut out = String::with_capacity(cols * rows * 8);
     // hide cursor, move to top-left
     out.push_str("\x1b[?25l\x1b[H");
 
-    let mut prev_fg: Option<Color> = None;
-    let mut prev_bg: Option<Color> = None;
+    let mut prev_fg: Option<TermColor> = None;
+    let mut prev_bg: Option<TermColor> = None;
     let mut prev_reverse: Option<bool> = None;
 
-    for row in 0..self.rows {
-      for col in 0..self.cols {
-        let cell = &self.cells[row * self.cols + col];
+    for row in 0..rows {
+      for col in 0..cols {
+        let cell = &self.buf.cells[row * cols + col];
         let need_color = prev_fg.map_or(true, |f| f != cell.fg)
           || prev_bg.map_or(true, |b| b != cell.bg)
           || prev_reverse.map_or(true, |r| r != cell.reverse);
@@ -111,7 +103,7 @@ impl BackendState {
         let ch = if cell.ch == '\0' { ' ' } else { cell.ch };
         out.push(ch);
       }
-      if row + 1 < self.rows {
+      if row + 1 < rows {
         out.push_str("\r\n");
       }
     }
@@ -120,7 +112,9 @@ impl BackendState {
   }
 }
 
-fn ansi_color(fg: Color, bg: Color) -> String {
+// Color helpers
+
+fn ansi_color(fg: TermColor, bg: TermColor) -> String {
   format!("{}{}", ansi_fg(fg), ansi_bg(bg))
 }
 
@@ -137,29 +131,23 @@ fn base_idx(b: BaseColor) -> u8 {
   }
 }
 
-fn ansi_fg(c: Color) -> String {
+fn ansi_fg(c: TermColor) -> String {
   match c {
-    Color::Dark(b) => format!("\x1b[{}m", 30 + base_idx(b)),
-    Color::Light(b) => format!("\x1b[{}m", 90 + base_idx(b)),
-    Color::Rgb(r, g, b) => format!("\x1b[38;2;{r};{g};{b}m"),
-    Color::RgbLowRes(r, g, b) => format!(
-      "\x1b[38;5;{}m",
-      16u16 + 36 * r as u16 + 6 * g as u16 + b as u16
-    ),
-    _ => "\x1b[39m".to_string(),
+    TermColor::Reset => "\x1b[39m".to_string(),
+    TermColor::Rgb(r, g, b) => format!("\x1b[38;2;{r};{g};{b}m"),
+    TermColor::Indexed(i) if i < 8 => format!("\x1b[{}m", 30 + i),
+    TermColor::Indexed(i) if i < 16 => format!("\x1b[{}m", 90 + (i - 8)),
+    TermColor::Indexed(i) => format!("\x1b[38;5;{}m", i),
   }
 }
 
-fn ansi_bg(c: Color) -> String {
+fn ansi_bg(c: TermColor) -> String {
   match c {
-    Color::Dark(b) => format!("\x1b[{}m", 40 + base_idx(b)),
-    Color::Light(b) => format!("\x1b[{}m", 100 + base_idx(b)),
-    Color::Rgb(r, g, b) => format!("\x1b[48;2;{r};{g};{b}m"),
-    Color::RgbLowRes(r, g, b) => format!(
-      "\x1b[48;5;{}m",
-      16u16 + 36 * r as u16 + 6 * g as u16 + b as u16
-    ),
-    _ => "\x1b[49m".to_string(),
+    TermColor::Reset => "\x1b[49m".to_string(),
+    TermColor::Rgb(r, g, b) => format!("\x1b[48;2;{r};{g};{b}m"),
+    TermColor::Indexed(i) if i < 8 => format!("\x1b[{}m", 40 + i),
+    TermColor::Indexed(i) if i < 16 => format!("\x1b[{}m", 100 + (i - 8)),
+    TermColor::Indexed(i) => format!("\x1b[48;5;{}m", i),
   }
 }
 
@@ -198,7 +186,7 @@ impl cursive::backend::Backend for XtermJsBackend {
 
   fn screen_size(&self) -> Vec2 {
     let s = self.state.borrow();
-    Vec2::new(s.cols, s.rows)
+    Vec2::new(s.buf.width as usize, s.buf.height as usize)
   }
 
   fn move_to(&self, pos: Vec2) {
@@ -209,18 +197,16 @@ impl cursive::backend::Backend for XtermJsBackend {
     let mut s = self.state.borrow_mut();
     let cx = s.cursor.x;
     let cy = s.cursor.y;
-    let fg = s.fg;
-    let bg = s.bg;
+    let fg = from_cursive_color(s.fg);
+    let bg = from_cursive_color(s.bg);
     let reverse = s.reverse;
+    let w = s.buf.width as usize;
+    let h = s.buf.height as usize;
     let n = text.chars().count();
     for (i, ch) in text.chars().enumerate() {
-      if let Some(idx) = s.cell_idx(cx + i, cy) {
-        s.cells[idx] = ScreenCell {
-          ch,
-          fg,
-          bg,
-          reverse,
-        };
+      let x = cx + i;
+      if x < w && cy < h {
+        s.buf.cells[cy * w + x] = TermCell { ch, fg, bg, reverse, bold: false, underline: false };
       }
     }
     s.cursor.x += n;
@@ -228,14 +214,10 @@ impl cursive::backend::Backend for XtermJsBackend {
 
   fn clear(&self, color: Color) {
     let mut s = self.state.borrow_mut();
-    let fg = s.fg;
-    for cell in s.cells.iter_mut() {
-      *cell = ScreenCell {
-        ch: ' ',
-        fg,
-        bg: color,
-        reverse: false,
-      };
+    let fg = from_cursive_color(s.fg);
+    let bg = from_cursive_color(color);
+    for cell in s.buf.cells.iter_mut() {
+      *cell = TermCell { ch: ' ', fg, bg, reverse: false, bold: false, underline: false };
     }
     s.cursor = Vec2::zero();
   }
@@ -262,6 +244,7 @@ impl cursive::backend::Backend for XtermJsBackend {
       self.state.borrow_mut().reverse = false;
     }
   }
+
   fn name(&self) -> &str {
     "xterm.js"
   }
@@ -270,6 +253,9 @@ impl cursive::backend::Backend for XtermJsBackend {
 struct WasmCtx {
   playhead: Arc<Playhead>,
   regex_tx: Sender<crate::core::engine::regex::Message>,
+  sym_state: Arc<SymSpellState>,
+  ui_rx: std::sync::mpsc::Receiver<UIUpdate>,
+  pending_ui: Vec<UIUpdate>,
   regex_handler: crate::core::engine::regex::RegExpHandler,
   regex_cache: RegexCache,
   metronome: Metronome,
@@ -316,8 +302,10 @@ impl WasmCtx {
     // 3. Drain the playhead message queue
     self.playhead.wasm_tick();
 
-    // 4. Process queued UI updates → push closures to cb_sink
-    self.playhead.wasm_tick_ui(&self.regex_tx);
+    // 4. Collect UI updates produced by the playhead this tick
+    while let Ok(update) = self.ui_rx.try_recv() {
+      self.pending_ui.push(update);
+    }
 
     // 5. Drain the regex handler
     self.regex_handler.wasm_tick(&mut self.regex_cache);
@@ -411,11 +399,13 @@ pub fn wasm_init(cols: u32, rows: u32) {
   setup_ui(&mut components);
 
   let playhead = components.playhead;
+  let sym_state = Arc::clone(&playhead.sym_state);
   let regex_tx = components.regex_handler.tx.clone();
   let regex_handler = components.regex_handler;
   let metronome_tx = components.metronome.tx.clone();
   let metronome = components.metronome;
   let midi = components.midi;
+  let ui_rx = components.ui_rx;
   let current_tempo = std::sync::Arc::clone(&components.current_tempo);
   let committed_tempo = *current_tempo.lock().unwrap();
 
@@ -426,6 +416,9 @@ pub fn wasm_init(cols: u32, rows: u32) {
   let ctx = WasmCtx {
     playhead,
     regex_tx,
+    sym_state,
+    ui_rx,
+    pending_ui: Vec::new(),
     regex_handler,
     regex_cache: RegexCache::new(),
     metronome,
@@ -452,10 +445,26 @@ pub fn wasm_step(elapsed_ms: f64) {
     }
   });
 
-  // process all pending events + cb_sink callbacks, then redraw
+  // Take pending UI updates and metadata needed to apply them
+  let maybe_ui = CTX.with(|c| {
+    c.borrow_mut().as_mut().map(|ctx| {
+      (
+        std::mem::take(&mut ctx.pending_ui),
+        Arc::clone(&ctx.sym_state),
+        ctx.regex_tx.clone(),
+      )
+    })
+  });
+
+  // Apply UI updates to runner, then process events and redraw
   RUNNER.with(|r| {
     if let Some(runner) = r.borrow_mut().as_mut() {
       runner.process_events();
+      if let Some((pending_ui, sym_state, regex_tx)) = maybe_ui {
+        for update in pending_ui {
+          apply_ui_update_cursive(runner, update, &sym_state, &regex_tx);
+        }
+      }
       runner.refresh();
     }
   });
@@ -477,9 +486,9 @@ pub fn wasm_render() -> String {
 }
 
 /// Forward a mouse event from the browser.
-/// `kind`   – 0 = press, 1 = hold/drag, 2 = release
-/// `button` – 0 = left, 1 = middle, 2 = right
-/// `col`, `row` – terminal cell coordinates (0-based)
+/// `kind`   - 0 = press, 1 = hold/drag, 2 = release
+/// `button` - 0 = left, 1 = middle, 2 = right
+/// `col`, `row` - terminal cell coordinates (0-based)
 #[wasm_bindgen]
 pub fn wasm_send_mouse(kind: u8, button: u8, col: u32, row: u32) {
   let btn = match button {

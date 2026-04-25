@@ -117,6 +117,7 @@ impl Direction {
 
 #[derive(Clone, Debug)]
 pub enum UIUpdate {
+  // Existing canvas geometry updates (kept as-is)
   ActivePos(Vec2),
   AccumulationCounter(usize, usize),
   PlayheadPosAndArea(Vec2, Rect),
@@ -127,6 +128,46 @@ pub enum UIUpdate {
   TmpAppendSpace,
   RplCycle(Rect),
   SweepX(usize),
+
+  // Status-bar text updates
+  BpmDisplay(String),
+  RatioStatus(String),
+  PosStatus(String),
+  LenStatus(String),
+  InputStatus(String),
+  ModeStatus(String),
+  MovementStatus(String),
+  TiltStatus(String),
+  RegexMatchCount(String),
+  RegexError(String),
+
+  // Canvas field updates replacing direct cb_sink closures
+  TextMatcher {
+    matcher: Option<HashMap<usize, Match>>,
+    regex_indexes: Arc<Mutex<BTreeSet<usize>>>,
+  },
+  QueueManagerUpdate(Arc<QueueManager>),
+  CanvasPlayheadPos(Vec2),
+  CanvasPlayheadArea(Rect),
+  CanvasArpeggiatorMode(bool),
+  CanvasAccumulationMode(bool),
+  CanvasEventOperatorMode(bool),
+  CanvasDrainQueueMode(bool),
+  CanvasSweepMode(bool),
+  CanvasSweepMovement(Option<Movement>),
+  CanvasSweepOutputMode(SweepOutputMode),
+  CanvasSweepCcNumber(u8),
+  CanvasSweepRowMode(SweepRowMode),
+  CanvasTiltMode(TiltMode),
+  CanvasFreezeMode(bool),
+  CanvasDroneMode(bool, usize),
+  CanvasDroneX(usize),
+  CanvasDroneChannel(usize),
+  CanvasScaleRootTop(scale::ScaleRoot),
+  CanvasScaleRootLeft(scale::ScaleRoot),
+  CanvasScaleModeTop(scale::ScaleMode),
+  CanvasScaleModeLeft(scale::ScaleMode),
+  CanvasKeyboardTopActive(bool),
 }
 
 pub struct PlayheadUI {
