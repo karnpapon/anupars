@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::sync::atomic::Ordering;
 
-use cursive::Vec2;
+use crate::core::geom::Vec2;
 
 use crate::core::consts;
 use crate::core::engine::regex;

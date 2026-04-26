@@ -1,32 +1,15 @@
-use cursive::view::Nameable;
-use cursive::view::Resizable;
-use cursive::views::DummyView;
-use cursive::views::LinearLayout;
-use cursive::views::NamedView;
-use cursive::views::RadioGroup;
-use std::sync::mpsc::Sender;
-use std::sync::Arc;
-use std::sync::RwLock;
+use std::sync::{Arc, RwLock};
 
 use crate::app::AppMode;
-use crate::core::consts;
-use crate::core::engine::regex;
-use crate::core::playhead;
 use crate::core::playhead::movement::Movement;
-use crate::view::grid::GridEditor;
-use cursive::views::FocusTracker;
 
-use super::console::{Console, RegexFlag, RegexMode};
-
+/// Shared program-level state used by CommandManager.
 #[derive(Clone)]
 pub struct Program {
   pub mode: AppMode,
   pub movement: Movement,
-  pub regex_mode_state: RadioGroup<RegexMode>,
-  pub regex_flag_state: RadioGroup<RegexFlag>,
   pub input_regex: String,
   pub toggle_regex_input: Arc<RwLock<bool>>,
-  pub top_section: Console,
 }
 
 impl Default for Program {
@@ -40,33 +23,14 @@ impl Program {
     Program {
       mode: AppMode::None,
       movement: Movement::Forward,
-      regex_mode_state: RadioGroup::new(),
-      regex_flag_state: RadioGroup::new(),
       input_regex: String::new(),
       toggle_regex_input: Arc::new(RwLock::new(true)),
-      top_section: Console::new(),
     }
   }
 
-  pub fn build(
-    &mut self,
-    regex_tx: Sender<regex::Message>,
-    playhead_tx: Sender<playhead::Message>,
-  ) -> NamedView<LinearLayout> {
-    let top_section = Console::build(self, regex_tx.clone());
-    let padding_section = DummyView::new().fixed_width(1);
-    let canvas_section = FocusTracker::new(GridEditor::build(playhead_tx, regex_tx));
-
-    LinearLayout::vertical()
-      .child(top_section)
-      .child(padding_section)
-      .child(canvas_section)
-      .with_name(consts::main_section_view)
-  }
-
   pub fn set_toggle_regex_input(&self) {
-    let mut toggle_regex_input = self.toggle_regex_input.write().unwrap();
-    *toggle_regex_input = !*toggle_regex_input;
+    let mut v = self.toggle_regex_input.write().unwrap();
+    *v = !*v;
   }
 
   pub fn toggle_regex_input(&self) -> bool {

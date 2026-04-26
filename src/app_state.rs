@@ -1,19 +1,93 @@
+use crate::core::consts;
+use crate::core::playhead::movement::Movement;
+use crate::core::playhead::tilt::TiltMode;
 use crate::core::playhead::{PlayheadUI, UIUpdate};
 use crate::core::utils;
+use crate::view::line_editor::LineEditor;
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub enum Focus {
-  #[default]
   Grid,
+  #[default]
   RegexInput,
   Menu,
 }
 
+/// Regex flag toggles shown in the console panel.
+#[derive(Debug, Clone, Copy)]
+pub struct FlagState {
+  pub case_sensitive: bool,
+  pub multiline: bool,
+}
+
+impl Default for FlagState {
+  fn default() -> Self {
+    Self {
+      case_sensitive: true,
+      multiline: false,
+    }
+  }
+}
+
+impl FlagState {
+  /// Return the flag string that the regex engine expects.
+  pub fn to_flag_str(self) -> &'static str {
+    if self.multiline {
+      "m"
+    } else {
+      "i"
+    }
+  }
+}
+
+/// Top-level menu identifier.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MenuId {
+  App,
+  View,
+  Help,
+}
+
+/// State for the custom-drawn menu bar.
+pub struct MenuState {
+  /// Whether the menu bar has keyboard focus and a dropdown is open.
+  pub visible: bool,
+  /// Which top-level menu is open (dropdown visible).
+  pub active_menu: Option<MenuId>,
+  /// Row index of the highlighted dropdown item (includes delimiter rows).
+  pub active_item: usize,
+  /// MIDI output device names, updated at startup and on device change.
+  pub midi_output_devices: Vec<String>,
+  /// MIDI input device names.
+  pub midi_input_devices: Vec<String>,
+}
+
+impl Default for MenuState {
+  fn default() -> Self {
+    Self {
+      visible: false,
+      active_menu: None,
+      active_item: 0,
+      midi_output_devices: Vec::new(),
+      midi_input_devices: Vec::new(),
+    }
+  }
+}
+
 /// Authoritative application state, owned by the main event loop.
-/// Background threads write into this via UIUpdate messages
+/// Background threads write into this via UIUpdate messages.
 pub struct AppState {
   /// All playhead-driven fields that the grid renderer reads.
   pub playhead_ui: PlayheadUI,
+
+  /// Regex input editor - single-line editable field.
+  pub line_editor: LineEditor,
+
+  /// Regex flag toggles (case-sensitive, multiline).
+  pub flags: FlagState,
+
+  /// Menu bar state.
+  pub menu: MenuState,
 
   /// Status bar text labels, one field per labeled slot.
   pub bpm_display: String,
@@ -29,7 +103,7 @@ pub struct AppState {
   pub regex_error: String,
   pub midi_status: String,
 
-  /// Console / SymSpell display state (fully wired in Phase 6).
+  /// Console / SymSpell display state.
   pub buf_status: String,
   pub sym_status: String,
   pub rpl_status: String,
@@ -50,17 +124,21 @@ impl Default for AppState {
   fn default() -> Self {
     Self {
       playhead_ui: PlayheadUI::default(),
-      bpm_display: "-".to_string(),
-      ratio_status: "-".to_string(),
+      line_editor: LineEditor::new(),
+      flags: FlagState::default(),
+      menu: MenuState::default(),
+      bpm_display: utils::build_bpm_status_str(consts::DEFAULT_TEMPO),
+      ratio_status: utils::build_ratio_status_str(consts::DEFAULT_RATIO),
       pos_status: "-".to_string(),
       len_status: "-".to_string(),
       chn_status: "-".to_string(),
       input_status: "-".to_string(),
-      mode_status: "-".to_string(),
-      movement_status: "-".to_string(),
-      tilt_status: "-".to_string(),
-      regex_match_count: "-".to_string(),
-      regex_error: "-".to_string(),
+      // all modes inactive at start - same format as build_mode_status_string() with no active modes
+      mode_status: "anuesyzo".to_string(),
+      movement_status: Movement::Forward.print_movements(),
+      tilt_status: TiltMode::Vertical.print_tilts(),
+      regex_match_count: "0".to_string(),
+      regex_error: String::new(),
       midi_status: String::new(),
       buf_status: String::new(),
       sym_status: String::new(),
@@ -69,7 +147,7 @@ impl Default for AppState {
       display_text: String::new(),
       width: 0,
       height: 0,
-      focus: Focus::Grid,
+      focus: Focus::RegexInput,
     }
   }
 }
@@ -81,6 +159,7 @@ impl AppState {
   }
 }
 
+/// Apply one UIUpdate directly to AppState
 pub fn apply_ui_update(update: UIUpdate, state: &mut AppState) {
   match update {
     UIUpdate::ActivePos(pos) => {
@@ -104,8 +183,15 @@ pub fn apply_ui_update(update: UIUpdate, state: &mut AppState) {
     UIUpdate::AimedArea(aimed_area) => {
       state.playhead_ui.aimed_area = aimed_area;
     }
-    // SymSpell animation - wired in Phase 6
-    UIUpdate::TmpAppendSpace | UIUpdate::TmpAppend(_) | UIUpdate::RplCycle(_) => {}
+    UIUpdate::TmpAppendSpace => {
+      state.buf_status.push(' ');
+    }
+    UIUpdate::TmpAppend(idx) => {
+      state
+        .buf_status
+        .push(char::from_u32(idx as u32).unwrap_or('?'));
+    }
+    UIUpdate::RplCycle(_) => {}
     UIUpdate::SweepX(x) => {
       state.playhead_ui.sweep_x = x;
     }
@@ -119,8 +205,11 @@ pub fn apply_ui_update(update: UIUpdate, state: &mut AppState) {
     UIUpdate::TiltStatus(s) => state.tilt_status = s,
     UIUpdate::RegexMatchCount(s) => state.regex_match_count = s,
     UIUpdate::RegexError(s) => state.regex_error = s,
-    UIUpdate::TextMatcher { matcher, .. } => {
+    UIUpdate::TextMatcher { matcher, regex_indexes } => {
       state.playhead_ui.text_matcher = matcher;
+      // Wire the shared Arc so the printer's regex_indexes writes are
+      // visible to position_calc.regex_indexes (same underlying Mutex).
+      state.playhead_ui.regex_indexes = regex_indexes;
     }
     UIUpdate::QueueManagerUpdate(qm) => {
       state.playhead_ui.queue_manager = qm;

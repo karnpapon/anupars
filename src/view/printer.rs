@@ -1,14 +1,12 @@
-use cursive::theme::ColorStyle;
-use cursive::theme::ColorType;
-use cursive::theme::Style;
-use cursive::Printer;
-use cursive::Vec2;
+use crate::core::geom::Vec2;
 
 use crate::core::consts;
 use crate::core::engine::regex::Match;
 use crate::core::playhead::tilt::TiltMode;
 use crate::core::playhead::types::SweepRowMode;
 use crate::core::playhead::PlayheadUI;
+use crate::terminal::buffer::ScreenBuffer;
+use crate::terminal::cell::{Cell, Color};
 use crate::view::consts::{EMPTY_CHAR, REST_CHAR};
 use std::collections::HashMap;
 
@@ -53,23 +51,86 @@ impl<T: Copy> Matrix<T> {
 }
 
 pub trait Printable {
-  fn display_char(&self, pos: cursive::XY<usize>) -> char;
-  fn should_rest(&self, _pos: cursive::XY<usize>) -> bool {
+  fn display_char(&self, x: usize, y: usize) -> char;
+  fn should_rest(&self, _x: usize, _y: usize) -> bool {
     false
   }
 }
 
 impl Printable for char {
-  fn should_rest(&self, pos: cursive::XY<usize>) -> bool {
-    pos.x.is_multiple_of(consts::GRID_ROW_SPACING) && pos.y.is_multiple_of(consts::GRID_COL_SPACING)
+  fn should_rest(&self, x: usize, y: usize) -> bool {
+    x.is_multiple_of(consts::GRID_ROW_SPACING) && y.is_multiple_of(consts::GRID_COL_SPACING)
   }
 
-  fn display_char(&self, pos: cursive::XY<usize>) -> char {
+  fn display_char(&self, x: usize, y: usize) -> char {
     match *self {
-      '\0' if self.should_rest(pos) => REST_CHAR,
+      '\0' if self.should_rest(x, y) => REST_CHAR,
       '\0' => EMPTY_CHAR,
       c => c,
     }
+  }
+}
+
+/// Styling for a single terminal cell - no Cursive dependency.
+#[derive(Clone, Copy)]
+pub struct CellStyle {
+  pub fg: Color,
+  pub bg: Color,
+  pub reverse: bool,
+}
+
+impl CellStyle {
+  pub fn fg_rgb(r: u8, g: u8, b: u8) -> Self {
+    Self {
+      fg: Color::Rgb(r, g, b),
+      bg: Color::Reset,
+      reverse: false,
+    }
+  }
+
+  pub fn fg_bg_rgb(fr: u8, fg_g: u8, fb: u8, br: u8, bg_g: u8, bb: u8) -> Self {
+    Self {
+      fg: Color::Rgb(fr, fg_g, fb),
+      bg: Color::Rgb(br, bg_g, bb),
+      reverse: false,
+    }
+  }
+
+  pub fn reset() -> Self {
+    Self {
+      fg: Color::Reset,
+      bg: Color::Reset,
+      reverse: false,
+    }
+  }
+
+  pub fn highlight() -> Self {
+    Self {
+      fg: Color::Rgb(0, 0, 0),
+      bg: Color::Rgb(255, 255, 255),
+      reverse: false,
+    }
+  }
+}
+
+/// Apply a CellStyle to a Cell, setting fg, bg, and reverse.
+#[inline]
+pub fn apply_style(cell: &mut Cell, ch: char, style: CellStyle) {
+  cell.ch = ch;
+  cell.fg = style.fg;
+  cell.bg = style.bg;
+  cell.reverse = style.reverse;
+}
+
+fn dim_style() -> CellStyle {
+  CellStyle::fg_rgb(50, 50, 50)
+}
+
+fn normal_style(is_match: bool) -> CellStyle {
+  if is_match {
+    CellStyle::highlight()
+  } else {
+    CellStyle::fg_rgb(100, 100, 100)
   }
 }
 
@@ -85,12 +146,11 @@ struct TiltMetrics {
 struct RowSweep {
   band_start: usize,
   band_end: usize,
-  /// x-coordinate of the crosshair; `usize::MAX` when this row has no active band.
+  /// x-coordinate of the crosshair, `usize::MAX` when this row has no active band.
   crosshair_x: usize,
 }
 
 impl RowSweep {
-  /// Sentinel for a row whose diagonal falls outside the grid.
   const INACTIVE: Self = Self {
     band_start: 0,
     band_end: 0,
@@ -119,21 +179,9 @@ struct CellStyleContext<'a> {
   h: usize,
 }
 
-fn dim_style() -> Style {
-  Style::from_color_style(ColorStyle::front(ColorType::rgb(50, 50, 50)))
-}
-
-fn normal_style(is_match: bool) -> Style {
-  if is_match {
-    Style::highlight()
-  } else {
-    Style::from_color_style(ColorStyle::front(ColorType::rgb(100, 100, 100)))
-  }
-}
-
 impl<T: Printable + Copy> Matrix<T> {
   fn get_display_char(&self, x: usize, y: usize) -> char {
-    self.get(x, y).unwrap().display_char((x, y).into())
+    self.get(x, y).unwrap().display_char(x, y)
   }
 
   /// Channel-dimming bounds for the active playhead area.
@@ -221,8 +269,6 @@ impl<T: Printable + Copy> Matrix<T> {
     y: usize,
   ) -> RowSweep {
     let row_idx = (y / metrics.row_h).min(h.saturating_sub(1));
-    // Use the column that active_x is currently in (not the area's head column) so the
-    // crosshair follows the active position across channel boundaries instead of wrapping.
     let active_col = (active_x / metrics.col_w.max(1)).min(v.saturating_sub(1));
     match tilt_mode.sweep_col_for_row(active_col, metrics.playhead_row, row_idx, v, h) {
       None => RowSweep::INACTIVE,
@@ -242,8 +288,8 @@ impl<T: Printable + Copy> Matrix<T> {
     }
   }
 
-  /// Base display style for a cell, before focus-dimming or playhead overlays are applied.
-  fn base_cell_style(&self, ctx: &CellStyleContext) -> Style {
+  /// Base display style for a cell, before focus-dimming or playhead overlays.
+  fn base_cell_style(&self, ctx: &CellStyleContext) -> CellStyle {
     let in_strip = if ctx.v > 1 || ctx.h > 1 {
       let in_channel_x = ctx
         .channel_bounds
@@ -262,7 +308,7 @@ impl<T: Printable + Copy> Matrix<T> {
       && ctx.sweep.in_band(ctx.x)
       && ctx.sweep_row_mode.is_row_active(ctx.y)
     {
-      return Style::highlight();
+      return CellStyle::highlight();
     }
     let in_channel = ctx
       .channel_bounds
@@ -275,8 +321,8 @@ impl<T: Printable + Copy> Matrix<T> {
     }
   }
 
-  /// Print to the given printer with playhead UI highlighting.
-  pub fn print(&self, printer: &Printer, playhead_ui: &PlayheadUI) {
+  /// Write matrix cells to `buf` at offset `(x_off, y_off)` with playhead UI highlighting.
+  pub fn print(&self, buf: &mut ScreenBuffer, x_off: u16, y_off: u16, playhead_ui: &PlayheadUI) {
     let PlayheadUI {
       text_matcher,
       playhead_pos,
@@ -294,7 +340,7 @@ impl<T: Printable + Copy> Matrix<T> {
       ..
     } = playhead_ui;
 
-    let active_absolute_pos = playhead_pos.saturating_add(actived_pos);
+    let active_absolute_pos = playhead_pos.saturating_add(*actived_pos);
     let crosshair_abs_x = if playhead_ui.sweep_movement.is_some() {
       playhead_ui.sweep_x
     } else {
@@ -308,16 +354,12 @@ impl<T: Printable + Copy> Matrix<T> {
     let metrics = self.tilt_metrics(*playhead_pos, v, h);
 
     let style_dim = dim_style();
-    let style_highlight = Style::highlight();
-    let style_none = Style::none();
-    let style_light = Style::from(ColorStyle::front(ColorType::rgb(255, 255, 255)));
-    let style_xhair_dim = Style::from_color_style(ColorStyle::front(ColorType::rgb(80, 80, 80)));
-    let style_aimed_bg = Style::from_color_style(ColorStyle::new(
-      ColorType::rgb(255, 255, 255),
-      ColorType::rgb(50, 50, 50),
-    ));
+    let style_highlight = CellStyle::highlight();
+    let style_none = CellStyle::reset();
+    let style_light = CellStyle::fg_rgb(255, 255, 255);
+    let style_xhair_dim = CellStyle::fg_rgb(80, 80, 80);
+    let style_aimed_bg = CellStyle::fg_bg_rgb(255, 255, 255, 50, 50, 50);
 
-    // Build a flat match-lookup map: cell_index -> &Match.
     let match_map: HashMap<usize, &Match> = text_matcher
       .as_ref()
       .map(|matcher| {
@@ -346,8 +388,6 @@ impl<T: Printable + Copy> Matrix<T> {
       map.into_iter().map(|(x, (_, y))| (x, y)).collect()
     };
 
-    // single str buff reused across all cells
-    let mut tmp = String::with_capacity(4);
     let mut new_regex_in_area: Vec<usize> = Vec::new();
 
     for y in 0..self.height {
@@ -355,7 +395,6 @@ impl<T: Printable + Copy> Matrix<T> {
 
       for x in 0..self.width {
         let cell_index = x + y * self.width;
-        let pos = (x, y);
         let ch = self.get_display_char(x, y);
 
         let is_in_playhead_area = playhead_area.contains((x, y).into());
@@ -412,19 +451,15 @@ impl<T: Printable + Copy> Matrix<T> {
           } else {
             '┃'
           };
-          let color = if is_black_key {
-            ColorType::rgb(50, 50, 50)
-          } else {
-            ColorType::rgb(100, 100, 100)
-          };
+          let r = if is_black_key { 50u8 } else { 100u8 };
           final_style = if is_regex_match {
-            Style::highlight()
+            CellStyle::highlight()
           } else {
-            Style::from_color_style(ColorStyle::front(color))
-          }
+            CellStyle::fg_rgb(r, r, r)
+          };
         }
 
-        // Focus dim (only for cells outside the playhead x-band).
+        // focus dim (only cells outside the playhead x-band)
         if *focus_mode
           && !is_in_playhead_area
           && (x < playhead_area.left() || x >= playhead_area.right())
@@ -471,23 +506,26 @@ impl<T: Printable + Copy> Matrix<T> {
           }
         }
 
-        // Single print per cell
-        tmp.clear();
-        tmp.push(final_ch);
-        printer.with_style(final_style, |p| p.print(pos, &tmp));
+        // write to ScreenBuffer
+        if let Some(cell) = buf.get_mut(x_off + x as u16, y_off + y as u16) {
+          apply_style(cell, final_ch, final_style);
+        }
       }
     }
 
-    // Update regex_indexes once per frame .
+    // Update regex_indexes once per frame.
     if !new_regex_in_area.is_empty() {
       let mut regex_indexes = playhead_ui.regex_indexes.lock().unwrap();
       for idx in new_regex_in_area {
         regex_indexes.insert(idx);
       }
-      let playhead_end = *playhead_pos + playhead_area.size();
+      let area_size = playhead_area.size();
+      let end_x = playhead_pos.x + area_size.x;
+      let end_y = playhead_pos.y + area_size.y;
       regex_indexes.retain(|&index| {
-        let p = self.index_to_xy(&index);
-        p.fits(*playhead_pos) && p.fits_in(playhead_end)
+        let ix = index % self.width;
+        let iy = index / self.width;
+        ix >= playhead_pos.x && iy >= playhead_pos.y && ix < end_x && iy < end_y
       });
     }
   }

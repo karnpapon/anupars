@@ -20,8 +20,8 @@ impl Default for Cell {
   fn default() -> Self {
     Cell {
       ch: ' ',
-      fg: Color::Indexed(7), // white
-      bg: Color::Indexed(0), // black
+      fg: Color::Reset,
+      bg: Color::Reset,
       bold: false,
       underline: false,
       reverse: false,

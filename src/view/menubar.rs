@@ -1,629 +1,46 @@
 use std::error::Error;
-use std::ffi::OsString;
 use std::fs;
 use std::fs::File;
-use std::io;
 use std::io::Read;
 use std::path::Path;
 use std::path::PathBuf;
 use std::sync::atomic::Ordering;
-use std::sync::mpsc::Sender;
-use std::sync::Mutex;
-use std::sync::OnceLock;
 
-use cursive::align::HAlign;
-use cursive::event::Event;
-use cursive::event::Key;
-use cursive::menu;
-use cursive::menu::Tree;
-use cursive::view::Margins;
-use cursive::view::Nameable;
-use cursive::view::Resizable;
-use cursive::views::Canvas;
-use cursive::views::Dialog;
-use cursive::views::DummyView;
-// use cursive::views::EditView;
-use cursive::views::HideableView;
-use cursive::views::LinearLayout;
-use cursive::views::NamedView;
-use cursive::views::OnEventView;
-use cursive::views::ResizedView;
-use cursive::views::SelectView;
-use cursive::views::TextView;
-use cursive::Cursive;
-use cursive::With;
+use crate::app_state::{MenuId, MenuState};
+use crate::core::{consts, utils};
+use crate::view::grid::GridEditor;
 
-use crate::core::io::midi;
-use crate::core::playhead;
-use crate::core::tonal::scale;
-use crate::core::utils;
-#[cfg(not(target_arch = "wasm32"))]
-use midir;
-
-use super::grid::GridEditor;
-use crate::core::consts;
-
-type MidiMenuState = (
-  Vec<(String, usize)>,
-  Vec<(String, usize)>,
-  Sender<midi::Message>,
-);
-
-// Stored once at startup so any full-menubar rebuild can reconstruct "anupars".
-static MIDI_MENU_STATE: OnceLock<Mutex<MidiMenuState>> = OnceLock::new();
-
-#[derive(Clone, Copy)]
-pub struct Menubar {
-  pub show_file_explorer: bool,
-  pub show_doc: bool,
-}
-
-impl Default for Menubar {
-  fn default() -> Self {
-    Self::new()
-  }
-}
-
-// impl View for Menubar {
-//   fn draw(&self, _: &Printer) {}
-// }
-
-impl Menubar {
-  pub fn new() -> Self {
-    Self {
-      show_file_explorer: false,
-      show_doc: false,
-    }
-  }
-
-  // pub fn toggle_show_doc(&mut self) -> bool {
-  //   self.show_doc = !self.show_doc;
-  //   self.show_doc
-  // }
-
-  // pub fn toggle_show_file_explorer(&mut self) -> bool {
-  //   self.show_file_explorer = !self.show_file_explorer;
-  //   self.show_file_explorer
-  // }
-
-  // pub fn reset_toggle(&mut self) {
-  //   self.show_file_explorer = false;
-  //   self.show_doc = false;
-  // }
-
-  pub fn build_doc_view() -> NamedView<HideableView<OnEventView<Dialog>>> {
-    HideableView::new(
-      OnEventView::new(Dialog::text(format!(
-        "{}\n\n{}",
-        "DOCUMENTATION",
-        // utils::build_doc_string(&consts::APP_DOCS)
-        "soon..."
-      )))
-      .on_event(Event::Key(Key::Esc), |s| {
-        // Menubar::show_doc_view(s, false);
-        s.pop_layer();
-      }),
-    )
-    .with_name(consts::doc_unit_view)
-  }
-
-  // pub fn show_doc_view(siv: &mut Cursive, show: bool) {
-  //   siv
-  //     .find_name::<HideableView<OnEventView<Dialog>>>("doc_view")
-  //     .unwrap()
-  //     .set_visible(show);
-  // }
-
-  // pub fn show_file_explorer_view(siv: &mut Cursive, show: bool) {
-  //   siv
-  //     .find_name::<HideableView<OnEventView<ResizedView<Dialog>>>>("file_explorer_view")
-  //     .unwrap()
-  //     .set_visible(show);
-  // }
-
-  pub fn build_menu_app(midi_devices: &[(String, usize)], midi_tx: Sender<midi::Message>) -> Tree {
-    // Persist MIDI state for later full-menubar rebuilds.
-    #[cfg(not(target_arch = "wasm32"))]
-    let midi_input_devices: Vec<(String, usize)> = {
-      match midir::MidiInput::new("anupars-query") {
-        Err(_) => Vec::new(),
-        Ok(inp) => inp
-          .ports()
-          .iter()
-          .enumerate()
-          .map(|(i, p)| {
-            (
-              inp.port_name(p).unwrap_or_else(|_| format!("Port {}", i)),
-              i,
-            )
-          })
-          .collect::<Vec<_>>(),
-      }
-    };
-    #[cfg(target_arch = "wasm32")]
-    let midi_input_devices: Vec<(String, usize)> = Vec::new();
-    let state = MIDI_MENU_STATE.get_or_init(|| {
-      Mutex::new((
-        midi_devices.to_vec(),
-        midi_input_devices.clone(),
-        midi_tx.clone(),
-      ))
-    });
-    if let Ok(mut guard) = state.lock() {
-      *guard = (
-        midi_devices.to_vec(),
-        midi_input_devices.clone(),
-        midi_tx.clone(),
-      );
-    }
-    let midi_tx_reset = midi_tx.clone();
-    let midi_tx_clock = midi_tx.clone();
-
-    let clock_status = if consts::CLOCK_ENABLED.load(Ordering::Relaxed) {
-      "ON"
-    } else {
-      "OFF"
-    };
-    let clock_label = format!("Clock Out [{}]", clock_status);
-
-    let devices_clone = midi_devices.to_vec();
-    let midi_tx_menu = midi_tx.clone();
-
-    menu::Tree::new()
-      // .leaf("Generate Text", generate_contents)
-      .leaf("Insert File", build_file_explorer_view)
-      .delimiter()
-      .subtree(
-        "MIDI Input",
-        build_midi_input_menu(midi_input_devices, midi_tx.clone()),
-      )
-      .subtree(
-        "MIDI Output",
-        build_midi_output_menu(midi_devices.to_vec(), midi_tx.clone()),
-      )
-      .leaf(clock_label, move |s| {
-        toggle_clock_out(s, &midi_tx_clock, &devices_clone, &midi_tx_menu);
-      })
-      // .subtree("OSC", build_osc_menu())
-      .delimiter()
-      .subtree("Scale (Left)", build_scale_menu_left())
-      .subtree("Scale (Top)", build_scale_menu_top())
-      .subtree("Scale Root (Top)", build_scale_root_menu_top())
-      .delimiter()
-      .leaf("Release All", move |s| {
-        s.reset_default_callbacks();
-        // Clear MIDI config and stop all notes
-        let _ = midi_tx_reset.send(midi::Message::ClearMsgConfig());
-        let _ = midi_tx_reset.send(midi::Message::Panic());
-      })
-      .leaf("Clear Queue", |s| {
-        s.call_on_name(
-          consts::canvas_editor_section_view,
-          |canvas: &mut Canvas<GridEditor>| {
-            let _ = canvas
-              .state_mut()
-              .playhead_tx
-              .send(playhead::Message::ClearQueue());
-          },
-        );
-      })
-      .delimiter()
-      .leaf("About", build_about_view)
-  }
-
-  pub fn build_menu_view() -> Tree {
-    let label = focus_label();
-    menu::Tree::new().leaf(label, toggle_focus)
-  }
-
-  pub fn build_menu_help() -> Tree {
-    // menu::Tree::new().leaf("Docs [h]", |s| Self::show_doc_view(s, true))
-    menu::Tree::new().leaf("Docs [h]", |s| s.add_layer(Self::build_doc_view()))
-  }
-}
-
-// ------------------------------------------------------------
-
-fn build_midi_output_menu(
-  devices: Vec<(String, usize)>,
-  midi_tx: Sender<midi::Message>,
-) -> cursive::menu::Tree {
-  menu::Tree::new().with(|tree| {
-    tree.add_item(menu::Item::leaf("None (disconnect)", {
-      let midi_tx = midi_tx.clone();
-      move |s| {
-        let _ = midi_tx.send(midi::Message::DisconnectOutput());
-        s.call_on_name(consts::midi_status_unit_view, |c: &mut TextView| {
-          c.set_content("-");
-        });
-      }
-    }));
-    if devices.is_empty() {
-      tree.add_item(menu::Item::leaf("No devices found", |_| ()));
-    } else {
-      for (name, idx) in devices {
-        let midi_tx_clone = midi_tx.clone();
-        let name_clone = name.clone();
-        tree.add_item(menu::Item::leaf(format!("{}: {}", idx, name), move |s| {
-          // Send message to switch MIDI device
-          if let Err(e) = midi_tx_clone.send(midi::Message::SwitchDevice(idx)) {
-            s.add_layer(Dialog::info(format!("Failed to switch device: {}", e)));
-          } else {
-            // Update the MIDI status display
-            s.call_on_name(consts::midi_status_unit_view, |c: &mut TextView| {
-              c.set_content(&name_clone);
-            });
-          }
-        }));
-      }
-    }
-  })
-}
-
-fn build_midi_input_menu(
-  devices: Vec<(String, usize)>,
-  midi_tx: Sender<midi::Message>,
-) -> cursive::menu::Tree {
-  menu::Tree::new().with(|tree| {
-    tree.add_item(menu::Item::leaf("None (disconnect)", {
-      let midi_tx = midi_tx.clone();
-      move |_| {
-        let _ = midi_tx.send(midi::Message::EnableClockInput(false));
-      }
-    }));
-    if devices.is_empty() {
-      tree.add_item(menu::Item::leaf("No input devices found", |_| ()));
-    } else {
-      for (name, idx) in devices {
-        let midi_tx_clone = midi_tx.clone();
-        let name_clone = name.clone();
-        tree.add_item(menu::Item::leaf(format!("{}: {}", idx, name), move |s| {
-          let _ = midi_tx_clone.send(midi::Message::ConnectInput(idx));
-          let _ = midi_tx_clone.send(midi::Message::EnableClockInput(true));
-          s.add_layer(Dialog::info(format!("MIDI Clock Input: {}", name_clone)));
-        }));
-      }
-    }
-  })
-}
-fn build_osc_menu() -> cursive::menu::Tree {
-  menu::Tree::new().with(|tree| {
-    for (osc, port) in consts::MENU_OSC.iter() {
-      tree.add_item(menu::Item::leaf(format!("{osc}: {port}"), |_| ()))
-    }
-  })
-}
-
-fn focus_label() -> String {
-  use std::sync::atomic::Ordering;
-  let state = if consts::FOCUS_MODE.load(Ordering::Relaxed) {
-    " "
+/// Load a file's contents into the grid editor.
+pub fn set_grid_contents(grid: &mut GridEditor, contents: String) {
+  let contents = contents.replace("\r\n", "\n").replace("\r", "\n");
+  let w = grid.grid.width;
+  let h = grid.grid.height;
+  let clipped = if w > 0 && h > 0 {
+    let contents = utils::scale_to_width(&contents, w);
+    let lines: Vec<&str> = contents.split('\n').collect();
+    let total = lines.len();
+    let start = if total > 1 { fastrand::usize(0..total) } else { 0 };
+    lines
+      .iter()
+      .cycle()
+      .skip(start)
+      .take(h)
+      .map(|line| line.chars().take(w).collect::<String>())
+      .collect::<Vec<_>>()
+      .join("\n")
   } else {
-    "X"
+    contents
   };
-  format!("Toggle Focus [{}]", state)
+  grid.clear_contents();
+  grid.update_text_contents(&clipped);
+  grid.update_grid_src();
 }
 
-fn toggle_focus(siv: &mut Cursive) {
-  use std::sync::atomic::Ordering;
-  let new_state = !consts::FOCUS_MODE.load(Ordering::Relaxed);
-  consts::FOCUS_MODE.store(new_state, Ordering::Relaxed);
-
-  // Propagate to the canvas PlayheadUI
-  siv.call_on_name(
-    consts::canvas_editor_section_view,
-    |canvas: &mut Canvas<GridEditor>| {
-      canvas.state_mut().playhead_ui.focus_mode = new_state;
-    },
-  );
-
-  rebuild_menubar(siv);
-}
-
-fn rebuild_menubar(siv: &mut Cursive) {
-  let menu_view = Menubar::build_menu_view();
-  let menu_help = Menubar::build_menu_help();
-
-  siv.menubar().clear();
-
-  // Clone the MIDI state while holding the lock, then drop it *before* calling
-  // build_menu_app which also locks MIDI_MENU_STATE and would otherwise deadlock.
-  let midi_state = MIDI_MENU_STATE
-    .get()
-    .and_then(|s| s.lock().ok().map(|g| (g.0.clone(), g.2.clone())));
-
-  if let Some((devices, midi_tx)) = midi_state {
-    let menu_app = Menubar::build_menu_app(&devices, midi_tx);
-    siv.menubar().add_subtree("anupars", menu_app);
-  }
-
-  siv
-    .menubar()
-    .add_subtree("view", menu_view)
-    .add_subtree("help", menu_help)
-    .add_delimiter()
-    .add_leaf("quit", |s| {
-      #[cfg(not(target_arch = "wasm32"))]
-      s.quit();
-      #[cfg(target_arch = "wasm32")]
-      s.add_layer(
-        Dialog::info(
-          "\"quit\" is only available in the terminal-based app.\n\nclose the browser tab to exit.",
-        )
-        .title("quit"),
-      );
-    });
-}
-
-fn toggle_clock_out(
-  siv: &mut Cursive,
-  midi_tx: &Sender<midi::Message>,
-  devices: &[(String, usize)],
-  menu_midi_tx: &Sender<midi::Message>,
-) {
-  let current = consts::CLOCK_ENABLED.load(Ordering::Relaxed);
-  let new_state = !current;
-  consts::CLOCK_ENABLED.store(new_state, Ordering::Relaxed);
-
-  let _ = midi_tx.send(midi::Message::EnableClock(new_state));
-
-  // Update the stored MIDI state so the clock label is fresh on next rebuild.
-  Menubar::build_menu_app(devices, menu_midi_tx.clone());
-  rebuild_menubar(siv);
-
-  let state_text = if new_state { "ON" } else { "OFF" };
-  siv.add_layer(Dialog::info(format!("MIDI Clock Output: {}", state_text)));
-}
-
-// ------------------------------------------------------------
-
-fn build_scale_menu_left() -> cursive::menu::Tree {
-  menu::Tree::new().with(|tree| {
-    for scale in scale::ScaleMode::all() {
-      let scale_clone = *scale;
-      tree.add_item(menu::Item::leaf(scale.name(), move |s| {
-        s.call_on_name(
-          consts::canvas_editor_section_view,
-          |canvas: &mut Canvas<GridEditor>| {
-            canvas
-              .state_mut()
-              .playhead_tx
-              .send(playhead::Message::SetScaleModeLeft(scale_clone))
-              .unwrap();
-          },
-        );
-      }));
-    }
-  })
-}
-
-fn build_scale_menu_top() -> cursive::menu::Tree {
-  menu::Tree::new().with(|tree| {
-    for scale in scale::ScaleMode::all() {
-      let scale_clone = *scale;
-      tree.add_item(menu::Item::leaf(scale.name(), move |s| {
-        s.call_on_name(
-          consts::canvas_editor_section_view,
-          |canvas: &mut Canvas<GridEditor>| {
-            canvas
-              .state_mut()
-              .playhead_tx
-              .send(playhead::Message::SetScaleModeTop(scale_clone))
-              .unwrap();
-          },
-        );
-      }));
-    }
-  })
-}
-
-fn build_scale_root_menu_top() -> cursive::menu::Tree {
-  menu::Tree::new().with(|tree| {
-    for root in scale::ScaleRoot::all() {
-      let root_clone = *root;
-      tree.add_item(menu::Item::leaf(root.name(), move |s| {
-        s.call_on_name(
-          consts::canvas_editor_section_view,
-          |canvas: &mut Canvas<GridEditor>| {
-            canvas
-              .state_mut()
-              .playhead_tx
-              .send(playhead::Message::SetScaleRootTop(root_clone))
-              .unwrap();
-          },
-        );
-      }));
-    }
-  })
-}
-
-#[cfg(not(target_arch = "wasm32"))]
-fn dialog_file_explorer() -> OnEventView<ResizedView<Dialog>> {
-  let default_path = get_default_database_path();
-  let paths = fs::read_dir(default_path.unwrap())
-    .unwrap()
-    .filter(|res| {
-      res
-        .as_ref()
-        .map_or(true, |e| !e.file_name().to_string_lossy().starts_with('.'))
-    })
-    .map(|res| res.map(|e| e.file_name().into_string()))
-    .collect::<Vec<_>>();
-
-  OnEventView::new(Dialog::around(listed_files_view(paths)).max_width(200)).on_event(
-    Event::Key(Key::Esc),
-    |s| {
-      s.pop_layer();
-    },
-  )
-}
-
-pub fn build_file_explorer_view(siv: &mut Cursive) {
-  #[cfg(not(target_arch = "wasm32"))]
-  siv.add_layer(
-    HideableView::new(dialog_file_explorer()).with_name(consts::file_explorer_unit_view),
-  );
-
-  #[cfg(target_arch = "wasm32")]
-  siv.add_layer(
-    Dialog::info("currently, insert a file not supported in browser").title("insert file"),
-  );
-}
-
-fn build_about_view(siv: &mut Cursive) {
-  siv.add_layer(
-    Dialog::info(format!(
-      "{}\n{}\n\nauthor: {}\nversion: {}",
-      consts::APP_NAME,
-      env!("CARGO_PKG_DESCRIPTION"),
-      env!("CARGO_PKG_AUTHORS"),
-      env!("CARGO_PKG_VERSION"),
-    ))
-    .padding(Margins::lrtb(2, 2, 0, 0))
-    .max_width(50),
-  );
-}
-
-// ----------------------------------------------------------------
-
-#[cfg(feature = "disspress")]
-// generate random text based-on Dissociate Press algorithm:
-// https://en.wikipedia.org/wiki/Dissociated_press
-pub fn generate_contents(siv: &mut Cursive) {
-  let max_len = siv
-    .call_on_name(
-      consts::canvas_editor_section_view,
-      |c: &mut Canvas<GridEditor>| c.state_mut().grid.width * c.state_mut().grid.height,
-    )
-    .unwrap_or(800);
-
-  siv.add_layer(
-    Dialog::around(
-      LinearLayout::vertical()
-        .child(TextView::new(format!(
-          "Enter number of words (1–{}):",
-          max_len
-        )))
-        .child(
-          EditView::new()
-            .on_submit(move |s, text| {
-              let length = text.parse::<usize>().unwrap_or(1).max(1).min(max_len);
-              s.pop_layer();
-              let contents = disspress::run_with_length(length);
-              set_contents(s, contents);
-            })
-            .with_name("disspress_length_input")
-            .fixed_width(20),
-        ),
-    )
-    .title("Generate Text")
-    .button("Cancel", |s| {
-      s.pop_layer();
-    }),
-  );
-}
-
-pub(crate) fn set_contents(siv: &mut Cursive, contents: String) {
-  siv
-    .call_on_name(
-      consts::canvas_editor_section_view,
-      move |c: &mut Canvas<GridEditor>| {
-        let editor = c.state_mut();
-        let w = editor.grid.width;
-        let h = editor.grid.height;
-        // Clip to the renderable grid area,
-        let clipped = if w > 0 && h > 0 {
-          let contents = utils::scale_to_width(&contents, w);
-          let lines: Vec<&str> = contents.split('\n').collect();
-          let total = lines.len();
-          // let start = 0;
-          let start = if total > 1 {
-            fastrand::usize(0..total)
-          } else {
-            0
-          };
-          lines
-            .iter()
-            .cycle()
-            .skip(start)
-            .take(h)
-            .map(|line| line.chars().take(w).collect::<String>())
-            .collect::<Vec<_>>()
-            .join("\n")
-        } else {
-          contents
-        };
-        editor.clear_contents();
-        editor.update_text_contents(&clipped);
-        editor.update_grid_src();
-      },
-    )
-    .unwrap();
-}
-
-pub fn set_preview_contents(siv: &mut Cursive, file: &PathBuf) {
-  let mut text_view = siv
-    .find_name::<TextView>(consts::file_contents_unit_view)
-    .unwrap();
-  if let Ok(contents) = read_file(Path::new(file)) {
-    text_view.set_content(contents);
-  }
-}
-
-fn set_selected_contents(siv: &mut Cursive, file: &PathBuf) {
-  siv.pop_layer();
-  if let Ok(contents) = read_file(Path::new(file)) {
-    set_contents(siv, contents);
-  }
-}
-
-// ----------------------------------------------------------------
-
-pub fn listed_files_view(dir: Vec<Result<Result<String, OsString>, io::Error>>) -> LinearLayout {
-  let mut panes = LinearLayout::horizontal();
-
-  if dir.is_empty() {
-    let empty_dialog = Dialog::info(consts::app_empty_dir()).fixed_size((50, 10));
-    panes.add_child(empty_dialog);
-    return panes;
-  }
-
-  let mut select = SelectView::new().h_align(HAlign::Left);
-  let mut first_file_path = PathBuf::new();
-
-  for (i, list) in dir.iter().enumerate() {
-    let list_cloned = list.as_ref().unwrap().clone();
-    let title_str = list_cloned.as_ref().unwrap().clone();
-    let select_value = dirs::home_dir()
-      .map(|p| {
-        p.join(consts::DEFAULT_APP_DIRECTORY)
-          .join(consts::DEFAULT_APP_FILENAME)
-          .join(list_cloned.unwrap())
-      })
-      .unwrap_or_default();
-    if i == 0 {
-      first_file_path = select_value.clone();
-    }
-    select.add_item(title_str, select_value);
-  }
-
-  let init_file_details =
-    read_file(first_file_path.as_path()).unwrap_or("empty content".to_string());
-
-  let file_contents_unit_view = TextView::new(init_file_details)
-    .with_name(consts::file_contents_unit_view)
-    .fixed_size((50, 15));
-
-  let padding_view = DummyView::new().fixed_width(2);
-
-  panes.add_child(
-    select
-      .on_select(set_preview_contents)
-      .on_submit(set_selected_contents),
-  );
-  panes.add_child(padding_view);
-  panes.add_child(file_contents_unit_view);
-  panes
+/// Load a file at `path` into the grid.
+pub fn load_file_into_grid(grid: &mut GridEditor, path: &Path) -> Result<(), Box<dyn Error>> {
+  let contents = read_file(path)?;
+  set_grid_contents(grid, contents);
+  Ok(())
 }
 
 fn read_file(path: &Path) -> Result<String, Box<dyn Error>> {
@@ -633,8 +50,331 @@ fn read_file(path: &Path) -> Result<String, Box<dyn Error>> {
   Ok(s)
 }
 
+// --- ScreenBuffer rendering path ---
+
+/// A single entry in a dropdown menu.
+#[derive(Clone)]
+enum Item {
+  Action(String),
+  Toggle(String, bool),
+  Submenu(String),
+  Delimiter,
+}
+
+impl Item {
+  fn is_selectable(&self) -> bool {
+    !matches!(self, Item::Delimiter)
+  }
+
+  fn label(&self) -> &str {
+    match self {
+      Item::Action(s) | Item::Toggle(s, _) | Item::Submenu(s) => s,
+      Item::Delimiter => "",
+    }
+  }
+}
+
+/// Build the item list for each top-level menu.
+fn menu_items(id: MenuId, state: &MenuState) -> Vec<Item> {
+  match id {
+    MenuId::App => {
+      let clock_on = consts::CLOCK_ENABLED.load(Ordering::Relaxed);
+      let focus_on = consts::FOCUS_MODE.load(Ordering::Relaxed);
+      vec![
+        Item::Action("Insert File".into()),
+        Item::Delimiter,
+        Item::Submenu(if state.midi_output_devices.is_empty() {
+          "MIDI Output (none) \u{25b8}".into()
+        } else {
+          format!("MIDI Output ({}) \u{25b8}", state.midi_output_devices.len())
+        }),
+        Item::Submenu(if state.midi_input_devices.is_empty() {
+          "MIDI Input  (none) \u{25b8}".into()
+        } else {
+          format!("MIDI Input  ({}) \u{25b8}", state.midi_input_devices.len())
+        }),
+        Item::Toggle(
+          format!("Clock Out [{}]", if clock_on { "ON " } else { "OFF" }),
+          clock_on,
+        ),
+        Item::Delimiter,
+        Item::Submenu("Scale (Left)      \u{25b8}".into()),
+        Item::Submenu("Scale (Top)       \u{25b8}".into()),
+        Item::Submenu("Scale Root (Top)  \u{25b8}".into()),
+        Item::Delimiter,
+        Item::Toggle(
+          format!("Focus Mode   [{}]", if focus_on { "X" } else { " " }),
+          focus_on,
+        ),
+        Item::Action("Release All".into()),
+        Item::Action("Clear Queue".into()),
+        Item::Delimiter,
+        Item::Action("About".into()),
+      ]
+    }
+    MenuId::View => vec![Item::Action("Docs [h]".into())],
+    MenuId::Help => vec![Item::Action("Docs [h]".into())],
+  }
+}
+
+/// Top-level menu titles in display order.
+const MENU_TITLES: &[(MenuId, &str)] = &[
+  (MenuId::App, "anupars"),
+  (MenuId::View, "view"),
+  (MenuId::Help, "help"),
+];
+
+/// Pixel (column) offset of each menu title, computed from title widths + separators.
+fn menu_title_x(index: usize) -> u16 {
+  let mut x = 1u16;
+  for (i, (_, title)) in MENU_TITLES.iter().enumerate() {
+    if i == index {
+      return x;
+    }
+    x += title.len() as u16 + 2;
+  }
+  x
+}
+
+/// Action produced by `handle_menu_key`.
+pub enum MenuAction {
+  /// Focus, navigation, or dropdown toggle - state already updated.
+  None,
+  /// User confirmed "Insert File".
+  InsertFile,
+  /// User confirmed "About".
+  About,
+  /// User confirmed "Release All" (panic/clear midi).
+  ReleaseAll,
+  /// User confirmed "Clear Queue".
+  ClearQueue,
+  /// User toggled Clock Out.
+  ToggleClock,
+  /// User toggled Focus mode.
+  ToggleFocus,
+  /// Close menu and focus grid.
+  Close,
+  /// Quit the application.
+  Quit,
+}
+
+/// Handle a key event when `Focus::Menu` is active.
+/// Mutates `menu` and returns what action (if any) was confirmed.
+#[cfg(not(target_arch = "wasm32"))]
+pub fn handle_menu_key(
+  menu: &mut MenuState,
+  key: crossterm::event::KeyEvent,
+) -> MenuAction {
+  use crossterm::event::KeyCode;
+
+  // If no dropdown is open yet, Left/Right opens one.
+  if menu.active_menu.is_none() {
+    match key.code {
+      KeyCode::Left => {
+        let last = MENU_TITLES.len() - 1;
+        menu.active_menu = Some(MENU_TITLES[last].0);
+        menu.active_item = 0;
+        return MenuAction::None;
+      }
+      KeyCode::Right | KeyCode::Enter => {
+        menu.active_menu = Some(MENU_TITLES[0].0);
+        menu.active_item = 0;
+        return MenuAction::None;
+      }
+      KeyCode::Esc => return MenuAction::Close,
+      _ => return MenuAction::None,
+    }
+  }
+
+  let current_id = menu.active_menu.unwrap();
+  let items = menu_items(current_id, menu);
+
+  match (key.modifiers, key.code) {
+    (_, KeyCode::Esc) => {
+      menu.active_menu = None;
+      MenuAction::Close
+    }
+    (_, KeyCode::Left) => {
+      let pos = MENU_TITLES.iter().position(|(id, _)| *id == current_id).unwrap_or(0);
+      let next = if pos == 0 { MENU_TITLES.len() - 1 } else { pos - 1 };
+      menu.active_menu = Some(MENU_TITLES[next].0);
+      menu.active_item = 0;
+      MenuAction::None
+    }
+    (_, KeyCode::Right) => {
+      let pos = MENU_TITLES.iter().position(|(id, _)| *id == current_id).unwrap_or(0);
+      let next = (pos + 1) % MENU_TITLES.len();
+      menu.active_menu = Some(MENU_TITLES[next].0);
+      menu.active_item = 0;
+      MenuAction::None
+    }
+    (_, KeyCode::Up) => {
+      let mut idx = menu.active_item;
+      loop {
+        idx = if idx == 0 { items.len() - 1 } else { idx - 1 };
+        if items[idx].is_selectable() {
+          break;
+        }
+      }
+      menu.active_item = idx;
+      MenuAction::None
+    }
+    (_, KeyCode::Down) => {
+      let mut idx = menu.active_item;
+      loop {
+        idx = (idx + 1) % items.len();
+        if items[idx].is_selectable() {
+          break;
+        }
+      }
+      menu.active_item = idx;
+      MenuAction::None
+    }
+    (_, KeyCode::Enter) => {
+      let action = confirm_item(current_id, menu.active_item, menu);
+      if !matches!(action, MenuAction::None) {
+        menu.active_menu = None;
+      }
+      action
+    }
+    _ => MenuAction::None,
+  }
+}
+
+/// Map a confirmed item selection to a `MenuAction`.
+fn confirm_item(id: MenuId, item_idx: usize, menu: &MenuState) -> MenuAction {
+  let items = menu_items(id, menu);
+  match items.get(item_idx) {
+    None => MenuAction::None,
+    Some(Item::Delimiter) => MenuAction::None,
+    Some(Item::Submenu(_)) => MenuAction::None,
+    Some(item) => {
+      let label = item.label();
+      if label.starts_with("Insert File") {
+        MenuAction::InsertFile
+      } else if label.starts_with("About") {
+        MenuAction::About
+      } else if label.starts_with("Release All") {
+        MenuAction::ReleaseAll
+      } else if label.starts_with("Clear Queue") {
+        MenuAction::ClearQueue
+      } else if label.starts_with("Clock Out") {
+        MenuAction::ToggleClock
+      } else if label.starts_with("Focus Mode") {
+        MenuAction::ToggleFocus
+      } else {
+        MenuAction::None
+      }
+    }
+  }
+}
+
+/// Draw the menu bar row and any open dropdown into `buf`.
+/// `y_off` is the row of the menu bar (row 0 in a full-screen layout).
+pub fn draw_menubar(
+  state: &crate::app_state::AppState,
+  buf: &mut crate::terminal::buffer::ScreenBuffer,
+  y_off: u16,
+) {
+  use crate::terminal::cell::Color;
+  use crate::view::printer::{apply_style, CellStyle};
+
+  let w = buf.width;
+  let bar_bg = Color::Rgb(30, 30, 30);
+  let title_style =
+    CellStyle { fg: Color::Rgb(200, 200, 200), bg: bar_bg, reverse: false };
+  let active_style =
+    CellStyle { fg: Color::Rgb(0, 0, 0), bg: Color::Rgb(200, 200, 200), reverse: false };
+  let quit_style = CellStyle { fg: Color::Rgb(160, 60, 60), bg: bar_bg, reverse: false };
+
+  // Fill bar background.
+  for x in 0..w {
+    if let Some(c) = buf.get_mut(x, y_off) {
+      apply_style(c, ' ', CellStyle { fg: Color::Reset, bg: bar_bg, reverse: false });
+    }
+  }
+
+  // Draw each menu title.
+  for (i, (id, title)) in MENU_TITLES.iter().enumerate() {
+    let x = menu_title_x(i);
+    let is_active = state.menu.active_menu == Some(*id)
+      || (state.focus == crate::app_state::Focus::Menu
+        && state.menu.active_menu.is_none()
+        && i == 0);
+    let style = if is_active { active_style } else { title_style };
+    for (j, ch) in title.chars().enumerate() {
+      if let Some(c) = buf.get_mut(x + j as u16, y_off) {
+        apply_style(c, ch, style);
+      }
+    }
+  }
+
+  // "quit" at the far right.
+  let quit_label = "quit";
+  if w >= quit_label.len() as u16 + 1 {
+    let qx = w - quit_label.len() as u16 - 1;
+    for (j, ch) in quit_label.chars().enumerate() {
+      if let Some(c) = buf.get_mut(qx + j as u16, y_off) {
+        apply_style(c, ch, quit_style);
+      }
+    }
+  }
+
+  // Draw open dropdown if any.
+  let Some(open_id) = state.menu.active_menu else { return };
+  let title_idx = MENU_TITLES.iter().position(|(id, _)| *id == open_id).unwrap_or(0);
+  let drop_x = menu_title_x(title_idx);
+  let items = menu_items(open_id, &state.menu);
+  let max_label_w = items.iter().map(|it| it.label().len()).max().unwrap_or(10);
+  let drop_w = (max_label_w + 4) as u16;
+
+  let item_bg = Color::Rgb(40, 40, 40);
+  let item_fg = Color::Rgb(200, 200, 200);
+  let dim_fg = Color::Rgb(80, 80, 80);
+  let active_item_bg = Color::Rgb(100, 100, 100);
+
+  for (row, item) in items.iter().enumerate() {
+    let dy = y_off + 1 + row as u16;
+    let is_active_item = row == state.menu.active_item;
+    let (fg, bg) = if item.is_selectable() && is_active_item {
+      (Color::Rgb(255, 255, 255), active_item_bg)
+    } else if item.is_selectable() {
+      (item_fg, item_bg)
+    } else {
+      (dim_fg, item_bg)
+    };
+    let row_style = CellStyle { fg, bg, reverse: false };
+
+    // Background fill for the dropdown row.
+    for x in 0..drop_w {
+      if let Some(c) = buf.get_mut(drop_x + x, dy) {
+        apply_style(c, ' ', CellStyle { fg: Color::Reset, bg, reverse: false });
+      }
+    }
+
+    match item {
+      Item::Delimiter => {
+        let sep_style = CellStyle { fg: dim_fg, bg: item_bg, reverse: false };
+        for x in 0..drop_w {
+          if let Some(c) = buf.get_mut(drop_x + x, dy) {
+            apply_style(c, '─', sep_style);
+          }
+        }
+      }
+      _ => {
+        let label = item.label();
+        for (j, ch) in label.chars().enumerate() {
+          if let Some(c) = buf.get_mut(drop_x + 1 + j as u16, dy) {
+            apply_style(c, ch, row_style);
+          }
+        }
+      }
+    }
+  }
+}
+
 /// Return the path to the default location (~/.anupars/contents)
-fn get_default_database_path() -> Result<PathBuf, Box<dyn Error>> {
+pub fn get_default_database_path() -> Result<PathBuf, Box<dyn Error>> {
   #[cfg(target_arch = "wasm32")]
   return Err("filesystem not available in WASM".into());
 

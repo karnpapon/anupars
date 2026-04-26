@@ -1,4 +1,4 @@
-use cursive::Vec2;
+use crate::core::geom::Vec2;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::mpsc::Sender;

@@ -1,13 +1,13 @@
 use std::collections::BTreeSet;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::mpsc::{channel, Sender};
+use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::Arc;
 use std::sync::Mutex;
 #[cfg(not(target_arch = "wasm32"))]
 use std::thread;
 
-use cursive::Vec2;
+use crate::core::geom::Vec2;
 
 use crate::core::engine::symspell::SymSpellState;
 use crate::core::io::midi as io_midi;
@@ -631,7 +631,7 @@ impl Playhead {
 #[cfg(test)]
 mod tests {
   use super::test_helpers::make_playhead;
-  use cursive::Vec2;
+  use crate::core::geom::Vec2;
   use std::sync::atomic::Ordering;
 
   #[test]

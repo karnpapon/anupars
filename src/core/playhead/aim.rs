@@ -1,4 +1,4 @@
-use cursive::Vec2;
+use crate::core::geom::Vec2;
 
 use super::Direction;
 use crate::view::rect::Rect;
@@ -76,7 +76,7 @@ mod tests {
   use super::super::test_helpers::make_playhead;
   use super::Direction;
   use crate::view::rect::Rect;
-  use cursive::Vec2;
+  use crate::core::geom::Vec2;
 
   #[test]
   fn start_aim_initialises_aimed_area_at_current_pos_and_size() {

@@ -2,6 +2,7 @@ pub mod console;
 pub mod consts;
 pub mod grid;
 pub mod layout;
+pub mod line_editor;
 pub mod menubar;
 pub mod printer;
 pub mod rect;

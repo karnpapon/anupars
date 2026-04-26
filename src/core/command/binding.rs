@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
-use cursive::event::Event;
-use cursive::event::Key;
+#[cfg(not(target_arch = "wasm32"))]
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use super::types::Adjustment;
 use super::types::Command;
@@ -52,72 +52,67 @@ fn default_keybindings() -> HashMap<String, Vec<Command>> {
   kb
 }
 
-fn parse_key(key: &str) -> Event {
+#[cfg(not(target_arch = "wasm32"))]
+fn parse_key_code(key: &str) -> Option<KeyCode> {
   match key {
-    "Enter" => Event::Key(Key::Enter),
-    "Space" => Event::Char(" ".chars().next().unwrap()),
-    "Tab" => Event::Key(Key::Tab),
-    "Backspace" => Event::Key(Key::Backspace),
-    "Esc" => Event::Key(Key::Esc),
-    "Left" => Event::Key(Key::Left),
-    "Right" => Event::Key(Key::Right),
-    "Up" => Event::Key(Key::Up),
-    "Down" => Event::Key(Key::Down),
-    "Ins" => Event::Key(Key::Ins),
-    "Del" => Event::Key(Key::Del),
-    "Home" => Event::Key(Key::Home),
-    "End" => Event::Key(Key::End),
-    "PageUp" => Event::Key(Key::PageUp),
-    "PageDown" => Event::Key(Key::PageDown),
-    "PauseBreak" => Event::Key(Key::PauseBreak),
-    "NumpadCenter" => Event::Key(Key::NumpadCenter),
-    "Plus" => Event::Char('+'),
-    "Underscore" => Event::Char('_'),
-    "Pipe" => Event::Char('|'),
-    "Backslash" => Event::Char('\\'),
-    "Equal" => Event::Char('='),
-    "Minus" => Event::Char('-'),
-    "F0" => Event::Key(Key::F0),
-    "F1" => Event::Key(Key::F1),
-    "F2" => Event::Key(Key::F2),
-    "F3" => Event::Key(Key::F3),
-    "F4" => Event::Key(Key::F4),
-    "F5" => Event::Key(Key::F5),
-    "F6" => Event::Key(Key::F6),
-    "F7" => Event::Key(Key::F7),
-    "F8" => Event::Key(Key::F8),
-    "F9" => Event::Key(Key::F9),
-    "F10" => Event::Key(Key::F10),
-    "F11" => Event::Key(Key::F11),
-    "F12" => Event::Key(Key::F12),
-    s => Event::Char(s.chars().next().unwrap()),
+    "Enter" => Some(KeyCode::Enter),
+    "Space" => Some(KeyCode::Char(' ')),
+    "Tab" => Some(KeyCode::Tab),
+    "Backspace" => Some(KeyCode::Backspace),
+    "Esc" => Some(KeyCode::Esc),
+    "Left" => Some(KeyCode::Left),
+    "Right" => Some(KeyCode::Right),
+    "Up" => Some(KeyCode::Up),
+    "Down" => Some(KeyCode::Down),
+    "Del" | "Delete" => Some(KeyCode::Delete),
+    "Home" => Some(KeyCode::Home),
+    "End" => Some(KeyCode::End),
+    "PageUp" => Some(KeyCode::PageUp),
+    "PageDown" => Some(KeyCode::PageDown),
+    "Plus" => Some(KeyCode::Char('+')),
+    "Underscore" => Some(KeyCode::Char('_')),
+    "Pipe" => Some(KeyCode::Char('|')),
+    "Backslash" => Some(KeyCode::Char('\\')),
+    "Equal" => Some(KeyCode::Char('=')),
+    "Minus" => Some(KeyCode::Char('-')),
+    "F1" => Some(KeyCode::F(1)),
+    "F2" => Some(KeyCode::F(2)),
+    "F3" => Some(KeyCode::F(3)),
+    "F4" => Some(KeyCode::F(4)),
+    "F5" => Some(KeyCode::F(5)),
+    "F6" => Some(KeyCode::F(6)),
+    "F7" => Some(KeyCode::F(7)),
+    "F8" => Some(KeyCode::F(8)),
+    "F9" => Some(KeyCode::F(9)),
+    "F10" => Some(KeyCode::F(10)),
+    "F11" => Some(KeyCode::F(11)),
+    "F12" => Some(KeyCode::F(12)),
+    s if s.chars().count() == 1 => Some(KeyCode::Char(s.chars().next().unwrap())),
+    _ => None,
   }
 }
 
-pub fn parse_keybinding(kb: &str) -> Option<cursive::event::Event> {
+#[cfg(not(target_arch = "wasm32"))]
+pub fn parse_keybinding(kb: &str) -> Option<KeyEvent> {
   let mut split = kb.split('+');
   if kb != "+" && split.clone().count() == 2 {
     let modifier = split.next().unwrap();
     let key = split.next().unwrap();
-    let parsed = parse_key(key);
-    if let Event::Key(parsed) = parsed {
-      match modifier {
-        "Shift" => Some(Event::Shift(parsed)),
-        "Alt" => Some(Event::Alt(parsed)),
-        "Ctrl" => Some(Event::Ctrl(parsed)),
-        _ => None,
+    let code = parse_key_code(key)?;
+    let (mods, code) = match (modifier, code) {
+      ("Ctrl", KeyCode::Char(c)) => (KeyModifiers::CONTROL, KeyCode::Char(c)),
+      ("Alt", KeyCode::Char(c)) => (KeyModifiers::ALT, KeyCode::Char(c)),
+      ("Shift", KeyCode::Char(c)) => {
+        (KeyModifiers::SHIFT, KeyCode::Char(c.to_ascii_uppercase()))
       }
-    } else if let Event::Char(parsed) = parsed {
-      match modifier {
-        "Shift" => Some(Event::Char(parsed.to_uppercase().next().unwrap())),
-        "Alt" => Some(Event::AltChar(parsed)),
-        "Ctrl" => Some(Event::CtrlChar(parsed)),
-        _ => None,
-      }
-    } else {
-      None
-    }
+      ("Ctrl", k) => (KeyModifiers::CONTROL, k),
+      ("Alt", k) => (KeyModifiers::ALT, k),
+      ("Shift", k) => (KeyModifiers::SHIFT, k),
+      _ => return None,
+    };
+    Some(KeyEvent::new(code, mods))
   } else {
-    Some(parse_key(kb))
+    let code = parse_key_code(kb)?;
+    Some(KeyEvent::new(code, KeyModifiers::NONE))
   }
 }

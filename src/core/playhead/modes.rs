@@ -412,7 +412,7 @@ mod tests {
   use super::super::movement::Movement;
   use super::super::test_helpers::make_playhead;
   use crate::view::rect::Rect;
-  use cursive::Vec2;
+  use crate::core::geom::Vec2;
   use std::sync::atomic::Ordering;
 
   #[test]

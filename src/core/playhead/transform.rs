@@ -1,7 +1,7 @@
 use std::sync::atomic::Ordering;
 
-use cursive::Vec2;
-use cursive::XY;
+use crate::core::geom::Vec2;
+use crate::core::geom::XY;
 
 use crate::core::utils;
 use crate::view::rect::Rect;

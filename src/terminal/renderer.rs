@@ -1,10 +1,13 @@
 use std::io::{self, Write};
 
-use crossterm::cursor::{Hide, MoveTo, Show};
+use crossterm::cursor::{Hide, MoveTo};
 use crossterm::style::{
   Color as CColor, Print, ResetColor, SetBackgroundColor, SetForegroundColor,
 };
-use crossterm::QueueableCommand;
+use crossterm::terminal::{
+  disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen,
+};
+use crossterm::{execute, QueueableCommand};
 
 use super::buffer::ScreenBuffer;
 use super::cell::{Cell, Color};
@@ -16,6 +19,14 @@ pub struct Renderer {
 
 impl Renderer {
   pub fn new(width: u16, height: u16) -> Self {
+    enable_raw_mode().expect("failed to enable raw mode");
+    execute!(
+      std::io::stdout(),
+      EnterAlternateScreen,
+      crossterm::terminal::Clear(crossterm::terminal::ClearType::All),
+      crossterm::cursor::Hide
+    )
+    .expect("failed to enter alternate screen");
     Self {
       current: ScreenBuffer::new(width, height),
       previous: ScreenBuffer::new(width, height),
@@ -29,13 +40,17 @@ impl Renderer {
   pub fn resize(&mut self, width: u16, height: u16) {
     self.current.resize(width, height);
     self.previous.resize(width, height);
+    // Clear the physical screen so stale content from before the resize
+    // doesn't persist - previous is now all-default, terminal must match
+    let _ = execute!(
+      std::io::stdout(),
+      crossterm::terminal::Clear(crossterm::terminal::ClearType::All)
+    );
   }
 
   /// Diff current vs previous, emit only changed cells, then swap buffers and
   /// clear current for the next frame.
   pub fn flush(&mut self, stdout: &mut impl Write) -> io::Result<()> {
-    stdout.queue(Hide)?;
-
     let width = self.current.width as usize;
 
     for y in 0..self.current.height {
@@ -72,13 +87,19 @@ impl Renderer {
     }
 
     stdout.queue(ResetColor)?;
-    stdout.queue(Show)?;
+    stdout.queue(Hide)?;
     stdout.flush()?;
 
     std::mem::swap(&mut self.current, &mut self.previous);
-    self.current.clear();
 
     Ok(())
+  }
+}
+
+impl Drop for Renderer {
+  fn drop(&mut self) {
+    let _ = execute!(std::io::stdout(), LeaveAlternateScreen);
+    let _ = disable_raw_mode();
   }
 }
 

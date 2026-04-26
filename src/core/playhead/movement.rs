@@ -61,7 +61,7 @@ impl Movement {
       .join("")
   }
 }
-use cursive::Vec2;
+use crate::core::geom::Vec2;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::Hash;
 use std::hash::Hasher;

@@ -3,8 +3,8 @@ use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, AtomicU8, AtomicUsize};
 use std::sync::{Arc, Mutex};
 
-use cursive::Vec2;
-use cursive::XY;
+use crate::core::geom::Vec2;
+use crate::core::geom::XY;
 
 use crate::core::command::types;
 use crate::core::consts;
@@ -170,6 +170,7 @@ pub enum UIUpdate {
   CanvasKeyboardTopActive(bool),
 }
 
+#[derive(Clone)]
 pub struct PlayheadUI {
   pub playhead_area: Rect,
   pub playhead_pos: Vec2,
