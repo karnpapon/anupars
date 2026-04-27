@@ -71,7 +71,6 @@ impl Printable for char {
   }
 }
 
-/// Styling for a single terminal cell - no Cursive dependency.
 #[derive(Clone, Copy)]
 pub struct CellStyle {
   pub fg: Color,

@@ -7,7 +7,6 @@ pub enum LineEditorAction {
   Changed,
 }
 
-/// Single-line text editor, Cursive-free. Cursor is a byte index into `buf`.
 pub struct LineEditor {
   pub buf: String,
   pub cursor: usize,

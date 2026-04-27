@@ -378,15 +378,6 @@ fn draw_frame(
   buf.clear();
   let w = buf.width;
 
-  // Layout (rows):
-  //   0                  : menubar (absolute top)
-  //   1..PADDING_Y       : top gap / top border line
-  //   1+PADDING_Y        : console top border  ─┐
-  //   2+PADDING_Y..      : console content      │
-  //   1+PADDING_Y+HEIGHT : console bottom border─┘
-  //   2+PADDING_Y+HEIGHT : grid start
-
-  // console border
   let bx0 = PADDING_X.saturating_sub(1);
   let bx1 = w.saturating_sub(PADDING_X);
   let by0 = PADDING_Y;
@@ -434,8 +425,6 @@ fn draw_frame(
     }
   }
 
-  // draw console and grid first, then menu on top so dropdown overlays them
-  // menubar is position-absolute at row 0, content is inset by PADDING_X/PADDING_Y
   draw_console(state, buf, PADDING_X, 1 + PADDING_Y, w, CONSOLE_HEIGHT);
   grid.draw_to_buf(buf, PADDING_X, 2 + PADDING_Y + CONSOLE_HEIGHT);
   // draw_menubar(state, buf, 0);

@@ -1,4 +1,3 @@
-/// 2D coordinate types replacing cursive::Vec2 / cursive::XY.
 use std::ops::{Add, Sub};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
@@ -13,7 +12,6 @@ impl<T> XY<T> {
   }
 }
 
-/// Unsigned 2D point - the workhorse replacement for cursive::Vec2.
 pub type Vec2 = XY<usize>;
 
 impl Vec2 {
