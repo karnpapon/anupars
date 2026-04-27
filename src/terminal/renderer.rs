@@ -1,12 +1,15 @@
 use std::io::{self, Write};
 
 use crossterm::cursor::{Hide, MoveTo};
-use crossterm::style::{
-  Color as CColor, Print, ResetColor, SetBackgroundColor, SetForegroundColor,
-};
-use crossterm::terminal::{
-  disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen,
-};
+use crossterm::event::{DisableMouseCapture, EnableMouseCapture};
+use crossterm::style::Color as CColor;
+use crossterm::style::Print;
+use crossterm::style::ResetColor;
+use crossterm::style::{SetBackgroundColor, SetForegroundColor};
+use crossterm::terminal::disable_raw_mode;
+use crossterm::terminal::enable_raw_mode;
+use crossterm::terminal::EnterAlternateScreen;
+use crossterm::terminal::LeaveAlternateScreen;
 use crossterm::{execute, QueueableCommand};
 
 use super::buffer::ScreenBuffer;
@@ -24,7 +27,8 @@ impl Renderer {
       std::io::stdout(),
       EnterAlternateScreen,
       crossterm::terminal::Clear(crossterm::terminal::ClearType::All),
-      crossterm::cursor::Hide
+      crossterm::cursor::Hide,
+      EnableMouseCapture
     )
     .expect("failed to enter alternate screen");
     Self {
@@ -98,7 +102,7 @@ impl Renderer {
 
 impl Drop for Renderer {
   fn drop(&mut self) {
-    let _ = execute!(std::io::stdout(), LeaveAlternateScreen);
+    let _ = execute!(std::io::stdout(), DisableMouseCapture, LeaveAlternateScreen);
     let _ = disable_raw_mode();
   }
 }

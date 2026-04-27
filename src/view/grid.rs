@@ -930,10 +930,17 @@ pub fn handle_key_event(canvas: &mut GridEditor, key: crossterm::event::KeyEvent
 
 /// Handle a crossterm mouse event. Returns true if consumed.
 #[cfg(not(target_arch = "wasm32"))]
-pub fn handle_mouse_event(canvas: &mut GridEditor, event: crossterm::event::MouseEvent) -> bool {
+pub fn handle_mouse_event(
+  canvas: &mut GridEditor,
+  event: crossterm::event::MouseEvent,
+  panel_x: u16,
+  panel_y: u16,
+) -> bool {
   use crossterm::event::{MouseButton, MouseEventKind};
 
-  let position = Vec2::new(event.column as usize, event.row as usize);
+  let col = (event.column as usize).saturating_sub(panel_x as usize - 1);
+  let row = (event.row as usize).saturating_sub(panel_y as usize);
+  let position = Vec2::new(col, row);
   let offset = Vec2::zero();
 
   match event.kind {
