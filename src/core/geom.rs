@@ -18,7 +18,10 @@ pub type Vec2 = XY<usize>;
 
 impl Vec2 {
   pub const ZERO: Vec2 = Vec2 { x: 0, y: 0 };
-  pub const MAX: Vec2 = Vec2 { x: usize::MAX, y: usize::MAX };
+  pub const MAX: Vec2 = Vec2 {
+    x: usize::MAX,
+    y: usize::MAX,
+  };
 
   pub fn zero() -> Self {
     Self::ZERO
@@ -45,7 +48,10 @@ impl Vec2 {
   }
 
   pub fn checked_sub(self, rhs: Vec2) -> Option<Vec2> {
-    Some(Vec2::new(self.x.checked_sub(rhs.x)?, self.y.checked_sub(rhs.y)?))
+    Some(Vec2::new(
+      self.x.checked_sub(rhs.x)?,
+      self.y.checked_sub(rhs.y)?,
+    ))
   }
 
   /// true if self >= other component-wise (self contains other).

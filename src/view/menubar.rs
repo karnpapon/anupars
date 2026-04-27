@@ -19,7 +19,11 @@ pub fn set_grid_contents(grid: &mut GridEditor, contents: String) {
     let contents = utils::scale_to_width(&contents, w);
     let lines: Vec<&str> = contents.split('\n').collect();
     let total = lines.len();
-    let start = if total > 1 { fastrand::usize(0..total) } else { 0 };
+    let start = if total > 1 {
+      fastrand::usize(0..total)
+    } else {
+      0
+    };
     lines
       .iter()
       .cycle()
@@ -161,10 +165,7 @@ pub enum MenuAction {
 /// Handle a key event when `Focus::Menu` is active.
 /// Mutates `menu` and returns what action (if any) was confirmed.
 #[cfg(not(target_arch = "wasm32"))]
-pub fn handle_menu_key(
-  menu: &mut MenuState,
-  key: crossterm::event::KeyEvent,
-) -> MenuAction {
+pub fn handle_menu_key(menu: &mut MenuState, key: crossterm::event::KeyEvent) -> MenuAction {
   use crossterm::event::KeyCode;
 
   // If no dropdown is open yet, Left/Right opens one.
@@ -195,14 +196,24 @@ pub fn handle_menu_key(
       MenuAction::Close
     }
     (_, KeyCode::Left) => {
-      let pos = MENU_TITLES.iter().position(|(id, _)| *id == current_id).unwrap_or(0);
-      let next = if pos == 0 { MENU_TITLES.len() - 1 } else { pos - 1 };
+      let pos = MENU_TITLES
+        .iter()
+        .position(|(id, _)| *id == current_id)
+        .unwrap_or(0);
+      let next = if pos == 0 {
+        MENU_TITLES.len() - 1
+      } else {
+        pos - 1
+      };
       menu.active_menu = Some(MENU_TITLES[next].0);
       menu.active_item = 0;
       MenuAction::None
     }
     (_, KeyCode::Right) => {
-      let pos = MENU_TITLES.iter().position(|(id, _)| *id == current_id).unwrap_or(0);
+      let pos = MENU_TITLES
+        .iter()
+        .position(|(id, _)| *id == current_id)
+        .unwrap_or(0);
       let next = (pos + 1) % MENU_TITLES.len();
       menu.active_menu = Some(MENU_TITLES[next].0);
       menu.active_item = 0;
@@ -281,16 +292,34 @@ pub fn draw_menubar(
 
   let w = buf.width;
   let bar_bg = Color::Rgb(30, 30, 30);
-  let title_style =
-    CellStyle { fg: Color::Rgb(200, 200, 200), bg: bar_bg, reverse: false };
-  let active_style =
-    CellStyle { fg: Color::Rgb(0, 0, 0), bg: Color::Rgb(200, 200, 200), reverse: false };
-  let quit_style = CellStyle { fg: Color::Rgb(160, 60, 60), bg: bar_bg, reverse: false };
+  let title_style = CellStyle {
+    fg: Color::Rgb(200, 200, 200),
+    bg: bar_bg,
+    reverse: false,
+  };
+  let active_style = CellStyle {
+    fg: Color::Rgb(0, 0, 0),
+    bg: Color::Rgb(200, 200, 200),
+    reverse: false,
+  };
+  let quit_style = CellStyle {
+    fg: Color::Rgb(160, 60, 60),
+    bg: bar_bg,
+    reverse: false,
+  };
 
   // Fill bar background.
   for x in 0..w {
     if let Some(c) = buf.get_mut(x, y_off) {
-      apply_style(c, ' ', CellStyle { fg: Color::Reset, bg: bar_bg, reverse: false });
+      apply_style(
+        c,
+        ' ',
+        CellStyle {
+          fg: Color::Reset,
+          bg: bar_bg,
+          reverse: false,
+        },
+      );
     }
   }
 
@@ -311,7 +340,7 @@ pub fn draw_menubar(
 
   // "quit" at the far right.
   let quit_label = "quit";
-  if w >= quit_label.len() as u16 + 1 {
+  if w > quit_label.len() as u16 {
     let qx = w - quit_label.len() as u16 - 1;
     for (j, ch) in quit_label.chars().enumerate() {
       if let Some(c) = buf.get_mut(qx + j as u16, y_off) {
@@ -321,8 +350,13 @@ pub fn draw_menubar(
   }
 
   // Draw open dropdown if any.
-  let Some(open_id) = state.menu.active_menu else { return };
-  let title_idx = MENU_TITLES.iter().position(|(id, _)| *id == open_id).unwrap_or(0);
+  let Some(open_id) = state.menu.active_menu else {
+    return;
+  };
+  let title_idx = MENU_TITLES
+    .iter()
+    .position(|(id, _)| *id == open_id)
+    .unwrap_or(0);
   let drop_x = menu_title_x(title_idx);
   let items = menu_items(open_id, &state.menu);
   let max_label_w = items.iter().map(|it| it.label().len()).max().unwrap_or(10);
@@ -343,18 +377,34 @@ pub fn draw_menubar(
     } else {
       (dim_fg, item_bg)
     };
-    let row_style = CellStyle { fg, bg, reverse: false };
+    let row_style = CellStyle {
+      fg,
+      bg,
+      reverse: false,
+    };
 
     // Background fill for the dropdown row.
     for x in 0..drop_w {
       if let Some(c) = buf.get_mut(drop_x + x, dy) {
-        apply_style(c, ' ', CellStyle { fg: Color::Reset, bg, reverse: false });
+        apply_style(
+          c,
+          ' ',
+          CellStyle {
+            fg: Color::Reset,
+            bg,
+            reverse: false,
+          },
+        );
       }
     }
 
     match item {
       Item::Delimiter => {
-        let sep_style = CellStyle { fg: dim_fg, bg: item_bg, reverse: false };
+        let sep_style = CellStyle {
+          fg: dim_fg,
+          bg: item_bg,
+          reverse: false,
+        };
         for x in 0..drop_w {
           if let Some(c) = buf.get_mut(drop_x + x, dy) {
             apply_style(c, '─', sep_style);

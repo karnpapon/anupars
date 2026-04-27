@@ -29,7 +29,9 @@ struct BackendState {
 
 impl BackendState {
   fn new(cols: u16, rows: u16) -> Self {
-    Self { buf: ScreenBuffer::new(cols, rows) }
+    Self {
+      buf: ScreenBuffer::new(cols, rows),
+    }
   }
 
   fn resize(&mut self, cols: u16, rows: u16) {
@@ -359,11 +361,7 @@ pub fn wasm_step(elapsed_ms: f64) {
   }
 }
 
-fn draw_wasm_frame(
-  state: &AppState,
-  grid: &GridEditor,
-  buf: &mut ScreenBuffer,
-) {
+fn draw_wasm_frame(state: &AppState, grid: &GridEditor, buf: &mut ScreenBuffer) {
   use crate::view::console::draw_console;
   use crate::view::consts::CONSOLE_HEIGHT;
   use crate::view::menubar::draw_menubar;
@@ -395,8 +393,8 @@ pub fn wasm_send_key(key: String) {
 }
 
 fn dispatch_wasm_key(key: WasmKey, ui: &mut WasmUiCtx, should_quit: &mut bool) {
-  use crate::core::playhead::Direction;
   use crate::core::consts;
+  use crate::core::playhead::Direction;
 
   match ui.state.focus {
     Focus::RegexInput => {
@@ -422,10 +420,16 @@ fn dispatch_wasm_key(key: WasmKey, ui: &mut WasmUiCtx, should_quit: &mut bool) {
         WasmKey::Char('J') => ui.grid.scale_action((0, -1)),
         WasmKey::Char('K') => ui.grid.scale_action((0, 1)),
         WasmKey::Char('L') => ui.grid.scale_action((1, 0)),
-        WasmKey::Alt('h') => ui.grid.alt_action(Direction::Left, consts::MOVE_X_STEP_SIZE),
-        WasmKey::Alt('j') => ui.grid.alt_action(Direction::Down, consts::MOVE_Y_STEP_SIZE),
+        WasmKey::Alt('h') => ui
+          .grid
+          .alt_action(Direction::Left, consts::MOVE_X_STEP_SIZE),
+        WasmKey::Alt('j') => ui
+          .grid
+          .alt_action(Direction::Down, consts::MOVE_Y_STEP_SIZE),
         WasmKey::Alt('k') => ui.grid.alt_action(Direction::Up, consts::MOVE_Y_STEP_SIZE),
-        WasmKey::Alt('l') => ui.grid.alt_action(Direction::Right, consts::MOVE_X_STEP_SIZE),
+        WasmKey::Alt('l') => ui
+          .grid
+          .alt_action(Direction::Right, consts::MOVE_X_STEP_SIZE),
         WasmKey::Ctrl('h') => {
           ui.grid.start_aim_if_needed();
           ui.grid.update_aim(Direction::Left, 1)
@@ -491,8 +495,12 @@ pub fn wasm_send_mouse(kind: u8, _button: u8, col: u32, row: u32) {
       let position = crate::core::geom::Vec2::new(col as usize, row as usize);
       let offset = crate::core::geom::Vec2::zero();
       match kind {
-        0 => { ui.grid.handle_mouse_press(offset, position); }
-        1 => { ui.grid.handle_mouse_hold(offset, position); }
+        0 => {
+          ui.grid.handle_mouse_press(offset, position);
+        }
+        1 => {
+          ui.grid.handle_mouse_hold(offset, position);
+        }
         _ => {}
       }
     }
@@ -506,7 +514,8 @@ pub fn wasm_resize(cols: u32, rows: u32) {
     if let Some(ui) = u.borrow_mut().as_mut() {
       ui.backend.resize(cols as u16, rows as u16);
       ui.state.resize(cols as u16, rows as u16);
-      ui.grid.resize(crate::core::geom::Vec2::new(cols as usize, rows as usize));
+      ui.grid
+        .resize(crate::core::geom::Vec2::new(cols as usize, rows as usize));
     }
   });
 }

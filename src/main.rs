@@ -10,7 +10,7 @@ use app::{initialize_components, spawn_background_threads};
 use std::sync::Arc;
 
 fn main() {
-  let mut components = initialize_components();
+  let components = initialize_components();
 
   let sym_state = Arc::clone(&components.sym_state);
   let regex_tx = components.regex_tx.clone();

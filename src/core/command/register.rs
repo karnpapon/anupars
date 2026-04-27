@@ -141,10 +141,18 @@ impl CommandManager {
 
         let new_idx = match direction {
           Adjustment::Increase => {
-            if current_idx < ratios.len() - 1 { current_idx + 1 } else { current_idx }
+            if current_idx < ratios.len() - 1 {
+              current_idx + 1
+            } else {
+              current_idx
+            }
           }
           Adjustment::Decrease => {
-            if current_idx > 0 { current_idx - 1 } else { current_idx }
+            if current_idx > 0 {
+              current_idx - 1
+            } else {
+              current_idx
+            }
           }
         };
 
@@ -154,9 +162,7 @@ impl CommandManager {
         let _ = self
           .playhead_tx_cloned
           .send(playhead::Message::SetRatio(new_ratio));
-        let _ = self
-          .metronome_sender
-          .send(metronome::Message::Reset);
+        let _ = self.metronome_sender.send(metronome::Message::Reset);
       }
       Command::ToggleForward => {
         let _ = self

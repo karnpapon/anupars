@@ -102,9 +102,7 @@ pub fn parse_keybinding(kb: &str) -> Option<KeyEvent> {
     let (mods, code) = match (modifier, code) {
       ("Ctrl", KeyCode::Char(c)) => (KeyModifiers::CONTROL, KeyCode::Char(c)),
       ("Alt", KeyCode::Char(c)) => (KeyModifiers::ALT, KeyCode::Char(c)),
-      ("Shift", KeyCode::Char(c)) => {
-        (KeyModifiers::SHIFT, KeyCode::Char(c.to_ascii_uppercase()))
-      }
+      ("Shift", KeyCode::Char(c)) => (KeyModifiers::SHIFT, KeyCode::Char(c.to_ascii_uppercase())),
       ("Ctrl", k) => (KeyModifiers::CONTROL, k),
       ("Alt", k) => (KeyModifiers::ALT, k),
       ("Shift", k) => (KeyModifiers::SHIFT, k),

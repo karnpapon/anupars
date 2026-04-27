@@ -49,6 +49,7 @@ pub enum MenuId {
 }
 
 /// State for the custom-drawn menu bar.
+#[derive(Default)]
 pub struct MenuState {
   /// Whether the menu bar has keyboard focus and a dropdown is open.
   pub visible: bool,
@@ -60,18 +61,6 @@ pub struct MenuState {
   pub midi_output_devices: Vec<String>,
   /// MIDI input device names.
   pub midi_input_devices: Vec<String>,
-}
-
-impl Default for MenuState {
-  fn default() -> Self {
-    Self {
-      visible: false,
-      active_menu: None,
-      active_item: 0,
-      midi_output_devices: Vec::new(),
-      midi_input_devices: Vec::new(),
-    }
-  }
 }
 
 /// Authoritative application state, owned by the main event loop.
@@ -205,7 +194,10 @@ pub fn apply_ui_update(update: UIUpdate, state: &mut AppState) {
     UIUpdate::TiltStatus(s) => state.tilt_status = s,
     UIUpdate::RegexMatchCount(s) => state.regex_match_count = s,
     UIUpdate::RegexError(s) => state.regex_error = s,
-    UIUpdate::TextMatcher { matcher, regex_indexes } => {
+    UIUpdate::TextMatcher {
+      matcher,
+      regex_indexes,
+    } => {
       state.playhead_ui.text_matcher = matcher;
       // Wire the shared Arc so the printer's regex_indexes writes are
       // visible to position_calc.regex_indexes (same underlying Mutex).

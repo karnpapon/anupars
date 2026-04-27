@@ -21,7 +21,10 @@ impl Default for LineEditor {
 
 impl LineEditor {
   pub fn new() -> Self {
-    Self { buf: String::new(), cursor: 0 }
+    Self {
+      buf: String::new(),
+      cursor: 0,
+    }
   }
 
   pub fn set_content(&mut self, s: &str) {
@@ -130,12 +133,21 @@ impl LineEditor {
       0
     };
 
-    let text_style =
-      CellStyle { fg: Color::Rgb(0, 0, 0), bg: Color::Rgb(255, 255, 255), reverse: false };
-    let cursor_style =
-      CellStyle { fg: Color::Rgb(255, 255, 255), bg: Color::Rgb(0, 0, 0), reverse: false };
-    let empty_style =
-      CellStyle { fg: Color::Rgb(150, 150, 150), bg: Color::Rgb(255, 255, 255), reverse: false };
+    let text_style = CellStyle {
+      fg: Color::Rgb(0, 0, 0),
+      bg: Color::Rgb(255, 255, 255),
+      reverse: false,
+    };
+    let cursor_style = CellStyle {
+      fg: Color::Rgb(255, 255, 255),
+      bg: Color::Rgb(0, 0, 0),
+      reverse: false,
+    };
+    let empty_style = CellStyle {
+      fg: Color::Rgb(150, 150, 150),
+      bg: Color::Rgb(255, 255, 255),
+      reverse: false,
+    };
 
     for col in 0..width {
       let char_idx = visible_start + col as usize;

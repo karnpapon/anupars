@@ -373,7 +373,6 @@ fn draw_frame(
   use crate::terminal::cell::Color;
   use crate::view::console::draw_console;
   use crate::view::consts::{CONSOLE_HEIGHT, PADDING_X, PADDING_Y};
-  use crate::view::menubar::draw_menubar;
   use crate::view::printer::{apply_style, CellStyle};
 
   buf.clear();
