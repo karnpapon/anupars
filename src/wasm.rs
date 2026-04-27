@@ -391,17 +391,41 @@ fn draw_wasm_frame(state: &AppState, grid: &GridEditor, buf: &mut ScreenBuffer) 
   } else {
     Color::Rgb(60, 60, 60)
   };
-  let bstyle = CellStyle { fg: border_col, bg: Color::Reset, reverse: false };
+  let bstyle = CellStyle {
+    fg: border_col,
+    bg: Color::Reset,
+    reverse: false,
+  };
 
   for x in bx0..=bx1 {
-    let top_ch = if x == bx0 { '┌' } else if x == bx1 { '┐' } else { '─' };
-    let bot_ch = if x == bx0 { '└' } else if x == bx1 { '┘' } else { '─' };
-    if let Some(c) = buf.get_mut(x, by0) { apply_style(c, top_ch, bstyle); }
-    if let Some(c) = buf.get_mut(x, by1) { apply_style(c, bot_ch, bstyle); }
+    let top_ch = if x == bx0 {
+      '┌'
+    } else if x == bx1 {
+      '┐'
+    } else {
+      '─'
+    };
+    let bot_ch = if x == bx0 {
+      '└'
+    } else if x == bx1 {
+      '┘'
+    } else {
+      '─'
+    };
+    if let Some(c) = buf.get_mut(x, by0) {
+      apply_style(c, top_ch, bstyle);
+    }
+    if let Some(c) = buf.get_mut(x, by1) {
+      apply_style(c, bot_ch, bstyle);
+    }
   }
   for y in by0 + 1..by1 {
-    if let Some(c) = buf.get_mut(bx0, y) { apply_style(c, '│', bstyle); }
-    if let Some(c) = buf.get_mut(bx1, y) { apply_style(c, '│', bstyle); }
+    if let Some(c) = buf.get_mut(bx0, y) {
+      apply_style(c, '│', bstyle);
+    }
+    if let Some(c) = buf.get_mut(bx1, y) {
+      apply_style(c, '│', bstyle);
+    }
   }
 
   draw_console(state, buf, PADDING_X, 1 + PADDING_Y, w, CONSOLE_HEIGHT);
@@ -526,25 +550,58 @@ fn dispatch_wasm_key(key: WasmKey, ui: &mut WasmUiCtx, should_quit: &mut bool) {
           false
         }
         WasmKey::Char(c) => {
-          matches!(ui.state.line_editor.insert_char(*c), crate::view::line_editor::LineEditorAction::Changed)
+          matches!(
+            ui.state.line_editor.insert_char(*c),
+            crate::view::line_editor::LineEditorAction::Changed
+          )
         }
         WasmKey::Backspace => {
-          matches!(ui.state.line_editor.backspace(), crate::view::line_editor::LineEditorAction::Changed)
+          matches!(
+            ui.state.line_editor.backspace(),
+            crate::view::line_editor::LineEditorAction::Changed
+          )
         }
         WasmKey::Delete => {
-          matches!(ui.state.line_editor.delete_forward(), crate::view::line_editor::LineEditorAction::Changed)
+          matches!(
+            ui.state.line_editor.delete_forward(),
+            crate::view::line_editor::LineEditorAction::Changed
+          )
         }
-        WasmKey::Left => { ui.state.line_editor.move_left(); false }
-        WasmKey::Right => { ui.state.line_editor.move_right(); false }
-        WasmKey::Home => { ui.state.line_editor.move_home(); false }
-        WasmKey::End => { ui.state.line_editor.move_end(); false }
-        WasmKey::Ctrl('a') => { ui.state.line_editor.move_home(); false }
-        WasmKey::Ctrl('e') => { ui.state.line_editor.move_end(); false }
+        WasmKey::Left => {
+          ui.state.line_editor.move_left();
+          false
+        }
+        WasmKey::Right => {
+          ui.state.line_editor.move_right();
+          false
+        }
+        WasmKey::Home => {
+          ui.state.line_editor.move_home();
+          false
+        }
+        WasmKey::End => {
+          ui.state.line_editor.move_end();
+          false
+        }
+        WasmKey::Ctrl('a') => {
+          ui.state.line_editor.move_home();
+          false
+        }
+        WasmKey::Ctrl('e') => {
+          ui.state.line_editor.move_end();
+          false
+        }
         WasmKey::Ctrl('u') => {
-          matches!(ui.state.line_editor.kill_before_cursor(), crate::view::line_editor::LineEditorAction::Changed)
+          matches!(
+            ui.state.line_editor.kill_before_cursor(),
+            crate::view::line_editor::LineEditorAction::Changed
+          )
         }
         WasmKey::Ctrl('k') => {
-          matches!(ui.state.line_editor.kill_after_cursor(), crate::view::line_editor::LineEditorAction::Changed)
+          matches!(
+            ui.state.line_editor.kill_after_cursor(),
+            crate::view::line_editor::LineEditorAction::Changed
+          )
         }
         _ => false,
       };
@@ -691,18 +748,45 @@ fn dispatch_wasm_key(key: WasmKey, ui: &mut WasmUiCtx, should_quit: &mut bool) {
 
       // Grid navigation and split-char keys.
       match &key {
-        WasmKey::Char('h') => { ui.grid.commit_or_move(Direction::Left); }
-        WasmKey::Char('j') => { ui.grid.commit_or_move(Direction::Down); }
-        WasmKey::Char('k') => { ui.grid.commit_or_move(Direction::Up); }
-        WasmKey::Char('l') => { ui.grid.commit_or_move(Direction::Right); }
-        WasmKey::Char('H') => { ui.grid.scale_action((-1, 0)); }
-        WasmKey::Char('J') => { ui.grid.scale_action((0, -1)); }
-        WasmKey::Char('K') => { ui.grid.scale_action((0, 1)); }
-        WasmKey::Char('L') => { ui.grid.scale_action((1, 0)); }
-        WasmKey::Alt('h') => { ui.grid.alt_action(Direction::Left, consts::MOVE_X_STEP_SIZE); }
-        WasmKey::Alt('j') => { ui.grid.alt_action(Direction::Down, consts::MOVE_Y_STEP_SIZE); }
-        WasmKey::Alt('k') => { ui.grid.alt_action(Direction::Up, consts::MOVE_Y_STEP_SIZE); }
-        WasmKey::Alt('l') => { ui.grid.alt_action(Direction::Right, consts::MOVE_X_STEP_SIZE); }
+        WasmKey::Char('h') => {
+          ui.grid.commit_or_move(Direction::Left);
+        }
+        WasmKey::Char('j') => {
+          ui.grid.commit_or_move(Direction::Down);
+        }
+        WasmKey::Char('k') => {
+          ui.grid.commit_or_move(Direction::Up);
+        }
+        WasmKey::Char('l') => {
+          ui.grid.commit_or_move(Direction::Right);
+        }
+        WasmKey::Char('H') => {
+          ui.grid.scale_action((-1, 0));
+        }
+        WasmKey::Char('J') => {
+          ui.grid.scale_action((0, -1));
+        }
+        WasmKey::Char('K') => {
+          ui.grid.scale_action((0, 1));
+        }
+        WasmKey::Char('L') => {
+          ui.grid.scale_action((1, 0));
+        }
+        WasmKey::Alt('h') => {
+          ui.grid
+            .alt_action(Direction::Left, consts::MOVE_X_STEP_SIZE);
+        }
+        WasmKey::Alt('j') => {
+          ui.grid
+            .alt_action(Direction::Down, consts::MOVE_Y_STEP_SIZE);
+        }
+        WasmKey::Alt('k') => {
+          ui.grid.alt_action(Direction::Up, consts::MOVE_Y_STEP_SIZE);
+        }
+        WasmKey::Alt('l') => {
+          ui.grid
+            .alt_action(Direction::Right, consts::MOVE_X_STEP_SIZE);
+        }
         WasmKey::Ctrl('h') => {
           ui.grid.start_aim_if_needed();
           ui.grid.update_aim(Direction::Left, 1);
