@@ -143,7 +143,7 @@ impl LineEditor {
       reverse: false,
     };
     let empty_style = CellStyle {
-      fg: Color::Rgb(150, 150, 150),
+      fg: Color::Rgb(0, 0, 0),
       bg: Color::Rgb(255, 255, 255),
       reverse: false,
     };

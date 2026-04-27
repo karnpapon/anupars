@@ -529,3 +529,63 @@ impl<T: Printable + Copy> Matrix<T> {
     }
   }
 }
+
+/// Draw a centered modal dialog box.
+/// `lines` is the content, one string per row.
+/// Lines starting with "press" are rendered dimmed as a hint.
+pub fn draw_dialog(
+  buf: &mut ScreenBuffer,
+  screen_w: u16,
+  screen_h: u16,
+  lines: &[&str],
+) {
+  let inner_w = lines.iter().map(|l| l.len()).max().unwrap_or(16) + 4;
+  let inner_h = lines.len() + 2;
+  let dw = inner_w as u16;
+  let dh = inner_h as u16;
+  let x0 = (screen_w / 2).saturating_sub(dw / 2);
+  let y0 = (screen_h / 2).saturating_sub(dh / 2);
+
+  let bg = Color::Reset;
+  let border_style = CellStyle { fg: Color::Rgb(200, 200, 200), bg, reverse: false };
+  let text_style = CellStyle { fg: Color::Rgb(200, 200, 200), bg, reverse: false };
+  let dim_style = CellStyle { fg: Color::Rgb(80, 80, 80), bg, reverse: false };
+
+  for x in 0..=dw + 1 {
+    let ch = if x == 0 { '┌' } else if x == dw + 1 { '┐' } else { '─' };
+    if let Some(c) = buf.get_mut(x0 + x, y0) {
+      apply_style(c, ch, border_style);
+    }
+  }
+  for (i, line) in lines.iter().enumerate() {
+    let dy = y0 + 1 + i as u16;
+    if let Some(c) = buf.get_mut(x0, dy) {
+      apply_style(c, '│', border_style);
+    }
+    for x in 1..=dw {
+      if let Some(c) = buf.get_mut(x0 + x, dy) {
+        apply_style(c, ' ', CellStyle { fg: Color::Reset, bg, reverse: false });
+      }
+    }
+    if let Some(c) = buf.get_mut(x0 + dw + 1, dy) {
+      apply_style(c, '│', border_style);
+    }
+    let style = if line.starts_with("press") || line.is_empty() {
+      dim_style
+    } else {
+      text_style
+    };
+    for (j, ch) in line.chars().enumerate() {
+      if let Some(c) = buf.get_mut(x0 + 2 + j as u16, dy) {
+        apply_style(c, ch, style);
+      }
+    }
+  }
+  let ybot = y0 + dh - 1;
+  for x in 0..=dw + 1 {
+    let ch = if x == 0 { '└' } else if x == dw + 1 { '┘' } else { '─' };
+    if let Some(c) = buf.get_mut(x0 + x, ybot) {
+      apply_style(c, ch, border_style);
+    }
+  }
+}

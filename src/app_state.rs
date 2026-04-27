@@ -116,6 +116,12 @@ pub struct AppState {
 
   /// Whether the menubar is visible (toggled with Ctrl+b, default hidden).
   pub show_menubar: bool,
+
+  /// Whether the About dialog overlay is visible.
+  pub show_about: bool,
+
+  /// Whether the Docs "coming soon" dialog is visible.
+  pub show_docs: bool,
 }
 
 impl Default for AppState {
@@ -147,6 +153,8 @@ impl Default for AppState {
       height: 0,
       focus: Focus::RegexInput,
       show_menubar: false,
+      show_about: false,
+      show_docs: false,
     }
   }
 }

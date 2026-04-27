@@ -102,22 +102,24 @@ fn menu_items(id: MenuId, state: &MenuState) -> Vec<Item> {
           clock_on,
         ),
         Item::Delimiter,
-        Item::Submenu("Scale (Left)      \u{25b8}".into()),
-        Item::Submenu("Scale (Top)       \u{25b8}".into()),
-        Item::Submenu("Scale Root (Top)  \u{25b8}".into()),
+        Item::Submenu("Scale (Left) \u{25b8}".into()),
+        Item::Submenu("Scale (Top) \u{25b8}".into()),
+        Item::Submenu("Scale Root (Top) \u{25b8}".into()),
         Item::Delimiter,
-        Item::Toggle(
-          format!("Focus Mode   [{}]", if focus_on { "X" } else { " " }),
-          focus_on,
-        ),
         Item::Action("Release All".into()),
         Item::Action("Clear Queue".into()),
         Item::Delimiter,
         Item::Action("About".into()),
       ]
     }
-    MenuId::View => vec![Item::Action("Docs [h]".into())],
-    MenuId::Help => vec![Item::Action("Docs [h]".into())],
+    MenuId::View => {
+      let focus_on = consts::FOCUS_MODE.load(Ordering::Relaxed);
+      vec![Item::Toggle(
+        format!("Focus Mode [{}]", if focus_on { "X" } else { " " }),
+        focus_on,
+      )]
+    }
+    MenuId::Help => vec![Item::Action("Docs".into())],
   }
 }
 
@@ -184,6 +186,8 @@ pub enum MenuAction {
   ScaleTopSelected(usize),
   /// User selected a scale root for the top keyboard by index into ScaleRoot::all().
   ScaleRootSelected(usize),
+  /// User opened Docs (coming soon).
+  ShowDocs,
 }
 
 /// Return the list of string labels for a submenu identified by its parent item label.
@@ -400,6 +404,8 @@ fn confirm_item(id: MenuId, item_idx: usize, menu: &MenuState) -> MenuAction {
         MenuAction::ToggleClock
       } else if label.starts_with("Focus Mode") {
         MenuAction::ToggleFocus
+      } else if label.starts_with("Docs") {
+        MenuAction::ShowDocs
       } else {
         MenuAction::None
       }
@@ -569,6 +575,21 @@ pub fn draw_menubar(
           if let Some(c) = buf.get_mut(drop_x + x, dy) {
             apply_style(c, '─', sep_style);
           }
+        }
+      }
+      Item::Submenu(_) => {
+        // Strip trailing spaces and the ▸ glyph from the stored label,
+        // then draw ▸ at the fixed right edge of the panel.
+        let raw = item.label();
+        let clean = raw.trim_end_matches('\u{25b8}').trim_end();
+        for (j, ch) in clean.chars().enumerate() {
+          if let Some(c) = buf.get_mut(drop_x + 2 + j as u16, dy) {
+            apply_style(c, ch, row_style);
+          }
+        }
+        // ▸ with 1 col of right padding before the border.
+        if let Some(c) = buf.get_mut(drop_x + drop_w - 1, dy) {
+          apply_style(c, '\u{25b8}', row_style);
         }
       }
       _ => {

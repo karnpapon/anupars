@@ -263,6 +263,16 @@ pub fn run_event_loop(
             break;
           }
 
+          if state.show_about {
+            state.show_about = false;
+            continue;
+          }
+
+          if state.show_docs {
+            state.show_docs = false;
+            continue;
+          }
+
           if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('b') {
             state.show_menubar = !state.show_menubar;
             if state.show_menubar {
@@ -316,6 +326,11 @@ pub fn run_event_loop(
                   close_after = true;
                 }
                 MenuAction::About => {
+                  state.show_about = true;
+                  close_after = true;
+                }
+                MenuAction::ShowDocs => {
+                  state.show_docs = true;
                   close_after = true;
                 }
                 MenuAction::MidiOutputSelected(idx) => {
@@ -528,4 +543,47 @@ fn draw_frame(
   if state.show_menubar {
     draw_menubar(state, buf, 0);
   }
+  if state.show_about {
+    draw_about_dialog(state, buf);
+  }
+  if state.show_docs {
+    draw_docs_dialog(state, buf);
+  }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn draw_about_dialog(
+  state: &crate::app_state::AppState,
+  buf: &mut crate::terminal::buffer::ScreenBuffer,
+) {
+  use crate::view::printer::draw_dialog;
+
+  let mut lines: Vec<String> = vec![
+    format!("{}  v{}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION")),
+    String::new(),
+  ];
+  let words: Vec<&str> = env!("CARGO_PKG_DESCRIPTION").split_whitespace().collect();
+  for chunk in words.chunks(6) {
+    lines.push(chunk.join(" "));
+  }
+  lines.push(String::new());
+  lines.push("press any key to close".to_string());
+
+  let refs: Vec<&str> = lines.iter().map(|s| s.as_str()).collect();
+  draw_dialog(buf, state.width, state.height, &refs);
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn draw_docs_dialog(
+  state: &crate::app_state::AppState,
+  buf: &mut crate::terminal::buffer::ScreenBuffer,
+) {
+  use crate::view::printer::draw_dialog;
+
+  draw_dialog(
+    buf,
+    state.width,
+    state.height,
+    &["docs", "", "coming soon...", "", "press any key to close"],
+  );
 }
