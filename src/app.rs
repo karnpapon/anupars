@@ -212,6 +212,7 @@ pub fn spawn_background_threads(
 }
 
 #[cfg(not(target_arch = "wasm32"))]
+#[allow(clippy::too_many_arguments)]
 pub fn run_event_loop(
   ui_rx: std::sync::mpsc::Receiver<crate::core::playhead::UIUpdate>,
   playhead_tx: std::sync::mpsc::Sender<crate::core::playhead::Message>,
@@ -220,6 +221,9 @@ pub fn run_event_loop(
   regex_tx: std::sync::mpsc::Sender<crate::core::engine::regex::Message>,
   midi_tx: std::sync::mpsc::Sender<midi::Message>,
   renderer: &mut crate::terminal::Renderer,
+  midi_output_devices: Vec<String>,
+  midi_input_devices: Vec<String>,
+  initial_midi_device: String,
 ) -> std::io::Result<()> {
   use crate::app_state::{apply_ui_update, AppState, Focus};
   use crate::view::consts::{CONSOLE_HEIGHT, PADDING_X, PADDING_Y};
@@ -230,6 +234,9 @@ pub fn run_event_loop(
   use std::time::Duration;
 
   let mut state = AppState::default();
+  state.menu.midi_output_devices = midi_output_devices;
+  state.menu.midi_input_devices = midi_input_devices;
+  state.midi_status = initial_midi_device;
   let mut should_quit = false;
 
   let (init_w, init_h) = crossterm::terminal::size().unwrap_or((80, 24));
@@ -256,11 +263,29 @@ pub fn run_event_loop(
             break;
           }
 
+          if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('b') {
+            state.show_menubar = !state.show_menubar;
+            if state.show_menubar {
+              state.focus = Focus::Menu;
+              state.menu.visible = true;
+              state.menu.active_menu = None;
+              state.menu.focused_tab = 0;
+            } else {
+              state.focus = Focus::Grid;
+              state.menu.visible = false;
+              state.menu.active_menu = None;
+            }
+            continue;
+          }
+
           match state.focus {
             Focus::Menu => {
               let action = handle_menu_key(&mut state.menu, key);
+              let mut close_after = false;
               match action {
+                MenuAction::None => {}
                 MenuAction::Close => {
+                  state.show_menubar = false;
                   state.focus = Focus::Grid;
                 }
                 MenuAction::Quit => {
@@ -269,11 +294,70 @@ pub fn run_event_loop(
                 MenuAction::ReleaseAll => {
                   let _ = midi_tx.send(midi::Message::ClearMsgConfig());
                   let _ = midi_tx.send(midi::Message::Panic());
+                  close_after = true;
+                }
+                MenuAction::ClearQueue => {
+                  let _ = playhead_tx.send(crate::core::playhead::Message::ClearQueue());
+                  close_after = true;
+                }
+                MenuAction::ToggleClock => {
+                  use std::sync::atomic::Ordering;
+                  let was = consts::CLOCK_ENABLED.load(Ordering::Relaxed);
+                  consts::CLOCK_ENABLED.store(!was, Ordering::Relaxed);
+                  let _ = midi_tx.send(midi::Message::EnableClock(!was));
+                }
+                MenuAction::ToggleFocus => {
+                  use std::sync::atomic::Ordering;
+                  let was = consts::FOCUS_MODE.load(Ordering::Relaxed);
+                  consts::FOCUS_MODE.store(!was, Ordering::Relaxed);
                 }
                 MenuAction::InsertFile => {
                   // TODO: file picker integration
+                  close_after = true;
                 }
-                _ => {}
+                MenuAction::About => {
+                  close_after = true;
+                }
+                MenuAction::MidiOutputSelected(idx) => {
+                  let _ = midi_tx.send(midi::Message::SwitchDevice(idx));
+                  if let Some(name) = state.menu.midi_output_devices.get(idx) {
+                    state.midi_status = name.clone();
+                  }
+                  close_after = true;
+                }
+                MenuAction::MidiInputSelected(_idx) => {
+                  // TODO: midi input switching not yet wired to a message
+                  close_after = true;
+                }
+                MenuAction::ScaleLeftSelected(idx) => {
+                  use crate::core::tonal::scale::ScaleMode;
+                  if let Some(mode) = ScaleMode::all().get(idx) {
+                    let _ =
+                      playhead_tx.send(crate::core::playhead::Message::SetScaleModeLeft(*mode));
+                  }
+                  close_after = true;
+                }
+                MenuAction::ScaleTopSelected(idx) => {
+                  use crate::core::tonal::scale::ScaleMode;
+                  if let Some(mode) = ScaleMode::all().get(idx) {
+                    let _ =
+                      playhead_tx.send(crate::core::playhead::Message::SetScaleModeTop(*mode));
+                  }
+                  close_after = true;
+                }
+                MenuAction::ScaleRootSelected(idx) => {
+                  use crate::core::tonal::scale::ScaleRoot;
+                  if let Some(root) = ScaleRoot::all().get(idx) {
+                    let _ =
+                      playhead_tx.send(crate::core::playhead::Message::SetScaleRootTop(*root));
+                  }
+                  close_after = true;
+                }
+              }
+              if close_after {
+                state.show_menubar = false;
+                state.menu.active_menu = None;
+                state.focus = Focus::Grid;
               }
             }
             Focus::RegexInput => {
@@ -386,6 +470,7 @@ fn draw_frame(
   use crate::terminal::cell::Color;
   use crate::view::console::draw_console;
   use crate::view::consts::{CONSOLE_HEIGHT, PADDING_X, PADDING_Y};
+  use crate::view::menubar::draw_menubar;
   use crate::view::printer::{apply_style, CellStyle};
 
   buf.clear();
@@ -440,5 +525,7 @@ fn draw_frame(
 
   draw_console(state, buf, PADDING_X, 1 + PADDING_Y, w, CONSOLE_HEIGHT);
   grid.draw_to_buf(buf, PADDING_X, 2 + PADDING_Y + CONSOLE_HEIGHT);
-  // draw_menubar(state, buf, 0);
+  if state.show_menubar {
+    draw_menubar(state, buf, 0);
+  }
 }

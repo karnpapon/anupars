@@ -24,6 +24,20 @@ fn main() {
     components.metronome,
   );
 
+  let midi_output_devices: Vec<String> = components
+    .midi
+    .get_available_devices()
+    .into_iter()
+    .map(|(name, _)| name)
+    .collect();
+  let midi_input_devices: Vec<String> = components
+    .midi
+    .get_available_input_devices()
+    .into_iter()
+    .map(|(name, _)| name)
+    .collect();
+  let initial_midi_device = components.midi.out_device_name();
+
   components.midi.run();
 
   let (init_w, init_h) = crossterm::terminal::size().unwrap_or((80, 24));
@@ -37,6 +51,9 @@ fn main() {
     regex_tx,
     midi_tx,
     &mut renderer,
+    midi_output_devices,
+    midi_input_devices,
+    initial_midi_device,
   )
   .expect("event loop error");
 }

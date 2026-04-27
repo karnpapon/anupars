@@ -340,23 +340,22 @@ impl Midi {
     }
   }
 
-  // #[allow(dead_code)]
-  // pub fn get_available_input_devices(&self) -> Vec<(String, usize)> {
-  //   let Ok(midi_inp) = MidiInput::new("anupars-query") else {
-  //     return Vec::new();
-  //   };
-  //   midi_inp
-  //     .ports()
-  //     .iter()
-  //     .enumerate()
-  //     .map(|(i, p)| {
-  //       let name = midi_inp
-  //         .port_name(p)
-  //         .unwrap_or_else(|_| format!("Port {}", i));
-  //       (name, i)
-  //     })
-  //     .collect()
-  // }
+  pub fn get_available_input_devices(&self) -> Vec<(String, usize)> {
+    let Ok(midi_inp) = MidiInput::new("anupars-query") else {
+      return Vec::new();
+    };
+    midi_inp
+      .ports()
+      .iter()
+      .enumerate()
+      .map(|(i, p)| {
+        let name = midi_inp
+          .port_name(p)
+          .unwrap_or_else(|_| format!("Port {}", i));
+        (name, i)
+      })
+      .collect()
+  }
 
   /// Register a callback that is invoked (from the run thread) for every
   /// incoming external MIDI clock byte (0xF8/0xFA/0xFB/0xFC).
@@ -859,6 +858,10 @@ impl Midi {
   pub fn run(self) {}
 
   pub fn get_available_devices(&self) -> Vec<(String, usize)> {
+    vec![]
+  }
+
+  pub fn get_available_input_devices(&self) -> Vec<(String, usize)> {
     vec![]
   }
 

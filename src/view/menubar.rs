@@ -128,14 +128,28 @@ const MENU_TITLES: &[(MenuId, &str)] = &[
   (MenuId::Help, "help"),
 ];
 
-/// Pixel (column) offset of each menu title, computed from title widths + separators.
+/// Uniform slot width: widest title + 1 space padding on each side.
+const TAB_SLOT_W: u16 = {
+  let mut max = 0usize;
+  let mut i = 0;
+  while i < MENU_TITLES.len() {
+    let len = MENU_TITLES[i].1.len();
+    if len > max {
+      max = len;
+    }
+    i += 1;
+  }
+  max as u16 + 2
+};
+
+/// Column offset of each menu title (uniform slot width + 1 gap).
 fn menu_title_x(index: usize) -> u16 {
   let mut x = 1u16;
-  for (i, (_, title)) in MENU_TITLES.iter().enumerate() {
+  for i in 0..MENU_TITLES.len() {
     if i == index {
       return x;
     }
-    x += title.len() as u16 + 2;
+    x += TAB_SLOT_W + 1;
   }
   x
 }
@@ -160,6 +174,51 @@ pub enum MenuAction {
   Close,
   /// Quit the application.
   Quit,
+  /// User selected a MIDI output device by port index.
+  MidiOutputSelected(usize),
+  /// User selected a MIDI input device by port index.
+  MidiInputSelected(usize),
+  /// User selected a scale mode for the left keyboard by index into ScaleMode::all().
+  ScaleLeftSelected(usize),
+  /// User selected a scale mode for the top keyboard by index into ScaleMode::all().
+  ScaleTopSelected(usize),
+  /// User selected a scale root for the top keyboard by index into ScaleRoot::all().
+  ScaleRootSelected(usize),
+}
+
+/// Return the list of string labels for a submenu identified by its parent item label.
+fn submenu_items_for(label: &str, state: &MenuState) -> Vec<String> {
+  use crate::core::tonal::scale::{ScaleMode, ScaleRoot};
+  if label.starts_with("MIDI Output") {
+    if state.midi_output_devices.is_empty() {
+      vec!["(no devices)".into()]
+    } else {
+      state.midi_output_devices.clone()
+    }
+  } else if label.starts_with("MIDI Input") {
+    if state.midi_input_devices.is_empty() {
+      vec!["(no devices)".into()]
+    } else {
+      state.midi_input_devices.clone()
+    }
+  } else if label.starts_with("Scale (Left)") {
+    ScaleMode::all()
+      .iter()
+      .map(|m| m.name().to_string())
+      .collect()
+  } else if label.starts_with("Scale (Top)") {
+    ScaleMode::all()
+      .iter()
+      .map(|m| m.name().to_string())
+      .collect()
+  } else if label.starts_with("Scale Root") {
+    ScaleRoot::all()
+      .iter()
+      .map(|r| r.name().to_string())
+      .collect()
+  } else {
+    vec![]
+  }
 }
 
 /// Handle a key event when `Focus::Menu` is active.
@@ -168,17 +227,23 @@ pub enum MenuAction {
 pub fn handle_menu_key(menu: &mut MenuState, key: crossterm::event::KeyEvent) -> MenuAction {
   use crossterm::event::KeyCode;
 
-  // If no dropdown is open yet, Left/Right opens one.
+  // No dropdown open - Left/Right moves tab focus, Enter/Down expands.
   if menu.active_menu.is_none() {
     match key.code {
       KeyCode::Left => {
-        let last = MENU_TITLES.len() - 1;
-        menu.active_menu = Some(MENU_TITLES[last].0);
-        menu.active_item = 0;
+        menu.focused_tab = if menu.focused_tab == 0 {
+          MENU_TITLES.len() - 1
+        } else {
+          menu.focused_tab - 1
+        };
         return MenuAction::None;
       }
-      KeyCode::Right | KeyCode::Enter => {
-        menu.active_menu = Some(MENU_TITLES[0].0);
+      KeyCode::Right => {
+        menu.focused_tab = (menu.focused_tab + 1) % MENU_TITLES.len();
+        return MenuAction::None;
+      }
+      KeyCode::Enter | KeyCode::Down => {
+        menu.active_menu = Some(MENU_TITLES[menu.focused_tab].0);
         menu.active_item = 0;
         return MenuAction::None;
       }
@@ -190,10 +255,59 @@ pub fn handle_menu_key(menu: &mut MenuState, key: crossterm::event::KeyEvent) ->
   let current_id = menu.active_menu.unwrap();
   let items = menu_items(current_id, menu);
 
+  // If a submenu is open, route keys there first.
+  if let Some(sub_idx) = menu.open_submenu {
+    let sub_label = items.get(sub_idx).map(|i| i.label()).unwrap_or("");
+    let sub_items = submenu_items_for(sub_label, menu);
+    match key.code {
+      KeyCode::Up => {
+        if menu.submenu_item > 0 {
+          menu.submenu_item -= 1;
+        } else {
+          menu.submenu_item = sub_items.len().saturating_sub(1);
+        }
+      }
+      KeyCode::Down => {
+        if menu.submenu_item + 1 < sub_items.len() {
+          menu.submenu_item += 1;
+        } else {
+          menu.submenu_item = 0;
+        }
+      }
+      KeyCode::Left | KeyCode::Esc => {
+        menu.open_submenu = None;
+      }
+      KeyCode::Enter => {
+        let chosen = menu.submenu_item;
+        menu.open_submenu = None;
+        menu.active_menu = None;
+        if sub_label.starts_with("MIDI Output") {
+          return MenuAction::MidiOutputSelected(chosen);
+        } else if sub_label.starts_with("MIDI Input") {
+          return MenuAction::MidiInputSelected(chosen);
+        } else if sub_label.starts_with("Scale (Left)") {
+          return MenuAction::ScaleLeftSelected(chosen);
+        } else if sub_label.starts_with("Scale (Top)") {
+          return MenuAction::ScaleTopSelected(chosen);
+        } else if sub_label.starts_with("Scale Root") {
+          return MenuAction::ScaleRootSelected(chosen);
+        }
+      }
+      _ => {}
+    }
+    return MenuAction::None;
+  }
+
   match (key.modifiers, key.code) {
     (_, KeyCode::Esc) => {
+      // Collapse dropdown back to tab-row focus, don't close the whole menubar.
+      let pos = MENU_TITLES
+        .iter()
+        .position(|(id, _)| *id == current_id)
+        .unwrap_or(0);
+      menu.focused_tab = pos;
       menu.active_menu = None;
-      MenuAction::Close
+      MenuAction::None
     }
     (_, KeyCode::Left) => {
       let pos = MENU_TITLES
@@ -206,16 +320,28 @@ pub fn handle_menu_key(menu: &mut MenuState, key: crossterm::event::KeyEvent) ->
         pos - 1
       };
       menu.active_menu = Some(MENU_TITLES[next].0);
+      menu.focused_tab = next;
       menu.active_item = 0;
       MenuAction::None
     }
     (_, KeyCode::Right) => {
+      // Open submenu if the focused item is a Submenu, otherwise switch tab.
+      if let Some(Item::Submenu(_)) = items.get(menu.active_item) {
+        let sub_label = items[menu.active_item].label();
+        let sub_items = submenu_items_for(sub_label, menu);
+        if !sub_items.is_empty() {
+          menu.open_submenu = Some(menu.active_item);
+          menu.submenu_item = 0;
+        }
+        return MenuAction::None;
+      }
       let pos = MENU_TITLES
         .iter()
         .position(|(id, _)| *id == current_id)
         .unwrap_or(0);
       let next = (pos + 1) % MENU_TITLES.len();
       menu.active_menu = Some(MENU_TITLES[next].0);
+      menu.focused_tab = next;
       menu.active_item = 0;
       MenuAction::None
     }
@@ -243,7 +369,8 @@ pub fn handle_menu_key(menu: &mut MenuState, key: crossterm::event::KeyEvent) ->
     }
     (_, KeyCode::Enter) => {
       let action = confirm_item(current_id, menu.active_item, menu);
-      if !matches!(action, MenuAction::None) {
+      let is_toggle = matches!(action, MenuAction::ToggleClock | MenuAction::ToggleFocus);
+      if !matches!(action, MenuAction::None) && !is_toggle {
         menu.active_menu = None;
       }
       action
@@ -291,18 +418,18 @@ pub fn draw_menubar(
   use crate::view::printer::{apply_style, CellStyle};
 
   let w = buf.width;
-  let bar_bg = Color::Rgb(30, 30, 30);
+  let bar_bg = Color::Reset;
   let title_style = CellStyle {
-    fg: Color::Rgb(200, 200, 200),
+    fg: Color::Rgb(120, 120, 120),
     bg: bar_bg,
     reverse: false,
   };
   let active_style = CellStyle {
     fg: Color::Rgb(0, 0, 0),
-    bg: Color::Rgb(200, 200, 200),
+    bg: Color::Rgb(255, 255, 255),
     reverse: false,
   };
-  let quit_style = CellStyle {
+  let _quit_style = CellStyle {
     fg: Color::Rgb(160, 60, 60),
     bg: bar_bg,
     reverse: false,
@@ -329,25 +456,31 @@ pub fn draw_menubar(
     let is_active = state.menu.active_menu == Some(*id)
       || (state.focus == crate::app_state::Focus::Menu
         && state.menu.active_menu.is_none()
-        && i == 0);
+        && i == state.menu.focused_tab);
     let style = if is_active { active_style } else { title_style };
+    // Fill entire slot with style background then draw title at offset 1.
+    for col in 0..TAB_SLOT_W {
+      if let Some(c) = buf.get_mut(x + col, y_off) {
+        apply_style(c, ' ', style);
+      }
+    }
     for (j, ch) in title.chars().enumerate() {
-      if let Some(c) = buf.get_mut(x + j as u16, y_off) {
+      if let Some(c) = buf.get_mut(x + 1 + j as u16, y_off) {
         apply_style(c, ch, style);
       }
     }
   }
 
   // "quit" at the far right.
-  let quit_label = "quit";
-  if w > quit_label.len() as u16 {
-    let qx = w - quit_label.len() as u16 - 1;
-    for (j, ch) in quit_label.chars().enumerate() {
-      if let Some(c) = buf.get_mut(qx + j as u16, y_off) {
-        apply_style(c, ch, quit_style);
-      }
-    }
-  }
+  // let quit_label = "quit";
+  // if w > quit_label.len() as u16 {
+  //   let qx = w - quit_label.len() as u16 - 1;
+  //   for (j, ch) in quit_label.chars().enumerate() {
+  //     if let Some(c) = buf.get_mut(qx + j as u16, y_off) {
+  //       apply_style(c, ch, quit_style);
+  //     }
+  //   }
+  // }
 
   // Draw open dropdown if any.
   let Some(open_id) = state.menu.active_menu else {
@@ -362,16 +495,35 @@ pub fn draw_menubar(
   let max_label_w = items.iter().map(|it| it.label().len()).max().unwrap_or(10);
   let drop_w = (max_label_w + 4) as u16;
 
-  let item_bg = Color::Rgb(40, 40, 40);
+  let item_bg = Color::Reset;
   let item_fg = Color::Rgb(200, 200, 200);
   let dim_fg = Color::Rgb(80, 80, 80);
-  let active_item_bg = Color::Rgb(100, 100, 100);
+  let border_col = Color::Rgb(100, 100, 100);
+  let border_style = CellStyle {
+    fg: border_col,
+    bg: item_bg,
+    reverse: false,
+  };
+
+  // Top border row.
+  let top_y = y_off + 1;
+  if let Some(c) = buf.get_mut(drop_x, top_y) {
+    apply_style(c, '┌', border_style);
+  }
+  for x in 1..=drop_w {
+    if let Some(c) = buf.get_mut(drop_x + x, top_y) {
+      apply_style(c, '─', border_style);
+    }
+  }
+  if let Some(c) = buf.get_mut(drop_x + drop_w + 1, top_y) {
+    apply_style(c, '┐', border_style);
+  }
 
   for (row, item) in items.iter().enumerate() {
-    let dy = y_off + 1 + row as u16;
+    let dy = y_off + 2 + row as u16;
     let is_active_item = row == state.menu.active_item;
     let (fg, bg) = if item.is_selectable() && is_active_item {
-      (Color::Rgb(255, 255, 255), active_item_bg)
+      (Color::Rgb(0, 0, 0), Color::Rgb(255, 255, 255))
     } else if item.is_selectable() {
       (item_fg, item_bg)
     } else {
@@ -383,8 +535,12 @@ pub fn draw_menubar(
       reverse: false,
     };
 
-    // Background fill for the dropdown row.
-    for x in 0..drop_w {
+    // Left border.
+    if let Some(c) = buf.get_mut(drop_x, dy) {
+      apply_style(c, '│', border_style);
+    }
+    // Background fill for the inner row.
+    for x in 1..=drop_w {
       if let Some(c) = buf.get_mut(drop_x + x, dy) {
         apply_style(
           c,
@@ -397,6 +553,10 @@ pub fn draw_menubar(
         );
       }
     }
+    // Right border.
+    if let Some(c) = buf.get_mut(drop_x + drop_w + 1, dy) {
+      apply_style(c, '│', border_style);
+    }
 
     match item {
       Item::Delimiter => {
@@ -405,7 +565,7 @@ pub fn draw_menubar(
           bg: item_bg,
           reverse: false,
         };
-        for x in 0..drop_w {
+        for x in 1..=drop_w {
           if let Some(c) = buf.get_mut(drop_x + x, dy) {
             apply_style(c, '─', sep_style);
           }
@@ -414,12 +574,108 @@ pub fn draw_menubar(
       _ => {
         let label = item.label();
         for (j, ch) in label.chars().enumerate() {
-          if let Some(c) = buf.get_mut(drop_x + 1 + j as u16, dy) {
+          if let Some(c) = buf.get_mut(drop_x + 2 + j as u16, dy) {
             apply_style(c, ch, row_style);
           }
         }
       }
     }
+  }
+
+  // Bottom border row.
+  let bot_y = y_off + 2 + items.len() as u16;
+  if let Some(c) = buf.get_mut(drop_x, bot_y) {
+    apply_style(c, '└', border_style);
+  }
+  for x in 1..=drop_w {
+    if let Some(c) = buf.get_mut(drop_x + x, bot_y) {
+      apply_style(c, '─', border_style);
+    }
+  }
+  if let Some(c) = buf.get_mut(drop_x + drop_w + 1, bot_y) {
+    apply_style(c, '┘', border_style);
+  }
+
+  // Draw submenu panel if one is open.
+  let Some(sub_idx) = state.menu.open_submenu else {
+    return;
+  };
+  let sub_label = items.get(sub_idx).map(|i| i.label()).unwrap_or("");
+  let sub_items = submenu_items_for(sub_label, &state.menu);
+  if sub_items.is_empty() {
+    return;
+  }
+
+  let sub_max_w = sub_items.iter().map(|s| s.len()).max().unwrap_or(10);
+  let sub_w = (sub_max_w + 2) as u16;
+  // Position submenu to the right of the main dropdown, aligned to the parent row.
+  let sub_x = drop_x + drop_w + 2;
+  let sub_top_y = y_off + 2 + sub_idx as u16; // align top with the parent item row
+
+  // Top border.
+  if let Some(c) = buf.get_mut(sub_x, sub_top_y) {
+    apply_style(c, '┌', border_style);
+  }
+  for x in 1..=sub_w {
+    if let Some(c) = buf.get_mut(sub_x + x, sub_top_y) {
+      apply_style(c, '─', border_style);
+    }
+  }
+  if let Some(c) = buf.get_mut(sub_x + sub_w + 1, sub_top_y) {
+    apply_style(c, '┐', border_style);
+  }
+
+  for (row, label) in sub_items.iter().enumerate() {
+    let dy = sub_top_y + 1 + row as u16;
+    let is_active = row == state.menu.submenu_item;
+    let (fg, bg) = if is_active {
+      (Color::Rgb(0, 0, 0), Color::Rgb(255, 255, 255))
+    } else {
+      (item_fg, item_bg)
+    };
+    let row_style = CellStyle {
+      fg,
+      bg,
+      reverse: false,
+    };
+    if let Some(c) = buf.get_mut(sub_x, dy) {
+      apply_style(c, '│', border_style);
+    }
+    for x in 1..=sub_w {
+      if let Some(c) = buf.get_mut(sub_x + x, dy) {
+        apply_style(
+          c,
+          ' ',
+          CellStyle {
+            fg: Color::Reset,
+            bg,
+            reverse: false,
+          },
+        );
+      }
+    }
+    if let Some(c) = buf.get_mut(sub_x + sub_w + 1, dy) {
+      apply_style(c, '│', border_style);
+    }
+    for (j, ch) in label.chars().enumerate() {
+      if let Some(c) = buf.get_mut(sub_x + 2 + j as u16, dy) {
+        apply_style(c, ch, row_style);
+      }
+    }
+  }
+
+  // Bottom border.
+  let sub_bot_y = sub_top_y + 1 + sub_items.len() as u16;
+  if let Some(c) = buf.get_mut(sub_x, sub_bot_y) {
+    apply_style(c, '└', border_style);
+  }
+  for x in 1..=sub_w {
+    if let Some(c) = buf.get_mut(sub_x + x, sub_bot_y) {
+      apply_style(c, '─', border_style);
+    }
+  }
+  if let Some(c) = buf.get_mut(sub_x + sub_w + 1, sub_bot_y) {
+    apply_style(c, '┘', border_style);
   }
 }
 

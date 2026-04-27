@@ -57,6 +57,12 @@ pub struct MenuState {
   pub active_menu: Option<MenuId>,
   /// Row index of the highlighted dropdown item (includes delimiter rows).
   pub active_item: usize,
+  /// Index of the focused tab when no dropdown is open.
+  pub focused_tab: usize,
+  /// Item index of the currently open submenu (if any).
+  pub open_submenu: Option<usize>,
+  /// Selected row within the open submenu.
+  pub submenu_item: usize,
   /// MIDI output device names, updated at startup and on device change.
   pub midi_output_devices: Vec<String>,
   /// MIDI input device names.
@@ -107,6 +113,9 @@ pub struct AppState {
 
   /// Keyboard focus.
   pub focus: Focus,
+
+  /// Whether the menubar is visible (toggled with Ctrl+b, default hidden).
+  pub show_menubar: bool,
 }
 
 impl Default for AppState {
@@ -137,6 +146,7 @@ impl Default for AppState {
       width: 0,
       height: 0,
       focus: Focus::RegexInput,
+      show_menubar: false,
     }
   }
 }
