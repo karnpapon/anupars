@@ -458,10 +458,9 @@ impl<T: Printable + Copy> Matrix<T> {
           };
         }
 
-        // focus dim (only cells outside the playhead x-band)
         if *focus_mode
           && !is_in_playhead_area
-          && (x < playhead_area.left() || x >= playhead_area.right())
+          && (x < playhead_area.left() || x > playhead_area.right())
         {
           final_ch = ch;
           final_style = style_dim;
