@@ -533,12 +533,7 @@ impl<T: Printable + Copy> Matrix<T> {
 /// Draw a centered modal dialog box.
 /// `lines` is the content, one string per row.
 /// Lines starting with "press" are rendered dimmed as a hint.
-pub fn draw_dialog(
-  buf: &mut ScreenBuffer,
-  screen_w: u16,
-  screen_h: u16,
-  lines: &[&str],
-) {
+pub fn draw_dialog(buf: &mut ScreenBuffer, screen_w: u16, screen_h: u16, lines: &[&str]) {
   let inner_w = lines.iter().map(|l| l.len()).max().unwrap_or(16) + 4;
   let inner_h = lines.len() + 2;
   let dw = inner_w as u16;
@@ -547,12 +542,30 @@ pub fn draw_dialog(
   let y0 = (screen_h / 2).saturating_sub(dh / 2);
 
   let bg = Color::Reset;
-  let border_style = CellStyle { fg: Color::Rgb(200, 200, 200), bg, reverse: false };
-  let text_style = CellStyle { fg: Color::Rgb(200, 200, 200), bg, reverse: false };
-  let dim_style = CellStyle { fg: Color::Rgb(80, 80, 80), bg, reverse: false };
+  let border_style = CellStyle {
+    fg: Color::Rgb(200, 200, 200),
+    bg,
+    reverse: false,
+  };
+  let text_style = CellStyle {
+    fg: Color::Rgb(200, 200, 200),
+    bg,
+    reverse: false,
+  };
+  let dim_style = CellStyle {
+    fg: Color::Rgb(80, 80, 80),
+    bg,
+    reverse: false,
+  };
 
   for x in 0..=dw + 1 {
-    let ch = if x == 0 { '┌' } else if x == dw + 1 { '┐' } else { '─' };
+    let ch = if x == 0 {
+      '┌'
+    } else if x == dw + 1 {
+      '┐'
+    } else {
+      '─'
+    };
     if let Some(c) = buf.get_mut(x0 + x, y0) {
       apply_style(c, ch, border_style);
     }
@@ -564,7 +577,15 @@ pub fn draw_dialog(
     }
     for x in 1..=dw {
       if let Some(c) = buf.get_mut(x0 + x, dy) {
-        apply_style(c, ' ', CellStyle { fg: Color::Reset, bg, reverse: false });
+        apply_style(
+          c,
+          ' ',
+          CellStyle {
+            fg: Color::Reset,
+            bg,
+            reverse: false,
+          },
+        );
       }
     }
     if let Some(c) = buf.get_mut(x0 + dw + 1, dy) {
@@ -583,7 +604,13 @@ pub fn draw_dialog(
   }
   let ybot = y0 + dh - 1;
   for x in 0..=dw + 1 {
-    let ch = if x == 0 { '└' } else if x == dw + 1 { '┘' } else { '─' };
+    let ch = if x == 0 {
+      '└'
+    } else if x == dw + 1 {
+      '┘'
+    } else {
+      '─'
+    };
     if let Some(c) = buf.get_mut(x0 + x, ybot) {
       apply_style(c, ch, border_style);
     }

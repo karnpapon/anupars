@@ -83,7 +83,6 @@ fn menu_items(id: MenuId, state: &MenuState) -> Vec<Item> {
   match id {
     MenuId::App => {
       let clock_on = consts::CLOCK_ENABLED.load(Ordering::Relaxed);
-      let focus_on = consts::FOCUS_MODE.load(Ordering::Relaxed);
       vec![
         Item::Action("Insert File".into()),
         Item::Delimiter,
