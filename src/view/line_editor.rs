@@ -53,65 +53,91 @@ impl LineEditor {
     i
   }
 
+  pub fn insert_char(&mut self, c: char) -> LineEditorAction {
+    self.buf.insert(self.cursor, c);
+    self.cursor += c.len_utf8();
+    LineEditorAction::Changed
+  }
+
+  pub fn backspace(&mut self) -> LineEditorAction {
+    if self.cursor > 0 {
+      let prev = self.prev_char_boundary();
+      self.buf.drain(prev..self.cursor);
+      self.cursor = prev;
+      LineEditorAction::Changed
+    } else {
+      LineEditorAction::None
+    }
+  }
+
+  pub fn delete_forward(&mut self) -> LineEditorAction {
+    if self.cursor < self.buf.len() {
+      let next = self.next_char_boundary();
+      self.buf.drain(self.cursor..next);
+      LineEditorAction::Changed
+    } else {
+      LineEditorAction::None
+    }
+  }
+
+  pub fn move_left(&mut self) {
+    if self.cursor > 0 {
+      self.cursor = self.prev_char_boundary();
+    }
+  }
+
+  pub fn move_right(&mut self) {
+    if self.cursor < self.buf.len() {
+      self.cursor = self.next_char_boundary();
+    }
+  }
+
+  pub fn move_home(&mut self) {
+    self.cursor = 0;
+  }
+
+  pub fn move_end(&mut self) {
+    self.cursor = self.buf.len();
+  }
+
+  pub fn kill_before_cursor(&mut self) -> LineEditorAction {
+    self.buf.drain(..self.cursor);
+    self.cursor = 0;
+    LineEditorAction::Changed
+  }
+
+  pub fn kill_after_cursor(&mut self) -> LineEditorAction {
+    self.buf.truncate(self.cursor);
+    LineEditorAction::Changed
+  }
+
   /// Handle a crossterm KeyEvent and return what happened.
   #[cfg(not(target_arch = "wasm32"))]
   pub fn handle_key(&mut self, key: crossterm::event::KeyEvent) -> LineEditorAction {
     use crossterm::event::{KeyCode, KeyModifiers};
 
     match (key.modifiers, key.code) {
-      (KeyModifiers::NONE | KeyModifiers::SHIFT, KeyCode::Char(c)) => {
-        self.buf.insert(self.cursor, c);
-        self.cursor += c.len_utf8();
-        LineEditorAction::Changed
-      }
-      (_, KeyCode::Backspace) => {
-        if self.cursor > 0 {
-          let prev = self.prev_char_boundary();
-          self.buf.drain(prev..self.cursor);
-          self.cursor = prev;
-          LineEditorAction::Changed
-        } else {
-          LineEditorAction::None
-        }
-      }
-      (_, KeyCode::Delete) => {
-        if self.cursor < self.buf.len() {
-          let next = self.next_char_boundary();
-          self.buf.drain(self.cursor..next);
-          LineEditorAction::Changed
-        } else {
-          LineEditorAction::None
-        }
-      }
+      (KeyModifiers::NONE | KeyModifiers::SHIFT, KeyCode::Char(c)) => self.insert_char(c),
+      (_, KeyCode::Backspace) => self.backspace(),
+      (_, KeyCode::Delete) => self.delete_forward(),
       (_, KeyCode::Left) => {
-        if self.cursor > 0 {
-          self.cursor = self.prev_char_boundary();
-        }
+        self.move_left();
         LineEditorAction::None
       }
       (_, KeyCode::Right) => {
-        if self.cursor < self.buf.len() {
-          self.cursor = self.next_char_boundary();
-        }
+        self.move_right();
         LineEditorAction::None
       }
       (_, KeyCode::Home) | (KeyModifiers::CONTROL, KeyCode::Char('a')) => {
-        self.cursor = 0;
+        self.move_home();
         LineEditorAction::None
       }
       (_, KeyCode::End) | (KeyModifiers::CONTROL, KeyCode::Char('e')) => {
-        self.cursor = self.buf.len();
+        self.move_end();
         LineEditorAction::None
       }
-      (KeyModifiers::CONTROL, KeyCode::Char('u')) => {
-        self.buf.drain(..self.cursor);
-        self.cursor = 0;
-        LineEditorAction::Changed
-      }
-      (KeyModifiers::CONTROL, KeyCode::Char('k')) => {
-        self.buf.truncate(self.cursor);
-        LineEditorAction::Changed
-      }
+      (KeyModifiers::CONTROL, KeyCode::Char('u')) => self.kill_before_cursor(),
+      (KeyModifiers::CONTROL, KeyCode::Char('k')) => self.kill_after_cursor(),
       (_, KeyCode::Enter) => LineEditorAction::Submit(self.buf.clone()),
       _ => LineEditorAction::None,
     }

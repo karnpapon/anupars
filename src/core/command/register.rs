@@ -293,6 +293,34 @@ impl CommandManager {
     }
   }
 
+  /// Return a reference to the stored playhead sender.
+  pub fn playhead_tx(&self) -> &Sender<playhead::Message> {
+    &self.playhead_tx_cloned
+  }
+
+  /// Look up `key` in the binding table and execute any matching commands.
+  /// Accepts the same key string format used in `binding.rs` (e.g. "Space", "Ctrl+f").
+  /// Returns true if at least one command was executed.
+  #[cfg(target_arch = "wasm32")]
+  pub fn dispatch_command_str(
+    &self,
+    key: &str,
+    state: &mut AppState,
+    grid: &mut GridEditor,
+    should_quit: &mut bool,
+  ) -> bool {
+    let kb = self.bindings.borrow();
+    if let Some(commands) = kb.get(key) {
+      let commands = commands.clone();
+      drop(kb);
+      for cmd in &commands {
+        self.execute_command(cmd, state, grid, should_quit);
+      }
+      return true;
+    }
+    false
+  }
+
   /// Dispatch a crossterm key event. Returns true if the key was consumed.
   #[cfg(not(target_arch = "wasm32"))]
   pub fn dispatch_key(

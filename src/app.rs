@@ -465,6 +465,8 @@ pub fn run_event_loop(
     }
 
     grid.playhead_ui = state.playhead_ui.clone();
+    grid.playhead_ui.focus_mode =
+      consts::FOCUS_MODE.load(std::sync::atomic::Ordering::Relaxed);
     grid.is_canvas_focused = matches!(state.focus, Focus::Grid);
 
     // Advance symspell animation if one is running.

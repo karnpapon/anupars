@@ -1,7 +1,7 @@
 use std::collections::BTreeSet;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::mpsc::{channel, Sender};
+use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::Arc;
 use std::sync::Mutex;
 #[cfg(not(target_arch = "wasm32"))]

@@ -279,13 +279,21 @@ pub fn wasm_init(cols: u32, rows: u32) {
     committed_tempo,
   };
 
+  use crate::view::consts::{CONSOLE_HEIGHT, PADDING_X, PADDING_Y};
   let playhead_tx = components.playhead_tx.clone();
   let mut grid = GridEditor::new(playhead_tx);
   grid.regex_tx = Some(regex_tx);
-  grid.resize(crate::core::geom::Vec2::new(cols as usize, rows as usize));
+  let init_w = cols as u16;
+  let init_h = rows as u16;
+  let grid_w = init_w.saturating_sub(PADDING_X * 2) as usize;
+  let grid_h = init_h.saturating_sub(CONSOLE_HEIGHT + 2 + PADDING_Y * 2) as usize;
+  grid.resize(crate::core::geom::Vec2::new(grid_w, grid_h));
 
   let mut state = AppState::default();
   state.resize(cols as u16, rows as u16);
+  state.focus = Focus::Grid;
+  state.midi_status = ctx.midi.out_device_name();
+  grid.is_canvas_focused = true;
 
   set_grid_contents(&mut grid, crate::core::consts::MANIFESTO_TEXT.to_string());
 
@@ -344,6 +352,8 @@ pub fn wasm_step(elapsed_ms: f64) {
 
         // Sync grid's PlayheadUI from AppState.
         ui.grid.playhead_ui = ui.state.playhead_ui.clone();
+        ui.grid.playhead_ui.focus_mode =
+          crate::core::consts::FOCUS_MODE.load(std::sync::atomic::Ordering::Relaxed);
 
         // Advance symspell animation.
         if let Some(tick) = sym_state.advance_anim_frame() {
@@ -362,19 +372,122 @@ pub fn wasm_step(elapsed_ms: f64) {
 }
 
 fn draw_wasm_frame(state: &AppState, grid: &GridEditor, buf: &mut ScreenBuffer) {
+  use crate::terminal::cell::Color;
   use crate::view::console::draw_console;
-  use crate::view::consts::CONSOLE_HEIGHT;
+  use crate::view::consts::{CONSOLE_HEIGHT, PADDING_X, PADDING_Y};
   use crate::view::menubar::draw_menubar;
+  use crate::view::printer::{apply_style, draw_dialog, CellStyle};
 
   buf.clear();
-  let (w, h) = (buf.width, buf.height);
+  let w = buf.width;
 
-  draw_menubar(state, buf, 0);
-  grid.draw_to_buf(buf, 0, 1);
+  let bx0 = PADDING_X.saturating_sub(1);
+  let bx1 = w.saturating_sub(PADDING_X);
+  let by0 = PADDING_Y;
+  let by1 = 1 + PADDING_Y + CONSOLE_HEIGHT;
+  let focused = matches!(state.focus, crate::app_state::Focus::RegexInput);
+  let border_col = if focused {
+    Color::Rgb(255, 255, 255)
+  } else {
+    Color::Rgb(60, 60, 60)
+  };
+  let bstyle = CellStyle { fg: border_col, bg: Color::Reset, reverse: false };
 
-  if h > CONSOLE_HEIGHT {
-    let console_y = h - CONSOLE_HEIGHT;
-    draw_console(state, buf, 0, console_y, w, CONSOLE_HEIGHT);
+  for x in bx0..=bx1 {
+    let top_ch = if x == bx0 { '┌' } else if x == bx1 { '┐' } else { '─' };
+    let bot_ch = if x == bx0 { '└' } else if x == bx1 { '┘' } else { '─' };
+    if let Some(c) = buf.get_mut(x, by0) { apply_style(c, top_ch, bstyle); }
+    if let Some(c) = buf.get_mut(x, by1) { apply_style(c, bot_ch, bstyle); }
+  }
+  for y in by0 + 1..by1 {
+    if let Some(c) = buf.get_mut(bx0, y) { apply_style(c, '│', bstyle); }
+    if let Some(c) = buf.get_mut(bx1, y) { apply_style(c, '│', bstyle); }
+  }
+
+  draw_console(state, buf, PADDING_X, 1 + PADDING_Y, w, CONSOLE_HEIGHT);
+  grid.draw_to_buf(buf, PADDING_X, 2 + PADDING_Y + CONSOLE_HEIGHT);
+
+  if state.show_menubar {
+    draw_menubar(state, buf, 0);
+  }
+
+  if state.show_about {
+    let mut lines: Vec<String> = vec![
+      format!("{}  v{}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION")),
+      String::new(),
+    ];
+    let words: Vec<&str> = env!("CARGO_PKG_DESCRIPTION").split_whitespace().collect();
+    for chunk in words.chunks(6) {
+      lines.push(chunk.join(" "));
+    }
+    lines.push(String::new());
+    lines.push("press any key to close".to_string());
+    let refs: Vec<&str> = lines.iter().map(|s| s.as_str()).collect();
+    draw_dialog(buf, state.width, state.height, &refs);
+  }
+
+  if state.show_docs {
+    draw_dialog(
+      buf,
+      state.width,
+      state.height,
+      &["docs", "", "coming soon...", "", "press any key to close"],
+    );
+  }
+}
+
+/// Map a WasmKey to the binding string used in binding.rs (e.g. "Space", "Ctrl+f").
+/// Returns None for keys handled elsewhere (Esc, Ctrl+b, grid nav keys).
+fn wasm_key_to_binding(key: &WasmKey) -> Option<&'static str> {
+  match key {
+    WasmKey::Char(' ') => Some("Space"),
+    WasmKey::Char('q') => Some("q"),
+    WasmKey::Char('>') => Some(">"),
+    WasmKey::Char('<') => Some("<"),
+    WasmKey::Char('}') => Some("}"),
+    WasmKey::Char('{') => Some("{"),
+    WasmKey::Char('~') => Some("~"),
+    WasmKey::Char('!') => Some("!"),
+    WasmKey::Char('i') => Some("i"),
+    WasmKey::Char('p') => Some("p"),
+    WasmKey::Char('I') => Some("I"),
+    WasmKey::Char('P') => Some("P"),
+    WasmKey::Char('|') => Some("Pipe"),
+    WasmKey::Char('@') => Some("@"),
+    WasmKey::Char('[') => Some("["),
+    WasmKey::Char(']') => Some("]"),
+    WasmKey::Char('+') => Some("Shift+Plus"),
+    WasmKey::Char('_') => Some("Shift+Underscore"),
+    WasmKey::Char('=') => Some("Equal"),
+    WasmKey::Char('-') => Some("Minus"),
+    WasmKey::Ctrl('f') => Some("Ctrl+f"),
+    WasmKey::Ctrl('r') => Some("Ctrl+r"),
+    WasmKey::Ctrl('d') => Some("Ctrl+d"),
+    WasmKey::Ctrl('p') => Some("Ctrl+p"),
+    WasmKey::Ctrl('a') => Some("Ctrl+a"),
+    WasmKey::Ctrl('u') => Some("Ctrl+u"),
+    WasmKey::Ctrl('e') => Some("Ctrl+e"),
+    WasmKey::Ctrl('n') => Some("Ctrl+n"),
+    WasmKey::Ctrl('s') => Some("Ctrl+s"),
+    WasmKey::Ctrl('o') => Some("Ctrl+o"),
+    WasmKey::Ctrl('y') => Some("Ctrl+y"),
+    WasmKey::Ctrl('z') => Some("Ctrl+z"),
+    WasmKey::Ctrl('t') => Some("Ctrl+t"),
+    _ => None,
+  }
+}
+
+/// Map a WasmKey to the platform-independent MenuNavKey for menu navigation.
+fn wasm_key_to_menu_nav(key: &WasmKey) -> crate::view::menubar::MenuNavKey {
+  use crate::view::menubar::MenuNavKey;
+  match key {
+    WasmKey::Left => MenuNavKey::Left,
+    WasmKey::Right => MenuNavKey::Right,
+    WasmKey::Up => MenuNavKey::Up,
+    WasmKey::Down => MenuNavKey::Down,
+    WasmKey::Enter => MenuNavKey::Enter,
+    WasmKey::Esc => MenuNavKey::Esc,
+    _ => MenuNavKey::Other,
   }
 }
 
@@ -395,87 +508,226 @@ pub fn wasm_send_key(key: String) {
 fn dispatch_wasm_key(key: WasmKey, ui: &mut WasmUiCtx, should_quit: &mut bool) {
   use crate::core::consts;
   use crate::core::playhead::Direction;
+  use crate::view::menubar::{handle_menu_nav, MenuAction};
+
+  // Dismiss dialogs on any key.
+  if ui.state.show_about || ui.state.show_docs {
+    ui.state.show_about = false;
+    ui.state.show_docs = false;
+    return;
+  }
 
   match ui.state.focus {
     Focus::RegexInput => {
-      if matches!(key, WasmKey::Esc) {
-        ui.state.focus = Focus::Grid;
-        ui.grid.is_canvas_focused = true;
-      }
-      // TODO: line editor key handling for WASM
-    }
-    Focus::Menu => {
-      if matches!(key, WasmKey::Esc) {
-        ui.state.focus = Focus::Grid;
-      }
-      // TODO: full menu key handling for WASM
-    }
-    Focus::Grid => {
-      let consumed = match &key {
-        WasmKey::Char('h') => ui.grid.commit_or_move(Direction::Left),
-        WasmKey::Char('j') => ui.grid.commit_or_move(Direction::Down),
-        WasmKey::Char('k') => ui.grid.commit_or_move(Direction::Up),
-        WasmKey::Char('l') => ui.grid.commit_or_move(Direction::Right),
-        WasmKey::Char('H') => ui.grid.scale_action((-1, 0)),
-        WasmKey::Char('J') => ui.grid.scale_action((0, -1)),
-        WasmKey::Char('K') => ui.grid.scale_action((0, 1)),
-        WasmKey::Char('L') => ui.grid.scale_action((1, 0)),
-        WasmKey::Alt('h') => ui
-          .grid
-          .alt_action(Direction::Left, consts::MOVE_X_STEP_SIZE),
-        WasmKey::Alt('j') => ui
-          .grid
-          .alt_action(Direction::Down, consts::MOVE_Y_STEP_SIZE),
-        WasmKey::Alt('k') => ui.grid.alt_action(Direction::Up, consts::MOVE_Y_STEP_SIZE),
-        WasmKey::Alt('l') => ui
-          .grid
-          .alt_action(Direction::Right, consts::MOVE_X_STEP_SIZE),
-        WasmKey::Ctrl('h') => {
-          ui.grid.start_aim_if_needed();
-          ui.grid.update_aim(Direction::Left, 1)
+      let changed = match &key {
+        WasmKey::Esc => {
+          ui.state.focus = Focus::Grid;
+          ui.grid.is_canvas_focused = true;
+          false
         }
-        WasmKey::Ctrl('j') => {
-          ui.grid.start_aim_if_needed();
-          ui.grid.update_aim(Direction::Down, 1)
+        WasmKey::Char(c) => {
+          matches!(ui.state.line_editor.insert_char(*c), crate::view::line_editor::LineEditorAction::Changed)
+        }
+        WasmKey::Backspace => {
+          matches!(ui.state.line_editor.backspace(), crate::view::line_editor::LineEditorAction::Changed)
+        }
+        WasmKey::Delete => {
+          matches!(ui.state.line_editor.delete_forward(), crate::view::line_editor::LineEditorAction::Changed)
+        }
+        WasmKey::Left => { ui.state.line_editor.move_left(); false }
+        WasmKey::Right => { ui.state.line_editor.move_right(); false }
+        WasmKey::Home => { ui.state.line_editor.move_home(); false }
+        WasmKey::End => { ui.state.line_editor.move_end(); false }
+        WasmKey::Ctrl('a') => { ui.state.line_editor.move_home(); false }
+        WasmKey::Ctrl('e') => { ui.state.line_editor.move_end(); false }
+        WasmKey::Ctrl('u') => {
+          matches!(ui.state.line_editor.kill_before_cursor(), crate::view::line_editor::LineEditorAction::Changed)
         }
         WasmKey::Ctrl('k') => {
-          ui.grid.start_aim_if_needed();
-          ui.grid.update_aim(Direction::Up, 1)
-        }
-        WasmKey::Ctrl('l') => {
-          ui.grid.start_aim_if_needed();
-          ui.grid.update_aim(Direction::Right, 1)
-        }
-        WasmKey::Char(c) if ('1'..='7').contains(c) => {
-          ui.grid.sgr_leak_state = 0;
-          ui.grid.handle_split_char(*c)
+          matches!(ui.state.line_editor.kill_after_cursor(), crate::view::line_editor::LineEditorAction::Changed)
         }
         _ => false,
       };
 
-      if !consumed {
-        dispatch_wasm_command(&key, ui, should_quit);
+      if changed {
+        let pattern = ui.state.line_editor.content().to_string();
+        if let Some(ref tx) = ui.grid.regex_tx {
+          if pattern.is_empty() {
+            let _ = tx.send(crate::core::engine::regex::Message::Clear);
+          } else {
+            let _ = tx.send(crate::core::engine::regex::Message::Solve(
+              crate::core::engine::regex::EventData {
+                text: ui.grid.text_contents(),
+                pattern,
+                flags: ui.state.flags.to_flag_str().to_string(),
+                grid_width: ui.grid.grid.width,
+              },
+            ));
+          }
+        }
       }
     }
-  }
-}
 
-fn dispatch_wasm_command(key: &WasmKey, ui: &mut WasmUiCtx, should_quit: &mut bool) -> bool {
-  match key {
-    WasmKey::Char('q') => {
-      *should_quit = true;
-      true
+    Focus::Menu => {
+      // Ctrl+b while menu is open closes the menubar.
+      if matches!(&key, WasmKey::Ctrl('b')) {
+        ui.state.show_menubar = false;
+        ui.state.focus = Focus::Grid;
+        ui.state.menu.visible = false;
+        ui.state.menu.active_menu = None;
+        return;
+      }
+
+      let nav = wasm_key_to_menu_nav(&key);
+      let action = handle_menu_nav(&mut ui.state.menu, nav);
+      let mut close_after = false;
+      match action {
+        MenuAction::None => {}
+        MenuAction::Close => {
+          ui.state.show_menubar = false;
+          ui.state.focus = Focus::Grid;
+        }
+        MenuAction::Quit => *should_quit = true,
+        MenuAction::ToggleClock => {
+          use std::sync::atomic::Ordering;
+          let was = consts::CLOCK_ENABLED.load(Ordering::Relaxed);
+          consts::CLOCK_ENABLED.store(!was, Ordering::Relaxed);
+        }
+        MenuAction::ToggleFocus => {
+          use std::sync::atomic::Ordering;
+          let was = consts::FOCUS_MODE.load(Ordering::Relaxed);
+          consts::FOCUS_MODE.store(!was, Ordering::Relaxed);
+        }
+        MenuAction::ReleaseAll => close_after = true,
+        MenuAction::ClearQueue => {
+          let _ = ui
+            .cmd_mgr
+            .playhead_tx()
+            .send(crate::core::playhead::Message::ClearQueue());
+          close_after = true;
+        }
+        MenuAction::InsertFile => close_after = true,
+        MenuAction::About => {
+          ui.state.show_about = true;
+          close_after = true;
+        }
+        MenuAction::ShowDocs => {
+          ui.state.show_docs = true;
+          close_after = true;
+        }
+        MenuAction::MidiOutputSelected(_) | MenuAction::MidiInputSelected(_) => {
+          close_after = true;
+        }
+        MenuAction::ScaleLeftSelected(idx) => {
+          use crate::core::tonal::scale::ScaleMode;
+          if let Some(mode) = ScaleMode::all().get(idx) {
+            let _ = ui
+              .cmd_mgr
+              .playhead_tx()
+              .send(crate::core::playhead::Message::SetScaleModeLeft(*mode));
+          }
+          close_after = true;
+        }
+        MenuAction::ScaleTopSelected(idx) => {
+          use crate::core::tonal::scale::ScaleMode;
+          if let Some(mode) = ScaleMode::all().get(idx) {
+            let _ = ui
+              .cmd_mgr
+              .playhead_tx()
+              .send(crate::core::playhead::Message::SetScaleModeTop(*mode));
+          }
+          close_after = true;
+        }
+        MenuAction::ScaleRootSelected(idx) => {
+          use crate::core::tonal::scale::ScaleRoot;
+          if let Some(root) = ScaleRoot::all().get(idx) {
+            let _ = ui
+              .cmd_mgr
+              .playhead_tx()
+              .send(crate::core::playhead::Message::SetScaleRootTop(*root));
+          }
+          close_after = true;
+        }
+      }
+      if close_after {
+        ui.state.show_menubar = false;
+        ui.state.menu.active_menu = None;
+        ui.state.focus = Focus::Grid;
+      }
     }
-    WasmKey::Ctrl('b') => {
-      ui.state.focus = Focus::Menu;
-      true
+
+    Focus::Grid => {
+      // Ctrl+b toggles menubar (handled before cmd_mgr, mirrors native behavior).
+      if matches!(&key, WasmKey::Ctrl('b')) {
+        ui.state.show_menubar = !ui.state.show_menubar;
+        if ui.state.show_menubar {
+          ui.state.focus = Focus::Menu;
+          ui.state.menu.visible = true;
+          ui.state.menu.active_menu = None;
+          ui.state.menu.focused_tab = 0;
+        } else {
+          ui.state.menu.visible = false;
+          ui.state.menu.active_menu = None;
+        }
+        return;
+      }
+
+      // Esc switches to RegexInput (same as native Grid focus handler).
+      if matches!(&key, WasmKey::Esc) {
+        ui.state.focus = Focus::RegexInput;
+        ui.grid.is_canvas_focused = false;
+        return;
+      }
+
+      // Try command bindings (Space, q, >, <, Ctrl+f, Ctrl+r, etc.).
+      if let Some(key_str) = wasm_key_to_binding(&key) {
+        if ui
+          .cmd_mgr
+          .dispatch_command_str(key_str, &mut ui.state, &mut ui.grid, should_quit)
+        {
+          return;
+        }
+      }
+
+      // Grid navigation and split-char keys.
+      match &key {
+        WasmKey::Char('h') => { ui.grid.commit_or_move(Direction::Left); }
+        WasmKey::Char('j') => { ui.grid.commit_or_move(Direction::Down); }
+        WasmKey::Char('k') => { ui.grid.commit_or_move(Direction::Up); }
+        WasmKey::Char('l') => { ui.grid.commit_or_move(Direction::Right); }
+        WasmKey::Char('H') => { ui.grid.scale_action((-1, 0)); }
+        WasmKey::Char('J') => { ui.grid.scale_action((0, -1)); }
+        WasmKey::Char('K') => { ui.grid.scale_action((0, 1)); }
+        WasmKey::Char('L') => { ui.grid.scale_action((1, 0)); }
+        WasmKey::Alt('h') => { ui.grid.alt_action(Direction::Left, consts::MOVE_X_STEP_SIZE); }
+        WasmKey::Alt('j') => { ui.grid.alt_action(Direction::Down, consts::MOVE_Y_STEP_SIZE); }
+        WasmKey::Alt('k') => { ui.grid.alt_action(Direction::Up, consts::MOVE_Y_STEP_SIZE); }
+        WasmKey::Alt('l') => { ui.grid.alt_action(Direction::Right, consts::MOVE_X_STEP_SIZE); }
+        WasmKey::Ctrl('h') => {
+          ui.grid.start_aim_if_needed();
+          ui.grid.update_aim(Direction::Left, 1);
+        }
+        WasmKey::Ctrl('j') => {
+          ui.grid.start_aim_if_needed();
+          ui.grid.update_aim(Direction::Down, 1);
+        }
+        WasmKey::Ctrl('k') => {
+          ui.grid.start_aim_if_needed();
+          ui.grid.update_aim(Direction::Up, 1);
+        }
+        WasmKey::Ctrl('l') => {
+          ui.grid.start_aim_if_needed();
+          ui.grid.update_aim(Direction::Right, 1);
+        }
+        WasmKey::Char(c) if ('1'..='7').contains(c) => {
+          ui.grid.sgr_leak_state = 0;
+          ui.grid.handle_split_char(*c);
+        }
+        _ => {
+          ui.grid.sgr_leak_state = 0;
+        }
+      }
     }
-    WasmKey::Esc => {
-      ui.state.focus = Focus::RegexInput;
-      ui.grid.is_canvas_focused = false;
-      true
-    }
-    _ => false,
   }
 }
 
@@ -490,9 +742,15 @@ pub fn wasm_render() -> String {
 /// `button` - 0=left, 1=middle, 2=right
 #[wasm_bindgen]
 pub fn wasm_send_mouse(kind: u8, _button: u8, col: u32, row: u32) {
+  use crate::view::consts::{CONSOLE_HEIGHT, PADDING_X, PADDING_Y};
+
   UI.with(|u| {
     if let Some(ui) = u.borrow_mut().as_mut() {
-      let position = crate::core::geom::Vec2::new(col as usize, row as usize);
+      let panel_x = PADDING_X as usize;
+      let panel_y = (2 + PADDING_Y + CONSOLE_HEIGHT) as usize;
+      let adj_col = (col as usize).saturating_sub(panel_x.saturating_sub(1));
+      let adj_row = (row as usize).saturating_sub(panel_y);
+      let position = crate::core::geom::Vec2::new(adj_col, adj_row);
       let offset = crate::core::geom::Vec2::zero();
       match kind {
         0 => {
@@ -510,12 +768,16 @@ pub fn wasm_send_mouse(kind: u8, _button: u8, col: u32, row: u32) {
 /// Notify the backend of a terminal resize.
 #[wasm_bindgen]
 pub fn wasm_resize(cols: u32, rows: u32) {
+  use crate::view::consts::{CONSOLE_HEIGHT, PADDING_X, PADDING_Y};
+  let w = cols as u16;
+  let h = rows as u16;
+  let grid_w = w.saturating_sub(PADDING_X * 2) as usize;
+  let grid_h = h.saturating_sub(CONSOLE_HEIGHT + 2 + PADDING_Y * 2) as usize;
   UI.with(|u| {
     if let Some(ui) = u.borrow_mut().as_mut() {
-      ui.backend.resize(cols as u16, rows as u16);
-      ui.state.resize(cols as u16, rows as u16);
-      ui.grid
-        .resize(crate::core::geom::Vec2::new(cols as usize, rows as usize));
+      ui.backend.resize(w, h);
+      ui.state.resize(w, h);
+      ui.grid.resize(crate::core::geom::Vec2::new(grid_w, grid_h));
     }
   });
 }

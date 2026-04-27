@@ -226,14 +226,23 @@ fn submenu_items_for(label: &str, state: &MenuState) -> Vec<String> {
 
 /// Handle a key event when `Focus::Menu` is active.
 /// Mutates `menu` and returns what action (if any) was confirmed.
-#[cfg(not(target_arch = "wasm32"))]
-pub fn handle_menu_key(menu: &mut MenuState, key: crossterm::event::KeyEvent) -> MenuAction {
-  use crossterm::event::KeyCode;
+/// Platform-independent directional key for menu navigation.
+pub enum MenuNavKey {
+  Left,
+  Right,
+  Up,
+  Down,
+  Enter,
+  Esc,
+  Other,
+}
 
+/// Core menu navigation logic, shared by native and WASM.
+pub fn handle_menu_nav(menu: &mut MenuState, key: MenuNavKey) -> MenuAction {
   // No dropdown open - Left/Right moves tab focus, Enter/Down expands.
   if menu.active_menu.is_none() {
-    match key.code {
-      KeyCode::Left => {
+    match key {
+      MenuNavKey::Left => {
         menu.focused_tab = if menu.focused_tab == 0 {
           MENU_TITLES.len() - 1
         } else {
@@ -241,16 +250,16 @@ pub fn handle_menu_key(menu: &mut MenuState, key: crossterm::event::KeyEvent) ->
         };
         return MenuAction::None;
       }
-      KeyCode::Right => {
+      MenuNavKey::Right => {
         menu.focused_tab = (menu.focused_tab + 1) % MENU_TITLES.len();
         return MenuAction::None;
       }
-      KeyCode::Enter | KeyCode::Down => {
+      MenuNavKey::Enter | MenuNavKey::Down => {
         menu.active_menu = Some(MENU_TITLES[menu.focused_tab].0);
         menu.active_item = 0;
         return MenuAction::None;
       }
-      KeyCode::Esc => return MenuAction::Close,
+      MenuNavKey::Esc => return MenuAction::Close,
       _ => return MenuAction::None,
     }
   }
@@ -262,25 +271,25 @@ pub fn handle_menu_key(menu: &mut MenuState, key: crossterm::event::KeyEvent) ->
   if let Some(sub_idx) = menu.open_submenu {
     let sub_label = items.get(sub_idx).map(|i| i.label()).unwrap_or("");
     let sub_items = submenu_items_for(sub_label, menu);
-    match key.code {
-      KeyCode::Up => {
+    match key {
+      MenuNavKey::Up => {
         if menu.submenu_item > 0 {
           menu.submenu_item -= 1;
         } else {
           menu.submenu_item = sub_items.len().saturating_sub(1);
         }
       }
-      KeyCode::Down => {
+      MenuNavKey::Down => {
         if menu.submenu_item + 1 < sub_items.len() {
           menu.submenu_item += 1;
         } else {
           menu.submenu_item = 0;
         }
       }
-      KeyCode::Left | KeyCode::Esc => {
+      MenuNavKey::Left | MenuNavKey::Esc => {
         menu.open_submenu = None;
       }
-      KeyCode::Enter => {
+      MenuNavKey::Enter => {
         let chosen = menu.submenu_item;
         menu.open_submenu = None;
         menu.active_menu = None;
@@ -301,8 +310,8 @@ pub fn handle_menu_key(menu: &mut MenuState, key: crossterm::event::KeyEvent) ->
     return MenuAction::None;
   }
 
-  match (key.modifiers, key.code) {
-    (_, KeyCode::Esc) => {
+  match key {
+    MenuNavKey::Esc => {
       // Collapse dropdown back to tab-row focus, don't close the whole menubar.
       let pos = MENU_TITLES
         .iter()
@@ -312,7 +321,7 @@ pub fn handle_menu_key(menu: &mut MenuState, key: crossterm::event::KeyEvent) ->
       menu.active_menu = None;
       MenuAction::None
     }
-    (_, KeyCode::Left) => {
+    MenuNavKey::Left => {
       let pos = MENU_TITLES
         .iter()
         .position(|(id, _)| *id == current_id)
@@ -327,7 +336,7 @@ pub fn handle_menu_key(menu: &mut MenuState, key: crossterm::event::KeyEvent) ->
       menu.active_item = 0;
       MenuAction::None
     }
-    (_, KeyCode::Right) => {
+    MenuNavKey::Right => {
       // Open submenu if the focused item is a Submenu, otherwise switch tab.
       if let Some(Item::Submenu(_)) = items.get(menu.active_item) {
         let sub_label = items[menu.active_item].label();
@@ -348,7 +357,7 @@ pub fn handle_menu_key(menu: &mut MenuState, key: crossterm::event::KeyEvent) ->
       menu.active_item = 0;
       MenuAction::None
     }
-    (_, KeyCode::Up) => {
+    MenuNavKey::Up => {
       let mut idx = menu.active_item;
       loop {
         idx = if idx == 0 { items.len() - 1 } else { idx - 1 };
@@ -359,7 +368,7 @@ pub fn handle_menu_key(menu: &mut MenuState, key: crossterm::event::KeyEvent) ->
       menu.active_item = idx;
       MenuAction::None
     }
-    (_, KeyCode::Down) => {
+    MenuNavKey::Down => {
       let mut idx = menu.active_item;
       loop {
         idx = (idx + 1) % items.len();
@@ -370,7 +379,7 @@ pub fn handle_menu_key(menu: &mut MenuState, key: crossterm::event::KeyEvent) ->
       menu.active_item = idx;
       MenuAction::None
     }
-    (_, KeyCode::Enter) => {
+    MenuNavKey::Enter => {
       let action = confirm_item(current_id, menu.active_item, menu);
       let is_toggle = matches!(action, MenuAction::ToggleClock | MenuAction::ToggleFocus);
       if !matches!(action, MenuAction::None) && !is_toggle {
@@ -378,8 +387,23 @@ pub fn handle_menu_key(menu: &mut MenuState, key: crossterm::event::KeyEvent) ->
       }
       action
     }
-    _ => MenuAction::None,
+    MenuNavKey::Other => MenuAction::None,
   }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+pub fn handle_menu_key(menu: &mut MenuState, key: crossterm::event::KeyEvent) -> MenuAction {
+  use crossterm::event::KeyCode;
+  let nav = match key.code {
+    KeyCode::Left => MenuNavKey::Left,
+    KeyCode::Right => MenuNavKey::Right,
+    KeyCode::Up => MenuNavKey::Up,
+    KeyCode::Down => MenuNavKey::Down,
+    KeyCode::Enter => MenuNavKey::Enter,
+    KeyCode::Esc => MenuNavKey::Esc,
+    _ => MenuNavKey::Other,
+  };
+  handle_menu_nav(menu, nav)
 }
 
 /// Map a confirmed item selection to a `MenuAction`.
