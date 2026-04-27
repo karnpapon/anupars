@@ -2,6 +2,10 @@ use std::collections::BTreeSet;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::mpsc::{channel, Sender};
+
+#[cfg(target_arch = "wasm32")]
+use std::sync::mpsc::Receiver;
+
 use std::sync::Arc;
 use std::sync::Mutex;
 #[cfg(not(target_arch = "wasm32"))]
@@ -95,7 +99,7 @@ pub struct Playhead {
 
   pub sym_state: Arc<SymSpellState>,
 
-  /// WASM only: receiver for the UI update channel, drained each frame in wasm.rs.
+  /// WASM only: receiver for the UI update channel, drained each frame in wasm.rs.  
   #[cfg(target_arch = "wasm32")]
   pub ui_rx: Mutex<Option<Receiver<UIUpdate>>>,
 
