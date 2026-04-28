@@ -3,8 +3,8 @@ use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, AtomicU8, AtomicUsize};
 use std::sync::{Arc, Mutex};
 
-use cursive::Vec2;
-use cursive::XY;
+use crate::core::geom::Vec2;
+use crate::core::geom::XY;
 
 use crate::core::command::types;
 use crate::core::consts;
@@ -117,6 +117,7 @@ impl Direction {
 
 #[derive(Clone, Debug)]
 pub enum UIUpdate {
+  // Existing canvas geometry updates (kept as-is)
   ActivePos(Vec2),
   AccumulationCounter(usize, usize),
   PlayheadPosAndArea(Vec2, Rect),
@@ -127,8 +128,50 @@ pub enum UIUpdate {
   TmpAppendSpace,
   RplCycle(Rect),
   SweepX(usize),
+
+  // Status-bar text updates
+  BpmDisplay(String),
+  RatioStatus(String),
+  PosStatus(String),
+  LenStatus(String),
+  InputStatus(String),
+  ModeStatus(String),
+  MovementStatus(String),
+  TiltStatus(String),
+  RegexMatchCount(String),
+  RegexError(String),
+
+  // Canvas field updates replacing direct cb_sink closures
+  TextMatcher {
+    matcher: Option<HashMap<usize, Match>>,
+    regex_indexes: Arc<Mutex<BTreeSet<usize>>>,
+  },
+  QueueManagerUpdate(Arc<QueueManager>),
+  CanvasPlayheadPos(Vec2),
+  CanvasPlayheadArea(Rect),
+  CanvasArpeggiatorMode(bool),
+  CanvasAccumulationMode(bool),
+  CanvasEventOperatorMode(bool),
+  CanvasDrainQueueMode(bool),
+  CanvasSweepMode(bool),
+  CanvasSweepMovement(Option<Movement>),
+  CanvasSweepOutputMode(SweepOutputMode),
+  CanvasSweepCcNumber(u8),
+  CanvasSweepRowMode(SweepRowMode),
+  CanvasTiltMode(TiltMode),
+  CanvasFreezeMode(bool),
+  CanvasDroneMode(bool, usize),
+  CanvasDroneX(usize),
+  CanvasDroneChannel(usize),
+  CanvasScaleRootTop(scale::ScaleRoot),
+  CanvasScaleRootLeft(scale::ScaleRoot),
+  CanvasScaleModeTop(scale::ScaleMode),
+  CanvasScaleModeLeft(scale::ScaleMode),
+  CanvasKeyboardTopActive(bool),
+  CurrentBar(usize),
 }
 
+#[derive(Clone)]
 pub struct PlayheadUI {
   pub playhead_area: Rect,
   pub playhead_pos: Vec2,
@@ -160,6 +203,7 @@ pub struct PlayheadUI {
   pub grid_h_splits: usize,
   pub focus_mode: bool,
   pub keyboard_top_active: bool,
+  pub current_bar: usize,
 }
 
 impl Default for PlayheadUI {
@@ -201,6 +245,7 @@ impl PlayheadUI {
       grid_h_splits: 1,
       focus_mode: false,
       keyboard_top_active: true,
+      current_bar: 0,
     }
   }
 }
@@ -213,6 +258,7 @@ pub enum Message {
   UpdateInfoStatusView(),
   SetGridArea(XY<usize>),
   SetActivePos(usize),
+  SetCurrentBar(usize),
   Scale((i32, i32)),
   SetMatcher(Option<HashMap<usize, Match>>),
   SetGridSize(usize, usize),

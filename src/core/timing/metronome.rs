@@ -4,7 +4,6 @@ use std::sync::mpsc::Receiver;
 use std::sync::mpsc::Sender;
 use std::sync::Arc;
 
-use cursive::views::TextView;
 use num_traits::ToPrimitive;
 #[cfg(not(target_arch = "wasm32"))]
 use std::time::Instant;
@@ -12,6 +11,7 @@ use std::time::Instant;
 use crate::core::consts;
 use crate::core::io::midi;
 use crate::core::playhead;
+use crate::core::playhead::UIUpdate;
 use crate::core::utils;
 
 use super::clock;
@@ -37,7 +37,7 @@ pub struct Metronome {
   pub rx: Receiver<Message>,
   pub playhead_tx: Sender<playhead::Message>,
   pub midi_tx: Option<Sender<midi::Message>>,
-  cb_sink: cursive::CbSink,
+  ui_tx: Sender<UIUpdate>,
   is_playing: Arc<AtomicBool>,
   current_position: Arc<AtomicUsize>,
   current_bpm: Arc<AtomicUsize>,
@@ -48,13 +48,13 @@ pub struct Metronome {
 }
 
 impl Metronome {
-  pub fn new(cb_sink: cursive::CbSink, playhead_tx: Sender<playhead::Message>) -> Self {
+  pub fn new(ui_tx: Sender<UIUpdate>, playhead_tx: Sender<playhead::Message>) -> Self {
     let (tx, rx) = channel();
 
     Self {
       tx,
       rx,
-      cb_sink,
+      ui_tx,
       playhead_tx,
       midi_tx: None,
       is_playing: Arc::new(AtomicBool::new(false)),
@@ -98,15 +98,8 @@ impl Metronome {
           self.current_bpm.store(bpm, Ordering::Relaxed);
           let _ = self.playhead_tx.send(playhead::Message::SetTempo(bpm));
           let _ = self
-            .cb_sink
-            .send(Box::new(move |siv: &mut cursive::Cursive| {
-              siv.call_on_name(
-                crate::core::consts::bpm_status_unit_view,
-                |v: &mut TextView| {
-                  v.set_content(crate::core::utils::build_bpm_status_str(bpm));
-                },
-              );
-            }));
+            .ui_tx
+            .send(UIUpdate::BpmDisplay(utils::build_bpm_status_str(bpm)));
         }
         Message::NudgeTempo(nudge) => {
           let old_bpm = self.current_bpm.load(Ordering::Relaxed);
@@ -114,15 +107,8 @@ impl Metronome {
           self.current_bpm.store(new_bpm, Ordering::Relaxed);
           let _ = self.playhead_tx.send(playhead::Message::SetTempo(new_bpm));
           let _ = self
-            .cb_sink
-            .send(Box::new(move |siv: &mut cursive::Cursive| {
-              siv.call_on_name(
-                crate::core::consts::bpm_status_unit_view,
-                |v: &mut TextView| {
-                  v.set_content(crate::core::utils::build_bpm_status_str(new_bpm));
-                },
-              );
-            }));
+            .ui_tx
+            .send(UIUpdate::BpmDisplay(utils::build_bpm_status_str(new_bpm)));
         }
         Message::Tap => { /* simplified: ignore in WASM */ }
         Message::ExternalClock(_) => { /* no external MIDI in WASM */ }
@@ -139,11 +125,13 @@ impl Metronome {
     let clock_tx = clock.run(metronome_tx_cloned);
     let mut ext_beat_instant: Option<Instant> = None;
 
+    let mut prev_bar: usize = usize::MAX;
+
     for control_message in self.rx {
       match control_message {
         Message::Reset => {
           clock_tx.send(clock::Message::Reset).unwrap();
-
+          prev_bar = usize::MAX;
           self.current_position.store(0, Ordering::Relaxed);
           if let Some(ref midi_tx) = self.midi_tx {
             let _ = midi_tx.send(midi::Message::ClockSongPosition(0));
@@ -199,12 +187,8 @@ impl Metronome {
               ext_beat_instant = None;
               let bpm = self.current_bpm.load(Ordering::Relaxed);
               let _ = self
-                .cb_sink
-                .send(Box::new(move |siv: &mut cursive::Cursive| {
-                  siv.call_on_name(consts::bpm_status_unit_view, |view: &mut TextView| {
-                    view.set_content(utils::build_bpm_status_str(bpm));
-                  });
-                }));
+                .ui_tx
+                .send(UIUpdate::BpmDisplay(utils::build_bpm_status_str(bpm)));
             }
             0xF8 => {
               // Timing clock: convert 24 PPQN to 16 internal ticks-per-beat
@@ -219,13 +203,7 @@ impl Metronome {
                     if elapsed_ms > 0 {
                       let bpm = (60_000 / elapsed_ms).clamp(20, 999);
                       self.current_bpm.store(bpm, Ordering::Relaxed);
-                      let _ = self
-                        .cb_sink
-                        .send(Box::new(move |siv: &mut cursive::Cursive| {
-                          siv.call_on_name(consts::bpm_status_unit_view, |view: &mut TextView| {
-                            view.set_content(format!("~{bpm}"));
-                          });
-                        }));
+                      let _ = self.ui_tx.send(UIUpdate::BpmDisplay(format!("~{bpm}")));
                     }
                   }
                 }
@@ -266,6 +244,12 @@ impl Metronome {
             .playhead_tx
             .send(playhead::Message::SetActivePos(tick))
             .unwrap();
+
+          let bar = time.bars().to_integer() as usize;
+          if bar != prev_bar {
+            prev_bar = bar;
+            let _ = self.playhead_tx.send(playhead::Message::SetCurrentBar(bar));
+          }
 
           // Send MIDI clock ticks
           // Internal: 16 ticks per quarter note (beat)

@@ -1,23 +1,6 @@
 use std::sync::mpsc::Sender;
 
-use cursive::event::Callback;
-use cursive::event::Event;
-use cursive::event::EventResult;
-use cursive::event::MouseButton;
-use cursive::event::MouseEvent;
-use cursive::theme::ColorStyle;
-use cursive::theme::ColorType;
-use cursive::theme::Style;
-use cursive::view::CannotFocus;
-use cursive::view::Nameable;
-use cursive::view::Resizable;
-use cursive::views::Canvas;
-use cursive::views::NamedView;
-use cursive::views::ResizedView;
-use cursive::views::TextView;
-use cursive::Cursive;
-use cursive::Printer;
-use cursive::Vec2;
+use crate::core::geom::Vec2;
 
 use ringbuffer::RingBuffer;
 
@@ -25,7 +8,9 @@ use crate::core::playhead::queue::EVENT_OPERATORS;
 use crate::core::playhead::queue::QUEUE_OPERATORS;
 use crate::core::playhead::PlayheadUI;
 use crate::core::{consts, playhead::queue::PendingJumpPosition};
-use crate::view::printer::Matrix;
+use crate::terminal::buffer::ScreenBuffer;
+use crate::terminal::cell::Color;
+use crate::view::printer::{apply_style, CellStyle, Matrix};
 
 use consts::BASE_OCTAVE;
 use consts::KEYBOARD_MARGIN_BOTTOM;
@@ -48,7 +33,12 @@ pub struct GridEditor {
   pub regex_tx: Option<Sender<regex::Message>>,
   pub last_pattern: String,
   pub last_flag_str: String,
-  sgr_leak_state: u8,
+  pub sgr_leak_state: u8,
+  pub dice_face: u8,
+  pub dice_enabled: bool,
+  pub dice_labels: Vec<(char, u8)>,
+  pub prev_dice_active_dot: Option<usize>,
+  pub dice_bars_div: usize,
 }
 
 impl GridEditor {
@@ -65,6 +55,11 @@ impl GridEditor {
       last_pattern: String::new(),
       last_flag_str: String::new(),
       sgr_leak_state: 0,
+      dice_face: 4,
+      dice_enabled: false,
+      dice_labels: vec![],
+      prev_dice_active_dot: None,
+      dice_bars_div: 1,
     }
   }
 
@@ -110,349 +105,6 @@ impl GridEditor {
       octave,
       NOTE_NAMES[note_index.round() as usize % 12],
     )
-  }
-
-  /// Draw the keyboard visualization on the top margin
-  fn draw_keyboard_top(&self, printer: &Printer) {
-    if !self.show_keyboard || self.grid.height == 0 || self.grid.width == 0 {
-      return;
-    }
-
-    let abs_active_x = self.playhead_ui.playhead_pos.x + self.playhead_ui.actived_pos.x;
-    for x in 0..self.grid.width {
-      let y_pos = x % self.grid.height;
-      let (note_index, octave, note_name) = self.y_to_note_top(y_pos);
-
-      let is_black_key = matches!(note_index.round() as u8, 1 | 3 | 6 | 8 | 10); // C#, D#, F#, G#, A#
-
-      let style = if x == abs_active_x {
-        if note_name == "C" {
-          Style::from(ColorStyle::new(
-            ColorType::rgb(0, 0, 0),
-            ColorType::rgb(255, 255, 255),
-          ))
-        } else {
-          Style::from(ColorStyle::front(ColorType::rgb(255, 255, 255)))
-        }
-      } else if note_name == "C" {
-        Style::from(ColorStyle::new(
-          ColorType::rgb(0, 0, 0),
-          ColorType::rgb(100, 100, 100),
-        ))
-      } else {
-        Style::from(ColorStyle::front(ColorType::rgb(100, 100, 100)))
-      };
-
-      printer.with_style(style, |printer| {
-        if is_black_key {
-          printer.print((x, 0), "#");
-        } else if note_name == "C" {
-          printer.print((x, 0), " ");
-          printer.print((x, 1), &octave.to_string());
-        } else {
-          printer.print((x, 0), "━");
-        }
-      });
-    }
-  }
-
-  fn draw_keyboard_left(&self, printer: &Printer) {
-    if !self.show_keyboard || self.grid.height == 0 {
-      return;
-    }
-
-    for y in 0..self.grid.height {
-      let (note_index, octave, note_name) = self.y_to_note_left(y);
-
-      // Determine text color based on note (white/black keys)
-      let is_black_key = matches!(note_index.round() as u8, 1 | 3 | 6 | 8 | 10); // C#, D#, F#, G#, A#
-
-      let text_color = if is_black_key {
-        ColorType::rgb(50, 50, 50)
-      } else {
-        ColorType::rgb(100, 100, 100)
-      };
-
-      let style = Style::from(ColorStyle::front(text_color));
-
-      // Format note label (e.g., "C3", "D#4")
-      let label = format!("{}{}", note_name, octave);
-      let symbol = if note_name == "C" { "┣" } else { "┃" };
-
-      printer.with_style(style, |printer| {
-        printer.print((0, y), &label);
-        printer.print((3, y), &":".repeat(KEYBOARD_MARGIN_LEFT - 6));
-        printer.print((KEYBOARD_MARGIN_LEFT - 2, y), symbol);
-      });
-    }
-  }
-
-  fn draw_queue_right(&self, printer: &Printer) {
-    if !self.show_keyboard || self.grid.height == 0 {
-      return;
-    }
-
-    let total_height = self.grid.height;
-    let half_height = total_height / 2;
-
-    let style = Style::from(ColorStyle::front(ColorType::rgb(100, 100, 100)));
-    // let dimmed_style = Style::from(ColorStyle::front(ColorType::rgb(50, 50, 50)));
-
-    // Top half: EVQ (Event Queue)
-    // Read and display event queue items (bottom-aligned)
-    let event_queue = self.playhead_ui.queue_manager.event_queue.lock().unwrap();
-    let evq_items: Vec<String> = event_queue
-      .iter()
-      .map(|op| op.get_event_name().to_string())
-      .collect();
-    drop(event_queue);
-
-    let evq_start_y = if evq_items.len() >= half_height - 2 {
-      0
-    } else {
-      half_height.saturating_sub(evq_items.len() + 2)
-    };
-
-    // Draw empty queue placeholder blocks for EVQ
-    for y in 0..(evq_start_y + 1) {
-      let placeholder_color = if y % 2 == 0 {
-        ColorType::rgb(50, 50, 50)
-      } else {
-        ColorType::rgb(70, 70, 70)
-      };
-      let placeholder_style = Style::from(ColorStyle::front(placeholder_color));
-      printer.with_style(placeholder_style, |printer| {
-        for x in 1..QUEUE_MARGIN_RIGHT {
-          printer.print((x, y), consts::QUEUE_PLACEHOLDER_SYMBOL);
-        }
-      });
-    }
-
-    // Draw EVQ items bottom-up: item[0] (oldest) at bottom, newest stacks upward
-    for (idx, item) in evq_items.iter().enumerate() {
-      if idx + 2 >= half_height {
-        break;
-      }
-      let y = half_height - 2 - idx;
-      printer.with_style(style, |printer| {
-        printer.print((3, y), item);
-      });
-    }
-
-    // EVQ label at bottom of top half
-    printer.with_style(style, |printer| {
-      printer.print((3, half_height - 1), "EVNTQ");
-    });
-
-    // Draw separator line between EVQ and OPQ
-    let center_offset = 1;
-    printer.with_style(style, |printer| {
-      let center_x = (QUEUE_MARGIN_RIGHT / 2) + center_offset;
-      for x in 0..QUEUE_MARGIN_RIGHT {
-        if x == center_x {
-          printer.print((x, half_height), "v");
-        } else {
-          printer.print((x, half_height), " ");
-        }
-      }
-    });
-
-    // Bottom half: OPQ (Operator Queue)
-    let opq_start_y = half_height;
-
-    // Read and display operator queue items (bottom-aligned)
-    let operator_queue = self
-      .playhead_ui
-      .queue_manager
-      .operator_queue
-      .lock()
-      .unwrap();
-    let opq_items: Vec<String> = operator_queue
-      .iter()
-      .map(|item| format!("{}", item))
-      .collect();
-    drop(operator_queue);
-
-    let opq_display_start_y = if opq_items.len() >= total_height - opq_start_y - 2 {
-      opq_start_y + 1 // Start after separator line
-    } else {
-      total_height.saturating_sub(opq_items.len() + 1)
-    };
-
-    // Draw empty queue placeholder blocks for OPQ
-    for y in (opq_start_y + 1)..(opq_display_start_y) {
-      let placeholder_color = if y % 2 == 0 {
-        ColorType::rgb(70, 70, 70)
-      } else {
-        ColorType::rgb(50, 50, 50)
-      };
-      let placeholder_style = Style::from(ColorStyle::front(placeholder_color));
-      printer.with_style(placeholder_style, |printer| {
-        for x in 1..QUEUE_MARGIN_RIGHT {
-          printer.print((x, y), consts::QUEUE_PLACEHOLDER_SYMBOL);
-        }
-      });
-    }
-
-    // Draw OPQ items bottom-up: item[0] (oldest) at bottom, newest stacks upward
-    for (idx, item) in opq_items.iter().enumerate() {
-      if idx + 2 >= total_height {
-        break;
-      }
-      let y = total_height - 2 - idx;
-      if y < opq_start_y + 1 {
-        break;
-      }
-      printer.with_style(style, |printer| {
-        printer.print((3, y), item);
-      });
-    }
-
-    // Draw vertical separator
-    for y in 0..total_height {
-      let placeholder_color = if y % 2 == 0 {
-        ColorType::rgb(50, 50, 50)
-      } else {
-        ColorType::rgb(70, 70, 70)
-      };
-      let placeholder_style = Style::from(ColorStyle::front(placeholder_color));
-      printer.with_style(placeholder_style, |printer| {
-        printer.print((0, y), " ┃ ");
-      });
-    }
-
-    // OPQ label at bottom of bottom half
-    printer.with_style(style, |printer| {
-      printer.print((3, total_height - 1), "OPRTQ");
-    });
-
-    // Pending jump position indicator
-    let pending = self
-      .playhead_ui
-      .queue_manager
-      .pending_jump_position
-      .lock()
-      .unwrap();
-    let (pending_str, pending_color) = match *pending {
-      PendingJumpPosition::Empty => (None, ColorType::rgb(60, 60, 60)),
-      PendingJumpPosition::Waiting(x, y) => {
-        (Some(format!("{},{}", x, y)), ColorType::rgb(100, 100, 100))
-      }
-      PendingJumpPosition::Armed(x, y) => {
-        (Some(format!("{},{}", x, y)), ColorType::rgb(255, 255, 255))
-      }
-    };
-    drop(pending);
-    if let Some(s) = pending_str {
-      let pending_style = Style::from(ColorStyle::front(pending_color));
-      printer.with_style(pending_style, |printer| {
-        printer.print((3, total_height), &s);
-      });
-    }
-  }
-
-  fn draw_queue_operators_bottom(&self, printer: &Printer) {
-    if !self.show_keyboard || self.grid.width == 0 {
-      return;
-    }
-
-    let style = Style::from(ColorStyle::front(ColorType::rgb(100, 100, 100)));
-
-    printer.with_style(style, |printer| {
-      for x in 0..self.grid.width {
-        printer.print((x, 0), "─");
-      }
-    });
-
-    let abs_active_x = self.playhead_ui.playhead_pos.x + self.playhead_ui.actived_pos.x;
-    if abs_active_x < self.grid.width {
-      let arrow_style = Style::from(ColorStyle::front(ColorType::rgb(255, 255, 255)));
-      printer.with_style(arrow_style, |printer| {
-        printer.print((abs_active_x, 0), "v");
-      });
-    }
-
-    let regex_indexes = self.playhead_ui.regex_indexes.lock().unwrap();
-    let is_regex_match_x = regex_indexes.iter().any(|&idx| {
-      let x_pos = idx % self.grid.width;
-      x_pos == abs_active_x
-    });
-
-    // Draw queue operators on row 1
-    let mut x = 0;
-    let mut queue_index = 0;
-    while x < self.grid.width {
-      // Check if this position collides with an event operator position
-      let is_event_position = x % consts::EVENT_OP_SPACING == 0;
-      let display_char = if is_event_position {
-        "-".to_string()
-      } else if !self.playhead_ui.accumulation_mode {
-        " ".to_string()
-      } else {
-        let op = QUEUE_OPERATORS[queue_index % QUEUE_OPERATORS.len()];
-        op.to_string()
-      };
-
-      let is_active = x == abs_active_x;
-      let style = if is_active && is_regex_match_x {
-        Style::from(ColorStyle::new(
-          ColorType::rgb(0, 0, 0),
-          ColorType::rgb(255, 255, 255),
-        ))
-      } else if is_active {
-        Style::from(ColorStyle::front(ColorType::rgb(255, 255, 255)))
-      } else {
-        Style::from(ColorStyle::front(ColorType::rgb(100, 100, 100)))
-      };
-      printer.with_style(style, |printer| {
-        printer.print((x, 1), &display_char);
-      });
-
-      x += consts::QUEUE_OP_SPACING;
-      queue_index += 1;
-    }
-
-    // Draw event operators on row 1 (same line)
-    if self.playhead_ui.event_operator_mode {
-      let mut x = 0;
-      let mut event_index = 0;
-      while x < self.grid.width {
-        let op = EVENT_OPERATORS[event_index % EVENT_OPERATORS.len()];
-        let is_active = x == abs_active_x;
-        let style = if is_active && is_regex_match_x {
-          Style::from(ColorStyle::new(
-            ColorType::rgb(0, 0, 0),
-            ColorType::rgb(255, 255, 255),
-          ))
-        } else if is_active {
-          Style::from(ColorStyle::front(ColorType::rgb(255, 255, 255)))
-        } else {
-          Style::from(ColorStyle::front(ColorType::rgb(150, 150, 150))) // Slightly brighter for events
-        };
-        printer.with_style(style, |printer| {
-          printer.print((x, 1), &op.to_string());
-        });
-
-        x += consts::EVENT_OP_SPACING;
-        event_index += 1;
-      }
-    }
-  }
-
-  pub fn build(
-    playhead_tx: Sender<PlayheadMessage>,
-    regex_tx: Sender<regex::Message>,
-  ) -> ResizedView<ResizedView<NamedView<Canvas<GridEditor>>>> {
-    let mut editor = GridEditor::new(playhead_tx);
-    editor.regex_tx = Some(regex_tx);
-    Canvas::new(editor)
-      .with_draw(draw)
-      .with_layout(layout)
-      .with_on_event(on_event)
-      .with_take_focus(take_focus)
-      .with_name(consts::canvas_editor_section_view)
-      .full_height()
-      .full_width()
   }
 
   pub fn update_text_contents(&mut self, contents: &str) {
@@ -510,35 +162,35 @@ impl GridEditor {
     }
   }
 
-  fn grid_size_xy(&self) -> cursive::XY<usize> {
-    (self.grid.width, self.grid.height).into()
+  fn grid_size_xy(&self) -> Vec2 {
+    Vec2::new(self.grid.width, self.grid.height)
   }
 
-  fn start_aim_if_needed(&mut self) {
+  pub fn start_aim_if_needed(&mut self) {
     if self.playhead_ui.aimed_area.is_none() {
       let _ = self.playhead_tx.send(PlayheadMessage::StartAim());
     }
   }
 
-  fn update_aim(&self, dir: Direction, step: usize) -> EventResult {
+  pub fn update_aim(&self, dir: Direction, step: usize) -> bool {
     let grid_size = self.grid_size_xy();
     let _ = self
       .playhead_tx
       .send(PlayheadMessage::UpdateAim(dir, grid_size, step));
-    EventResult::Ignored
+    false
   }
 
-  fn commit_or_move(&mut self, dir: Direction) -> EventResult {
+  pub fn commit_or_move(&mut self, dir: Direction) -> bool {
     if self.playhead_ui.aimed_area.is_some() {
       let _ = self.playhead_tx.send(PlayheadMessage::CommitAim());
-      return EventResult::Ignored;
+      return false;
     }
     let grid_size = self.grid_size_xy();
     let _ = self.playhead_tx.send(PlayheadMessage::Move(dir, grid_size));
-    EventResult::Ignored
+    false
   }
 
-  fn alt_action(&self, dir: Direction, step: usize) -> EventResult {
+  pub fn alt_action(&self, dir: Direction, step: usize) -> bool {
     let grid_size = self.grid_size_xy();
     if self.playhead_ui.aimed_area.is_some() {
       let _ = self
@@ -547,15 +199,15 @@ impl GridEditor {
     } else {
       let _ = self.playhead_tx.send(PlayheadMessage::Leap(dir, grid_size));
     }
-    EventResult::Ignored
+    false
   }
 
-  fn scale_action(&self, dir: (i32, i32)) -> EventResult {
+  pub fn scale_action(&self, dir: (i32, i32)) -> bool {
     let _ = self.playhead_tx.send(PlayheadMessage::Scale(dir));
-    EventResult::Ignored
+    false
   }
 
-  fn handle_mouse_press(&mut self, offset: Vec2, position: Vec2) -> EventResult {
+  pub fn handle_mouse_press(&mut self, offset: Vec2, position: Vec2) -> bool {
     let x_offset = if self.show_keyboard {
       KEYBOARD_MARGIN_LEFT
     } else {
@@ -586,10 +238,10 @@ impl GridEditor {
       .send(PlayheadMessage::UpdateInfoStatusView())
       .unwrap();
 
-    EventResult::consumed()
+    true
   }
 
-  fn handle_mouse_hold(&mut self, offset: Vec2, position: Vec2) -> EventResult {
+  pub fn handle_mouse_hold(&mut self, offset: Vec2, position: Vec2) -> bool {
     // Adjust position to account for keyboard margins
     let x_offset = if self.show_keyboard {
       KEYBOARD_MARGIN_LEFT
@@ -615,10 +267,10 @@ impl GridEditor {
       .send(PlayheadMessage::SetGridArea((clamped_x, clamped_y).into()))
       .unwrap();
 
-    EventResult::Ignored
+    false
   }
 
-  fn handle_split_char(&mut self, c: char) -> EventResult {
+  pub fn handle_split_char(&mut self, c: char) -> bool {
     let (v, h): (usize, usize) = match c {
       '0' => (1, 1),
       '1' => (1, 1),
@@ -634,21 +286,7 @@ impl GridEditor {
     self.playhead_ui.grid_h_splits = h;
     let _ = self.playhead_tx.send(PlayheadMessage::SetGridSplits(v, h));
 
-    let pos = self.playhead_ui.playhead_pos;
-    let gw = self.grid.width.max(1);
-    let gh = self.grid.height.max(1);
-    let col_w = if v > 1 { (gw / v).max(1) } else { gw };
-    let row_h = if h > 1 { (gh / h).max(1) } else { gh };
-    let col_idx = (pos.x / col_w).min(v.saturating_sub(1));
-    let row_idx = (pos.y / row_h).min(h.saturating_sub(1));
-    let ch = row_idx * v + col_idx;
-    let label = format!("{}/{}", ch + 1, v * h);
-
-    EventResult::Consumed(Some(Callback::from_fn(move |s: &mut Cursive| {
-      s.call_on_name(consts::chn_status_unit_view, |view: &mut TextView| {
-        view.set_content(label.clone());
-      });
-    })))
+    true
   }
 
   pub fn resize(&mut self, size: Vec2) {
@@ -670,6 +308,8 @@ impl GridEditor {
 
     self.grid = Matrix::new(grid_width, grid_height, '\0');
     self.size = size;
+    // Repopulate grid from cached text after dimension change
+    self.update_grid_src();
     // Update grid width and height for precise timing calculations and note mapping
     let _ = self
       .playhead_tx
@@ -679,6 +319,86 @@ impl GridEditor {
       Direction::Idle,
       (grid_width, grid_height).into(),
     ));
+  }
+
+  pub fn toggle_dice(&mut self) -> bool {
+    self.dice_enabled = !self.dice_enabled;
+    if self.dice_enabled {
+      self.reshuffle_dice_labels();
+    }
+    self.prev_dice_active_dot = None;
+    true
+  }
+
+  fn reshuffle_dice_labels(&mut self) {
+    self.dice_labels = (0..self.dice_point_count())
+      .map(|_| {
+        let prefix = if fastrand::bool() { '+' } else { '-' };
+        let value = fastrand::u8(0..=9);
+        (prefix, value)
+      })
+      .collect();
+  }
+
+  pub fn cycle_dice_face(&mut self) -> bool {
+    self.dice_face = if self.dice_face >= 6 {
+      1
+    } else {
+      self.dice_face + 1
+    };
+    if self.dice_enabled {
+      self.reshuffle_dice_labels();
+    }
+    self.prev_dice_active_dot = None;
+    true
+  }
+
+  fn dice_point_count(&self) -> usize {
+    match self.dice_face {
+      1 => 1,
+      2 => 2,
+      3 => 3,
+      4 => 4,
+      5 => 5,
+      _ => 6,
+    }
+  }
+
+  pub fn apply_dice_scale_if_changed(&mut self) {
+    if !self.dice_enabled {
+      return;
+    }
+    use crate::core::command::types::Adjustment;
+    let num_points = self.dice_point_count();
+    let active_dot = (self.playhead_ui.current_bar / self.dice_bars_div) % num_points;
+    if self.prev_dice_active_dot == Some(active_dot) {
+      return;
+    }
+    // even index = +digit steps up, odd index = -digit steps down
+    let (prefix, value) = self
+      .dice_labels
+      .get(active_dot)
+      .copied()
+      .unwrap_or(('+', 0));
+    let steps: i32 = if prefix == '+' {
+      value as i32
+    } else {
+      -(value as i32)
+    };
+    if steps > 0 {
+      for _ in 0..steps {
+        let _ = self
+          .playhead_tx
+          .send(PlayheadMessage::CycleScaleMode(Adjustment::Increase));
+      }
+    } else if steps < 0 {
+      for _ in 0..(-steps) {
+        let _ = self
+          .playhead_tx
+          .send(PlayheadMessage::CycleScaleMode(Adjustment::Decrease));
+      }
+    }
+    self.prev_dice_active_dot = Some(active_dot);
   }
 
   pub fn clear_contents(&mut self) {
@@ -692,306 +412,695 @@ impl GridEditor {
       .unwrap_or(&"".to_string())
       .to_string()
   }
-}
 
-fn draw(canvas: &GridEditor, printer: &Printer) {
-  if canvas.show_keyboard {
-    let top_keyboard_printer = printer.offset((KEYBOARD_MARGIN_LEFT, 0));
-    canvas.draw_keyboard_top(&top_keyboard_printer);
+  fn draw_keyboard_indicators(&self, buf: &mut ScreenBuffer, x_off: u16, y_off: u16) {
+    // Scale mode/root labels
+    let pui = &self.playhead_ui;
+    let root_note_top = pui.scale_root_top;
+    let scale_mode_top = pui.scale_mode_top;
+    let scale_mode_left = pui.scale_mode_left;
+    let scale_root_left = pui.scale_root_left;
 
-    // Draw corner symbol where keyboards meet
-    let root_note_top = canvas.playhead_ui.scale_root_top;
-    // let style = Style::from(ColorStyle::front(ColorType::rgb(100, 100, 100)));
-    // printer.with_style(style, |printer| {
-    //   printer.print((0, 1), root_note_top.name());
-    // });
-
-    let scale_mode_top = canvas.playhead_ui.scale_mode_top;
-    let scale_mode_left = canvas.playhead_ui.scale_mode_left;
-    let scale_root_left = canvas.playhead_ui.scale_root_left;
-    let active_style = Style::from(ColorStyle::front(ColorType::rgb(255, 255, 255)));
-    let inactive_style = Style::from(ColorStyle::front(ColorType::rgb(100, 100, 100)));
-    let (style_top, style_left) = if !canvas.is_canvas_focused {
-      (inactive_style, inactive_style)
-    } else if canvas.playhead_ui.keyboard_top_active {
-      (active_style, inactive_style)
+    let active_col = if !self.is_canvas_focused {
+      Color::Rgb(100, 100, 100)
     } else {
-      (inactive_style, active_style)
+      Color::Rgb(255, 255, 255)
+    };
+    let inactive_col = Color::Rgb(100, 100, 100);
+    let (top_color, left_color) = if !self.is_canvas_focused {
+      (inactive_col, inactive_col)
+    } else if pui.keyboard_top_active {
+      (active_col, inactive_col)
+    } else {
+      (inactive_col, active_col)
     };
 
-    printer.with_style(style_top, |printer| {
-      printer.print(
-        (0, 0),
-        &format!("{} {}", scale_mode_top.short_name(), root_note_top.name()),
-      );
-    });
-    printer.with_style(style_left, |printer| {
-      printer.print(
-        (0, 2),
-        &format!(
-          "{} {}",
-          scale_mode_left.short_name(),
-          scale_root_left.name()
-        ),
-      );
-    });
-
-    let left_keyboard_printer = printer.offset((0, KEYBOARD_MARGIN_TOP));
-    canvas.draw_keyboard_left(&left_keyboard_printer);
-
-    let bottom_y = KEYBOARD_MARGIN_TOP + canvas.grid.height;
-    let bottom_operators_printer = printer.offset((KEYBOARD_MARGIN_LEFT, bottom_y));
-    canvas.draw_queue_operators_bottom(&bottom_operators_printer);
-
-    // draw bottom corners
-    let style = Style::from(ColorStyle::front(ColorType::rgb(100, 100, 100)));
-    printer.with_style(style, |printer| {
-      printer.print((KEYBOARD_MARGIN_LEFT - 2, bottom_y), "┗");
-    });
-    printer.with_style(style, |printer| {
-      printer.print((canvas.grid.width + QUEUE_MARGIN_RIGHT + 1, bottom_y), "┛");
-    });
-
-    // Draw right queue display
-    let right_x = KEYBOARD_MARGIN_LEFT + canvas.grid.width;
-    let right_queue_printer = printer.offset((right_x, KEYBOARD_MARGIN_TOP));
-    canvas.draw_queue_right(&right_queue_printer);
-  }
-
-  let x_offset = if canvas.show_keyboard {
-    KEYBOARD_MARGIN_LEFT
-  } else {
-    0
-  };
-  let y_offset = if canvas.show_keyboard {
-    KEYBOARD_MARGIN_TOP
-  } else {
-    0
-  };
-  let grid_printer = printer.offset((x_offset, y_offset));
-
-  let sep_style = Style::from(ColorStyle::front(ColorType::rgb(100, 100, 100)));
-
-  let col_w = if canvas.playhead_ui.grid_v_splits >= 2 {
-    canvas.grid.width / canvas.playhead_ui.grid_v_splits
-  } else {
-    0
-  };
-  let row_h = if canvas.playhead_ui.grid_h_splits >= 2 {
-    canvas.grid.height / canvas.playhead_ui.grid_h_splits
-  } else {
-    0
-  };
-
-  let sep_xs: Vec<usize> = if canvas.playhead_ui.grid_v_splits >= 2 {
-    (1..canvas.playhead_ui.grid_v_splits)
-      .map(|i| col_w * i)
-      .filter(|&x| x < canvas.grid.width)
-      .collect()
-  } else {
-    vec![]
-  };
-
-  let sep_ys: Vec<usize> = if canvas.playhead_ui.grid_h_splits >= 2 {
-    (1..canvas.playhead_ui.grid_h_splits)
-      .map(|i| row_h * i)
-      .filter(|&y| y < canvas.grid.height)
-      .collect()
-  } else {
-    vec![]
-  };
-
-  let playhead_area = canvas.playhead_ui.playhead_area;
-
-  canvas.grid.print(&grid_printer, &canvas.playhead_ui);
-
-  // Compute crosshair x for the special-cell skip below.
-  let pui = &canvas.playhead_ui;
-  let crosshair_abs_x = if pui.sweep_movement.is_some() {
-    pui.sweep_x
-  } else {
-    pui.playhead_pos.x + pui.actived_pos.x
-  };
-
-  // draw separators after grid.print, ensure the special overlay (crosshair,
-  // drone line, regex match) stay visible
-  let is_special = |x: usize, y: usize| -> bool {
-    let is_crosshair =
-      pui.sweep_mode && pui.sweep_row_mode.is_row_active(y) && x == crosshair_abs_x;
-    let is_drone = pui.drone_mode && x == playhead_area.left() + pui.drone_x;
-    let is_match = pui
-      .text_matcher
-      .as_ref()
-      .is_some_and(|m| m.contains_key(&(y * canvas.grid.width + x)));
-    is_crosshair || is_drone || is_match
-  };
-
-  for &sep_x in &sep_xs {
-    for y in 0..canvas.grid.height {
-      if playhead_area.contains((sep_x, y).into()) || is_special(sep_x, y) {
-        continue;
+    let top_label = format!("{} {}", scale_mode_top.short_name(), root_note_top.name());
+    for (i, ch) in top_label.chars().enumerate() {
+      if let Some(c) = buf.get_mut(x_off + i as u16, y_off) {
+        apply_style(
+          c,
+          ch,
+          CellStyle {
+            fg: top_color,
+            bg: Color::Reset,
+            reverse: false,
+          },
+        );
       }
-      let ch = if sep_ys.contains(&y) { "┼" } else { "│" };
-      grid_printer.with_style(sep_style, |printer| {
-        printer.print((sep_x, y), ch);
-      });
     }
-  }
-
-  for &sep_y in &sep_ys {
-    for x in 0..canvas.grid.width {
-      if playhead_area.contains((x, sep_y).into()) || is_special(x, sep_y) {
-        continue;
+    let left_label = format!(
+      "{} {}",
+      scale_mode_left.short_name(),
+      scale_root_left.name()
+    );
+    for (i, ch) in left_label.chars().enumerate() {
+      if let Some(c) = buf.get_mut(x_off + i as u16, y_off + 2) {
+        apply_style(
+          c,
+          ch,
+          CellStyle {
+            fg: left_color,
+            bg: Color::Reset,
+            reverse: false,
+          },
+        );
       }
-      let ch = if sep_xs.contains(&x) { "┼" } else { "─" };
-      grid_printer.with_style(sep_style, |printer| {
-        printer.print((x, sep_y), ch);
-      });
     }
-  }
 
-  // Canvas focus indicator: shown at top-left margin (row 2, free space)
-  if canvas.show_keyboard {
-    let keyboard_label = if canvas.playhead_ui.keyboard_top_active {
+    // Keyboard focus indicator
+    let keyboard_label = if pui.keyboard_top_active {
       "[  \u{2227}  ]"
     } else {
       "[  \u{2228}  ]"
     };
-    let color = if canvas.is_canvas_focused {
-      ColorType::rgb(200, 200, 200)
+    let label_col = if self.is_canvas_focused {
+      Color::Rgb(200, 200, 200)
     } else {
-      ColorType::rgb(100, 100, 100)
+      Color::Rgb(100, 100, 100)
     };
-    let style = Style::from(ColorStyle::front(color));
-    printer.with_style(style, |printer| {
-      printer.print((0, 1), keyboard_label);
-    });
+    for (i, ch) in keyboard_label.chars().enumerate() {
+      if let Some(c) = buf.get_mut(x_off + i as u16, y_off + 1) {
+        apply_style(
+          c,
+          ch,
+          CellStyle {
+            fg: label_col,
+            bg: Color::Reset,
+            reverse: false,
+          },
+        );
+      }
+    }
   }
-}
 
-fn layout(canvas: &mut GridEditor, size: Vec2) {
-  if canvas.size != size {
-    canvas.resize(size);
-    if canvas.text_contents.is_some() {
-      canvas.update_grid_src();
-      if !canvas.last_pattern.is_empty() {
-        if let Some(ref tx) = canvas.regex_tx {
-          let input_regex = regex::EventData {
-            text: canvas.text_contents(),
-            pattern: canvas.last_pattern.clone(),
-            flags: canvas.last_flag_str.clone(),
-            grid_width: canvas.grid.width,
-          };
-          let _ = tx.send(regex::Message::Solve(input_regex));
+  fn draw_keyboard_indicators_right(&self, buf: &mut ScreenBuffer, x_off: u16, y_off: u16) {
+    // dot positions (col_offset, row_offset) within the 7x3 area, clockwise from TL:
+    //   TL=(0,0)  TR=(5,0)
+    //   ML=(0,1)  C=(3,1)  MR=(5,1)
+    //   BL=(0,2)  BR=(5,2)
+    if !self.dice_enabled {
+      let placeholder_points: &[(u16, u16)] = &[(0, 0), (5, 0), (5, 2), (0, 2), (3, 1)];
+      let style = CellStyle {
+        fg: Color::Rgb(100, 100, 100),
+        bg: Color::Reset,
+        reverse: false,
+      };
+      for &(dx, dy) in placeholder_points {
+        let prefix = '±';
+        if let Some(c) = buf.get_mut(x_off + dx, y_off + dy) {
+          apply_style(c, prefix, style);
+        }
+        if let Some(c) = buf.get_mut(x_off + dx + 1, y_off + dy) {
+          apply_style(c, 'x', style);
+        }
+      }
+      return;
+    }
+
+    let points: &[(u16, u16)] = match self.dice_face {
+      1 => &[(3, 1)],
+      2 => &[(5, 0), (0, 2)],
+      3 => &[(5, 0), (3, 1), (0, 2)],
+      4 => &[(0, 0), (5, 0), (5, 2), (0, 2)],
+      5 => &[(0, 0), (5, 0), (5, 2), (0, 2), (3, 1)],
+      _ => &[(0, 0), (5, 0), (5, 1), (5, 2), (0, 2), (0, 1)],
+    };
+
+    let active_dot = (self.playhead_ui.current_bar / self.dice_bars_div) % points.len().max(1);
+
+    for (idx, &(dx, dy)) in points.iter().enumerate() {
+      let col = if idx == active_dot {
+        Color::Rgb(200, 200, 200)
+      } else {
+        Color::Rgb(100, 100, 100)
+      };
+      let (prefix, value) = self.dice_labels.get(idx).copied().unwrap_or(('+', 0));
+      let style = CellStyle {
+        fg: col,
+        bg: Color::Reset,
+        reverse: false,
+      };
+      if let Some(c) = buf.get_mut(x_off + dx, y_off + dy) {
+        apply_style(c, prefix, style);
+      }
+      let d0 = char::from_digit((value / 10) as u32, 10).unwrap_or('0');
+      let d1 = char::from_digit((value % 10) as u32, 10).unwrap_or('0');
+      let digit = if value >= 10 { d0 } else { d1 };
+      if let Some(c) = buf.get_mut(x_off + dx + 1, y_off + dy) {
+        apply_style(c, digit, style);
+      }
+    }
+  }
+
+  fn draw_keyboard_top_to_buf(&self, buf: &mut ScreenBuffer, x_off: u16, y_off: u16) {
+    if !self.show_keyboard || self.grid.height == 0 || self.grid.width == 0 {
+      return;
+    }
+    let abs_active_x = self.playhead_ui.playhead_pos.x + self.playhead_ui.actived_pos.x;
+    for x in 0..self.grid.width {
+      let y_pos = x % self.grid.height;
+      let (note_index, octave, note_name) = self.y_to_note_top(y_pos);
+      let is_black_key = matches!(note_index.round() as u8, 1 | 3 | 6 | 8 | 10);
+
+      let (fg, bg) = if x == abs_active_x {
+        if note_name == "C" {
+          (Color::Rgb(0, 0, 0), Color::Rgb(255, 255, 255))
+        } else {
+          (Color::Rgb(255, 255, 255), Color::Reset)
+        }
+      } else if note_name == "C" {
+        (Color::Rgb(0, 0, 0), Color::Rgb(100, 100, 100))
+      } else {
+        (Color::Rgb(100, 100, 100), Color::Reset)
+      };
+      let style = CellStyle {
+        fg,
+        bg,
+        reverse: false,
+      };
+
+      let cx = x_off + x as u16;
+      if is_black_key {
+        if let Some(c) = buf.get_mut(cx, y_off) {
+          apply_style(c, '#', style);
+        }
+      } else if note_name == "C" {
+        if let Some(c) = buf.get_mut(cx, y_off) {
+          apply_style(c, ' ', style);
+        }
+        if let Some(c) = buf.get_mut(cx, y_off + 1) {
+          apply_style(c, octave.to_string().chars().next().unwrap_or(' '), style);
+        }
+      } else if let Some(c) = buf.get_mut(cx, y_off) {
+        apply_style(c, '━', style);
+      }
+    }
+  }
+
+  fn draw_keyboard_left_to_buf(&self, buf: &mut ScreenBuffer, x_off: u16, y_off: u16) {
+    if !self.show_keyboard || self.grid.height == 0 {
+      return;
+    }
+    for y in 0..self.grid.height {
+      let (note_index, octave, note_name) = self.y_to_note_left(y);
+      let is_black_key = matches!(note_index.round() as u8, 1 | 3 | 6 | 8 | 10);
+      let r = if is_black_key { 50u8 } else { 100u8 };
+      let style = CellStyle::fg_rgb(r, r, r);
+
+      // always write exactly 3 columns so shorter names (e.g. "F3") don't
+      // leave stale chars from a previously longer name (e.g. "F#3") at col 2
+      let label = format!("{:<3}", format!("{}{}", note_name, octave));
+      for (i, ch) in label.chars().enumerate() {
+        if let Some(c) = buf.get_mut(x_off + i as u16, y_off + y as u16) {
+          apply_style(c, ch, style);
+        }
+      }
+      let dots = ":".repeat(KEYBOARD_MARGIN_LEFT.saturating_sub(6));
+      for (i, ch) in dots.chars().enumerate() {
+        if let Some(c) = buf.get_mut(x_off + 3 + i as u16, y_off + y as u16) {
+          apply_style(c, ch, style);
+        }
+      }
+      let sym = if note_name == "C" { '┣' } else { '┃' };
+      if let Some(c) = buf.get_mut(x_off + (KEYBOARD_MARGIN_LEFT - 2) as u16, y_off + y as u16) {
+        apply_style(c, sym, style);
+      }
+    }
+  }
+
+  fn draw_queue_right_to_buf(&self, buf: &mut ScreenBuffer, x_off: u16, y_off: u16) {
+    if !self.show_keyboard || self.grid.height == 0 {
+      return;
+    }
+    let total_height = self.grid.height;
+    let half_height = total_height / 2;
+    let style = CellStyle::fg_rgb(100, 100, 100);
+
+    // Event queue (EVQ) - top half, bottom-aligned
+    let event_queue = self.playhead_ui.queue_manager.event_queue.lock().unwrap();
+    let evq_items: Vec<String> = event_queue
+      .iter()
+      .map(|op| op.get_event_name().to_string())
+      .collect();
+    drop(event_queue);
+
+    let evq_start_y = if evq_items.len() >= half_height.saturating_sub(2) {
+      0
+    } else {
+      half_height.saturating_sub(evq_items.len() + 2)
+    };
+
+    for y in 0..=(evq_start_y.min(half_height.saturating_sub(1))) {
+      let c = if y % 2 == 0 { 50u8 } else { 70u8 };
+      let ph_style = CellStyle::fg_rgb(c, c, c);
+      for x in 1..QUEUE_MARGIN_RIGHT {
+        if let Some(cell) = buf.get_mut(x_off + x as u16, y_off + y as u16) {
+          apply_style(
+            cell,
+            consts::QUEUE_PLACEHOLDER_SYMBOL
+              .chars()
+              .next()
+              .unwrap_or('·'),
+            ph_style,
+          );
+        }
+      }
+    }
+    for (idx, item) in evq_items.iter().enumerate() {
+      if idx + 2 >= half_height {
+        break;
+      }
+      let row = half_height - 2 - idx;
+      for (i, ch) in item.chars().enumerate() {
+        if let Some(c) = buf.get_mut(x_off + 3 + i as u16, y_off + row as u16) {
+          apply_style(c, ch, style);
+        }
+      }
+    }
+    for (i, ch) in "EVNTQ".chars().enumerate() {
+      if let Some(c) = buf.get_mut(x_off + 3 + i as u16, y_off + (half_height - 1) as u16) {
+        apply_style(c, ch, style);
+      }
+    }
+
+    // Separator between EVQ and OPQ
+    let center_x = (QUEUE_MARGIN_RIGHT / 2) + 1;
+    for x in 0..QUEUE_MARGIN_RIGHT {
+      let ch = if x == center_x { 'v' } else { ' ' };
+      if let Some(c) = buf.get_mut(x_off + x as u16, y_off + half_height as u16) {
+        apply_style(c, ch, style);
+      }
+    }
+
+    // Operator queue (OPQ) - bottom half, bottom-aligned
+    let operator_queue = self
+      .playhead_ui
+      .queue_manager
+      .operator_queue
+      .lock()
+      .unwrap();
+    let opq_items: Vec<String> = operator_queue
+      .iter()
+      .map(|item| format!("{}", item))
+      .collect();
+    drop(operator_queue);
+
+    let opq_start_y = half_height;
+    let opq_display_start_y = if opq_items.len() >= total_height.saturating_sub(opq_start_y + 2) {
+      opq_start_y + 1
+    } else {
+      total_height.saturating_sub(opq_items.len() + 1)
+    };
+
+    for y in (opq_start_y + 1)..opq_display_start_y {
+      let c = if y % 2 == 0 { 70u8 } else { 50u8 };
+      let ph_style = CellStyle::fg_rgb(c, c, c);
+      for x in 1..QUEUE_MARGIN_RIGHT {
+        if let Some(cell) = buf.get_mut(x_off + x as u16, y_off + y as u16) {
+          apply_style(
+            cell,
+            consts::QUEUE_PLACEHOLDER_SYMBOL
+              .chars()
+              .next()
+              .unwrap_or('·'),
+            ph_style,
+          );
+        }
+      }
+    }
+    for (idx, item) in opq_items.iter().enumerate() {
+      if idx + 2 >= total_height {
+        break;
+      }
+      let row = total_height - 2 - idx;
+      if row < opq_start_y + 1 {
+        break;
+      }
+      for (i, ch) in item.chars().enumerate() {
+        if let Some(c) = buf.get_mut(x_off + 3 + i as u16, y_off + row as u16) {
+          apply_style(c, ch, style);
+        }
+      }
+    }
+    for (i, ch) in "OPRTQ".chars().enumerate() {
+      if let Some(c) = buf.get_mut(x_off + 3 + i as u16, y_off + (total_height - 1) as u16) {
+        apply_style(c, ch, style);
+      }
+    }
+
+    // Vertical separator
+    for y in 0..total_height {
+      let c = if y % 2 == 0 { 50u8 } else { 70u8 };
+      let vs_style = CellStyle::fg_rgb(c, c, c);
+      for (i, ch) in " ┃ ".chars().enumerate() {
+        if let Some(cell) = buf.get_mut(x_off + i as u16, y_off + y as u16) {
+          apply_style(cell, ch, vs_style);
+        }
+      }
+    }
+
+    // Pending jump indicator
+    let pending = self
+      .playhead_ui
+      .queue_manager
+      .pending_jump_position
+      .lock()
+      .unwrap();
+    let (pending_str, pr, pg, pb) = match *pending {
+      PendingJumpPosition::Empty => (None, 60u8, 60u8, 60u8),
+      PendingJumpPosition::Waiting(x, y) => (Some(format!("{},{}", x, y)), 100, 100, 100),
+      PendingJumpPosition::Armed(x, y) => (Some(format!("{},{}", x, y)), 255, 255, 255),
+    };
+    drop(pending);
+    if let Some(s) = pending_str {
+      let ps = CellStyle::fg_rgb(pr, pg, pb);
+      for (i, ch) in s.chars().enumerate() {
+        if let Some(c) = buf.get_mut(x_off + 3 + i as u16, y_off + total_height as u16) {
+          apply_style(c, ch, ps);
+        }
+      }
+    }
+  }
+
+  fn draw_queue_operators_bottom_to_buf(&self, buf: &mut ScreenBuffer, x_off: u16, y_off: u16) {
+    if !self.show_keyboard || self.grid.width == 0 {
+      return;
+    }
+    let style = CellStyle::fg_rgb(100, 100, 100);
+
+    // Separator line
+    for x in 0..self.grid.width {
+      if let Some(c) = buf.get_mut(x_off + x as u16, y_off) {
+        apply_style(c, '─', style);
+      }
+    }
+
+    let abs_active_x = self.playhead_ui.playhead_pos.x + self.playhead_ui.actived_pos.x;
+    if abs_active_x < self.grid.width {
+      let arrow_style = CellStyle::fg_rgb(255, 255, 255);
+      if let Some(c) = buf.get_mut(x_off + abs_active_x as u16, y_off) {
+        apply_style(c, 'v', arrow_style);
+      }
+    }
+
+    let regex_indexes = self.playhead_ui.regex_indexes.lock().unwrap();
+    let is_regex_match_x = regex_indexes
+      .iter()
+      .any(|&idx| idx % self.grid.width == abs_active_x);
+    drop(regex_indexes);
+
+    // Queue operators row
+    let mut x = 0;
+    let mut queue_index = 0;
+    while x < self.grid.width {
+      let is_event_position = x % consts::EVENT_OP_SPACING == 0;
+      let display_char = if is_event_position {
+        '-'
+      } else if !self.playhead_ui.accumulation_mode {
+        ' '
+      } else {
+        QUEUE_OPERATORS[queue_index % QUEUE_OPERATORS.len()]
+          .to_string()
+          .chars()
+          .next()
+          .unwrap_or(' ')
+      };
+      let is_active = x == abs_active_x;
+      let op_style = if is_active && is_regex_match_x {
+        CellStyle::fg_bg_rgb(0, 0, 0, 255, 255, 255)
+      } else if is_active {
+        CellStyle::fg_rgb(255, 255, 255)
+      } else {
+        CellStyle::fg_rgb(100, 100, 100)
+      };
+      if let Some(c) = buf.get_mut(x_off + x as u16, y_off + 1) {
+        apply_style(c, display_char, op_style);
+      }
+      x += consts::QUEUE_OP_SPACING;
+      queue_index += 1;
+    }
+
+    // Event operators overlay
+    if self.playhead_ui.event_operator_mode {
+      let mut x = 0;
+      let mut event_index = 0;
+      while x < self.grid.width {
+        let op_ch = EVENT_OPERATORS[event_index % EVENT_OPERATORS.len()]
+          .to_string()
+          .chars()
+          .next()
+          .unwrap_or(' ');
+        let is_active = x == abs_active_x;
+        let ev_style = if is_active && is_regex_match_x {
+          CellStyle::fg_bg_rgb(0, 0, 0, 255, 255, 255)
+        } else if is_active {
+          CellStyle::fg_rgb(255, 255, 255)
+        } else {
+          CellStyle::fg_rgb(150, 150, 150)
+        };
+        if let Some(c) = buf.get_mut(x_off + x as u16, y_off + 1) {
+          apply_style(c, op_ch, ev_style);
+        }
+        x += consts::EVENT_OP_SPACING;
+        event_index += 1;
+      }
+    }
+  }
+
+  /// Draw the entire grid panel into `buf` at offset `(x_off, y_off)`.
+  pub fn draw_to_buf(&self, buf: &mut ScreenBuffer, x_off: u16, y_off: u16) {
+    if self.show_keyboard {
+      self.draw_keyboard_indicators(buf, x_off, y_off);
+      self.draw_keyboard_top_to_buf(buf, x_off + KEYBOARD_MARGIN_LEFT as u16, y_off);
+      self.draw_keyboard_left_to_buf(buf, x_off, y_off + KEYBOARD_MARGIN_TOP as u16);
+
+      // Bottom operators
+      let bottom_y = y_off + KEYBOARD_MARGIN_TOP as u16 + self.grid.height as u16;
+      self.draw_queue_operators_bottom_to_buf(buf, x_off + KEYBOARD_MARGIN_LEFT as u16, bottom_y);
+
+      // Bottom corners
+      let corner_style = CellStyle::fg_rgb(100, 100, 100);
+      if let Some(c) = buf.get_mut(x_off + (KEYBOARD_MARGIN_LEFT - 2) as u16, bottom_y) {
+        apply_style(c, '┗', corner_style);
+      }
+      if let Some(c) = buf.get_mut(
+        x_off + (KEYBOARD_MARGIN_LEFT + self.grid.width + 1) as u16,
+        bottom_y,
+      ) {
+        apply_style(c, '┛', corner_style);
+      }
+
+      // Right queue display
+      let right_x = x_off + (KEYBOARD_MARGIN_LEFT + self.grid.width) as u16;
+      self.draw_keyboard_indicators_right(buf, right_x + 1, y_off);
+      self.draw_queue_right_to_buf(buf, right_x, y_off + KEYBOARD_MARGIN_TOP as u16);
+    }
+
+    let gx = x_off
+      + if self.show_keyboard {
+        KEYBOARD_MARGIN_LEFT as u16
+      } else {
+        0
+      };
+    let gy = y_off
+      + if self.show_keyboard {
+        KEYBOARD_MARGIN_TOP as u16
+      } else {
+        0
+      };
+
+    // Main grid cells
+    self.grid.print(buf, gx, gy, &self.playhead_ui);
+
+    // Channel separators
+    let pui = &self.playhead_ui;
+    let col_w = if pui.grid_v_splits >= 2 {
+      self.grid.width / pui.grid_v_splits
+    } else {
+      0
+    };
+    let row_h = if pui.grid_h_splits >= 2 {
+      self.grid.height / pui.grid_h_splits
+    } else {
+      0
+    };
+    let sep_xs: Vec<usize> = if pui.grid_v_splits >= 2 {
+      (1..pui.grid_v_splits)
+        .map(|i| col_w * i)
+        .filter(|&x| x < self.grid.width)
+        .collect()
+    } else {
+      vec![]
+    };
+    let sep_ys: Vec<usize> = if pui.grid_h_splits >= 2 {
+      (1..pui.grid_h_splits)
+        .map(|i| row_h * i)
+        .filter(|&y| y < self.grid.height)
+        .collect()
+    } else {
+      vec![]
+    };
+    let playhead_area = pui.playhead_area;
+    let crosshair_abs_x = if pui.sweep_movement.is_some() {
+      pui.sweep_x
+    } else {
+      pui.playhead_pos.x + pui.actived_pos.x
+    };
+    let is_special = |x: usize, y: usize| -> bool {
+      let is_crosshair =
+        pui.sweep_mode && pui.sweep_row_mode.is_row_active(y) && x == crosshair_abs_x;
+      let is_drone = pui.drone_mode && x == playhead_area.left() + pui.drone_x;
+      let is_match = pui
+        .text_matcher
+        .as_ref()
+        .is_some_and(|m| m.contains_key(&(y * self.grid.width + x)));
+      is_crosshair || is_drone || is_match
+    };
+    let sep_style = CellStyle::fg_rgb(100, 100, 100);
+    for &sep_x in &sep_xs {
+      for y in 0..self.grid.height {
+        if playhead_area.contains((sep_x, y).into()) || is_special(sep_x, y) {
+          continue;
+        }
+        let ch = if sep_ys.contains(&y) { '┼' } else { '│' };
+        if let Some(c) = buf.get_mut(gx + sep_x as u16, gy + y as u16) {
+          apply_style(c, ch, sep_style);
+        }
+      }
+    }
+    for &sep_y in &sep_ys {
+      for x in 0..self.grid.width {
+        if playhead_area.contains((x, sep_y).into()) || is_special(x, sep_y) {
+          continue;
+        }
+        let ch = if sep_xs.contains(&x) { '┼' } else { '─' };
+        if let Some(c) = buf.get_mut(gx + x as u16, gy + sep_y as u16) {
+          apply_style(c, ch, sep_style);
         }
       }
     }
   }
 }
 
-fn take_focus(
-  _: &mut GridEditor,
-  _: cursive::direction::Direction,
-) -> Result<EventResult, CannotFocus> {
-  Ok(EventResult::Consumed(None))
-}
+/// Dispatch a crossterm key event to the appropriate grid action.
+/// Returns true if the event was consumed.
+#[cfg(not(target_arch = "wasm32"))]
+pub fn handle_key_event(canvas: &mut GridEditor, key: crossterm::event::KeyEvent) -> bool {
+  use crossterm::event::{KeyCode, KeyEventKind, KeyModifiers};
 
-fn on_event(canvas: &mut GridEditor, event: Event) -> EventResult {
-  match event {
-    Event::Refresh => EventResult::consumed(),
+  if key.kind == KeyEventKind::Release {
+    return false;
+  }
 
-    // detect leaked SGR mouse escape sequences eg. `[<35;74;24M`
-    // aka. Mouse Drag + Pressing ESC thingy
-    // Return Ignored so `[` still propagates to the command handler
-    // (AdjustSweepCC Decrease). The state is set to track whether this
-    // is really an SGR leak (next char `<` will confirm).
-    Event::Char('[') => {
+  let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
+  let alt = key.modifiers.contains(KeyModifiers::ALT);
+
+  if ctrl {
+    return match key.code {
+      KeyCode::Char('h') => {
+        canvas.start_aim_if_needed();
+        canvas.update_aim(Direction::Left, 1)
+      }
+      KeyCode::Char('j') => {
+        canvas.start_aim_if_needed();
+        canvas.update_aim(Direction::Down, 1)
+      }
+      KeyCode::Char('k') => {
+        canvas.start_aim_if_needed();
+        canvas.update_aim(Direction::Up, 1)
+      }
+      KeyCode::Char('l') => {
+        canvas.start_aim_if_needed();
+        canvas.update_aim(Direction::Right, 1)
+      }
+      KeyCode::Char('g') => canvas.cycle_dice_face(),
+      _ => false,
+    };
+  }
+
+  if alt {
+    return match key.code {
+      KeyCode::Char('h') => canvas.alt_action(Direction::Left, consts::MOVE_X_STEP_SIZE),
+      KeyCode::Char('j') => canvas.alt_action(Direction::Down, consts::MOVE_Y_STEP_SIZE),
+      KeyCode::Char('k') => canvas.alt_action(Direction::Up, consts::MOVE_Y_STEP_SIZE),
+      KeyCode::Char('l') => canvas.alt_action(Direction::Right, consts::MOVE_X_STEP_SIZE),
+      _ => false,
+    };
+  }
+
+  match key.code {
+    KeyCode::Char('#') => canvas.toggle_dice(),
+    KeyCode::Char('h') => canvas.commit_or_move(Direction::Left),
+    KeyCode::Char('j') => canvas.commit_or_move(Direction::Down),
+    KeyCode::Char('k') => canvas.commit_or_move(Direction::Up),
+    KeyCode::Char('l') => canvas.commit_or_move(Direction::Right),
+    KeyCode::Char('H') => canvas.scale_action((-1, 0)),
+    KeyCode::Char('J') => canvas.scale_action((0, -1)),
+    KeyCode::Char('K') => canvas.scale_action((0, 1)),
+    KeyCode::Char('L') => canvas.scale_action((1, 0)),
+    // macOS Option+h/j/k/l compose to these Unicode chars without an explicit Alt modifier
+    #[cfg(target_os = "macos")]
+    KeyCode::Char('˙') => canvas.alt_action(Direction::Left, consts::MOVE_X_STEP_SIZE),
+    #[cfg(target_os = "macos")]
+    KeyCode::Char('∆') => canvas.alt_action(Direction::Down, consts::MOVE_Y_STEP_SIZE),
+    #[cfg(target_os = "macos")]
+    KeyCode::Char('˚') => canvas.alt_action(Direction::Up, consts::MOVE_Y_STEP_SIZE),
+    #[cfg(target_os = "macos")]
+    KeyCode::Char('¬') => canvas.alt_action(Direction::Right, consts::MOVE_X_STEP_SIZE),
+    // macOS Option+Shift+h/j/k/l
+    #[cfg(target_os = "macos")]
+    KeyCode::Char('Ó') => canvas.scale_action((-(consts::SCALE_X_STEP_SIZE as i32), 0)),
+    #[cfg(target_os = "macos")]
+    KeyCode::Char('Ô') => canvas.scale_action((0, -(consts::SCALE_Y_STEP_SIZE as i32))),
+    #[cfg(target_os = "macos")]
+    KeyCode::Char('\u{f8ff}') => canvas.scale_action((0, consts::SCALE_Y_STEP_SIZE as i32)),
+    #[cfg(target_os = "macos")]
+    KeyCode::Char('Ò') => canvas.scale_action((consts::SCALE_X_STEP_SIZE as i32, 0)),
+    KeyCode::Char('[') => {
       canvas.sgr_leak_state = 1;
-      EventResult::Ignored
+      false
     }
-    Event::Char('<') if canvas.sgr_leak_state == 1 => {
+    KeyCode::Char('<') if canvas.sgr_leak_state == 1 => {
       canvas.sgr_leak_state = 2;
-      EventResult::consumed()
+      true
     }
-    Event::Char(c) if canvas.sgr_leak_state == 2 && (c.is_ascii_digit() || c == ';') => {
-      EventResult::consumed()
-    }
-    Event::Char('M') | Event::Char('m') if canvas.sgr_leak_state == 2 => {
+    KeyCode::Char(c) if canvas.sgr_leak_state == 2 && (c.is_ascii_digit() || c == ';') => true,
+    KeyCode::Char('M') | KeyCode::Char('m') if canvas.sgr_leak_state == 2 => {
       canvas.sgr_leak_state = 0;
-      EventResult::consumed()
+      true
     }
-
-    // handle split midi-chan
-    Event::Char(c) if ('1'..='7').contains(&c) => {
+    KeyCode::Char(c) if ('1'..='7').contains(&c) => {
       canvas.sgr_leak_state = 0;
       canvas.handle_split_char(c)
     }
-
-    // Vim keybindings for movement (h/j/k/l)
-    Event::Char('h') => canvas.commit_or_move(Direction::Left),
-    Event::Char('j') => canvas.commit_or_move(Direction::Down),
-    Event::Char('k') => canvas.commit_or_move(Direction::Up),
-    Event::Char('l') => canvas.commit_or_move(Direction::Right),
-    Event::AltChar('h') => canvas.alt_action(Direction::Left, consts::MOVE_X_STEP_SIZE),
-    Event::AltChar('j') => canvas.alt_action(Direction::Down, consts::MOVE_Y_STEP_SIZE),
-    Event::AltChar('k') => canvas.alt_action(Direction::Up, consts::MOVE_Y_STEP_SIZE),
-    Event::AltChar('l') => canvas.alt_action(Direction::Right, consts::MOVE_X_STEP_SIZE),
-
-    // Option+h
-    #[cfg(target_os = "macos")]
-    Event::Char('˙') => canvas.alt_action(Direction::Left, consts::MOVE_X_STEP_SIZE),
-    // Option+j
-    #[cfg(target_os = "macos")]
-    Event::Char('∆') => canvas.alt_action(Direction::Down, consts::MOVE_Y_STEP_SIZE),
-    // Option+k
-    #[cfg(target_os = "macos")]
-    Event::Char('˚') => canvas.alt_action(Direction::Up, consts::MOVE_Y_STEP_SIZE),
-    // Option+l
-    #[cfg(target_os = "macos")]
-    Event::Char('¬') => canvas.alt_action(Direction::Right, consts::MOVE_X_STEP_SIZE),
-
-    // Shift + Vim keybindings for movement (h/j/k/l)
-    Event::Char('H') => canvas.scale_action((-1, 0)),
-    Event::Char('J') => canvas.scale_action((0, -1)),
-    Event::Char('K') => canvas.scale_action((0, 1)),
-    Event::Char('L') => canvas.scale_action((1, 0)),
-    #[cfg(target_os = "macos")]
-    Event::Char('Ó') => canvas.scale_action((-(consts::SCALE_X_STEP_SIZE as i32), 0)),
-    #[cfg(target_os = "macos")]
-    Event::Char('Ô') => canvas.scale_action((0, -(consts::SCALE_Y_STEP_SIZE as i32))),
-    #[cfg(target_os = "macos")]
-    Event::Char('\u{f8ff}') => canvas.scale_action((0, consts::SCALE_Y_STEP_SIZE as i32)),
-    #[cfg(target_os = "macos")]
-    Event::Char('Ò') => canvas.scale_action((consts::SCALE_X_STEP_SIZE as i32, 0)),
-    Event::CtrlChar('h') => {
-      canvas.start_aim_if_needed();
-      canvas.update_aim(Direction::Left, 1)
-    }
-    Event::CtrlChar('j') => {
-      canvas.start_aim_if_needed();
-      canvas.update_aim(Direction::Down, 1)
-    }
-    Event::CtrlChar('k') => {
-      canvas.start_aim_if_needed();
-      canvas.update_aim(Direction::Up, 1)
-    }
-    Event::CtrlChar('l') => {
-      canvas.start_aim_if_needed();
-      canvas.update_aim(Direction::Right, 1)
-    }
-    Event::Mouse {
-      offset,
-      position,
-      event: MouseEvent::Press(_btn),
-    } => canvas.handle_mouse_press(offset, position),
-    Event::Mouse {
-      offset,
-      position,
-      event: MouseEvent::Hold(MouseButton::Left),
-    } => canvas.handle_mouse_hold(offset, position),
     _ => {
       canvas.sgr_leak_state = 0;
-      EventResult::Ignored
+      false
     }
+  }
+}
+
+/// Handle a crossterm mouse event. Returns true if consumed.
+#[cfg(not(target_arch = "wasm32"))]
+pub fn handle_mouse_event(
+  canvas: &mut GridEditor,
+  event: crossterm::event::MouseEvent,
+  panel_x: u16,
+  panel_y: u16,
+) -> bool {
+  use crossterm::event::{MouseButton, MouseEventKind};
+
+  let col = (event.column as usize).saturating_sub(panel_x as usize - 1);
+  let row = (event.row as usize).saturating_sub(panel_y as usize);
+  let position = Vec2::new(col, row);
+  let offset = Vec2::zero();
+
+  match event.kind {
+    MouseEventKind::Down(MouseButton::Left)
+    | MouseEventKind::Down(MouseButton::Right)
+    | MouseEventKind::Down(MouseButton::Middle) => canvas.handle_mouse_press(offset, position),
+    MouseEventKind::Drag(MouseButton::Left) => canvas.handle_mouse_hold(offset, position),
+    _ => false,
   }
 }

@@ -1,106 +1,63 @@
+/// Exports functions that JavaScript drives:
+///   wasm_init(cols, rows)   - set up the whole application
+///   wasm_step(elapsed_ms)   - advance one frame (~60 fps)
+///   wasm_send_key(key_str)  - forward a key string from xterm.js
+///   wasm_render()           - returns the ANSI string to write to xterm.js
+///   wasm_resize(cols, rows) - notify the backend of a terminal resize
 use std::cell::RefCell;
-use std::collections::VecDeque;
 use std::sync::mpsc::Sender;
 use std::sync::Arc;
 
-use cursive::event::{Event, Key, MouseButton, MouseEvent};
-use cursive::style::{BaseColor, Color, ColorPair, Effect};
-use cursive::Vec2;
 use wasm_bindgen::prelude::*;
 
-use crate::app::{initialize_components, setup_ui};
+use crate::app::initialize_components;
+use crate::app_state::{apply_ui_update, AppState, Focus};
 use crate::core::engine::regex::RegexCache;
-use crate::core::playhead::{Message as PlayheadMessage, Playhead};
+use crate::core::engine::symspell::SymSpellState;
+use crate::core::playhead::{Message as PlayheadMessage, Playhead, UIUpdate};
 use crate::core::timing::metronome::{Message as MetronomeMessage, Metronome};
+use crate::terminal::buffer::ScreenBuffer;
+use crate::terminal::cell::Color as TermColor;
+use crate::view::grid::GridEditor;
+use crate::view::menubar::set_grid_contents;
 
-thread_local! {
-  /// Events pushed by `wasm_send_key`, drained by `poll_event`.
-  static EVENT_STAGE: RefCell<VecDeque<Event>> = RefCell::new(VecDeque::new());
-  /// Pending resize (cols, rows) written by `wasm_resize`.
-  static RESIZE_STAGE: RefCell<Option<(usize, usize)>> = RefCell::new(None);
-  /// Last rendered ANSI frame, read by `wasm_render`.
-  static ANSI_OUTPUT: RefCell<String> = RefCell::new(String::new());
-}
-
-#[derive(Clone)]
-struct ScreenCell {
-  ch: char,
-  fg: Color,
-  bg: Color,
-  reverse: bool,
-}
-
-impl Default for ScreenCell {
-  fn default() -> Self {
-    ScreenCell {
-      ch: ' ',
-      fg: Color::Dark(BaseColor::White),
-      bg: Color::Dark(BaseColor::Black),
-      reverse: false,
-    }
-  }
-}
+// -------- ANSI rendering --------
 
 struct BackendState {
-  cols: usize,
-  rows: usize,
-  cells: Vec<ScreenCell>,
-  cursor: Vec2,
-  fg: Color,
-  bg: Color,
-  reverse: bool,
+  buf: ScreenBuffer,
 }
 
 impl BackendState {
-  fn new(cols: usize, rows: usize) -> Self {
+  fn new(cols: u16, rows: u16) -> Self {
     Self {
-      cols,
-      rows,
-      cells: vec![ScreenCell::default(); cols * rows],
-      cursor: Vec2::zero(),
-      fg: Color::Dark(BaseColor::White),
-      bg: Color::Dark(BaseColor::Black),
-      reverse: false,
+      buf: ScreenBuffer::new(cols, rows),
     }
   }
 
-  fn resize(&mut self, cols: usize, rows: usize) {
-    self.cols = cols;
-    self.rows = rows;
-    self.cells = vec![ScreenCell::default(); cols * rows];
-    self.cursor = Vec2::zero();
-  }
-
-  fn cell_idx(&self, x: usize, y: usize) -> Option<usize> {
-    if x < self.cols && y < self.rows {
-      Some(y * self.cols + x)
-    } else {
-      None
-    }
+  fn resize(&mut self, cols: u16, rows: u16) {
+    self.buf.resize(cols, rows);
   }
 
   fn render_ansi(&self) -> String {
-    let mut out = String::with_capacity(self.cols * self.rows * 8);
-    // hide cursor, move to top-left
+    let cols = self.buf.width as usize;
+    let rows = self.buf.height as usize;
+    let mut out = String::with_capacity(cols * rows * 8);
     out.push_str("\x1b[?25l\x1b[H");
 
-    let mut prev_fg: Option<Color> = None;
-    let mut prev_bg: Option<Color> = None;
+    let mut prev_fg: Option<TermColor> = None;
+    let mut prev_bg: Option<TermColor> = None;
     let mut prev_reverse: Option<bool> = None;
 
-    for row in 0..self.rows {
-      for col in 0..self.cols {
-        let cell = &self.cells[row * self.cols + col];
+    for row in 0..rows {
+      for col in 0..cols {
+        let cell = &self.buf.cells[row * cols + col];
         let need_color = prev_fg.map_or(true, |f| f != cell.fg)
           || prev_bg.map_or(true, |b| b != cell.bg)
           || prev_reverse.map_or(true, |r| r != cell.reverse);
         if need_color {
           if cell.reverse {
-            // Reset all then enable reverse video - the terminal inverts its
-            // own default colours, giving white-bg/dark-text for the cursor.
             out.push_str("\x1b[0m\x1b[7m");
           } else {
-            // Reset (clears any lingering reverse) then set explicit colours.
             out.push_str("\x1b[0m");
             out.push_str(&ansi_color(cell.fg, cell.bg));
           }
@@ -111,7 +68,7 @@ impl BackendState {
         let ch = if cell.ch == '\0' { ' ' } else { cell.ch };
         out.push(ch);
       }
-      if row + 1 < self.rows {
+      if row + 1 < rows {
         out.push_str("\r\n");
       }
     }
@@ -120,156 +77,107 @@ impl BackendState {
   }
 }
 
-fn ansi_color(fg: Color, bg: Color) -> String {
+fn ansi_color(fg: TermColor, bg: TermColor) -> String {
   format!("{}{}", ansi_fg(fg), ansi_bg(bg))
 }
 
-fn base_idx(b: BaseColor) -> u8 {
-  match b {
-    BaseColor::Black => 0,
-    BaseColor::Red => 1,
-    BaseColor::Green => 2,
-    BaseColor::Yellow => 3,
-    BaseColor::Blue => 4,
-    BaseColor::Magenta => 5,
-    BaseColor::Cyan => 6,
-    BaseColor::White => 7,
-  }
-}
-
-fn ansi_fg(c: Color) -> String {
+fn ansi_fg(c: TermColor) -> String {
   match c {
-    Color::Dark(b) => format!("\x1b[{}m", 30 + base_idx(b)),
-    Color::Light(b) => format!("\x1b[{}m", 90 + base_idx(b)),
-    Color::Rgb(r, g, b) => format!("\x1b[38;2;{r};{g};{b}m"),
-    Color::RgbLowRes(r, g, b) => format!(
-      "\x1b[38;5;{}m",
-      16u16 + 36 * r as u16 + 6 * g as u16 + b as u16
-    ),
-    _ => "\x1b[39m".to_string(),
+    TermColor::Reset => "\x1b[39m".to_string(),
+    TermColor::Rgb(r, g, b) => format!("\x1b[38;2;{r};{g};{b}m"),
+    TermColor::Indexed(i) if i < 8 => format!("\x1b[{}m", 30 + i),
+    TermColor::Indexed(i) if i < 16 => format!("\x1b[{}m", 90 + (i - 8)),
+    TermColor::Indexed(i) => format!("\x1b[38;5;{}m", i),
   }
 }
 
-fn ansi_bg(c: Color) -> String {
+fn ansi_bg(c: TermColor) -> String {
   match c {
-    Color::Dark(b) => format!("\x1b[{}m", 40 + base_idx(b)),
-    Color::Light(b) => format!("\x1b[{}m", 100 + base_idx(b)),
-    Color::Rgb(r, g, b) => format!("\x1b[48;2;{r};{g};{b}m"),
-    Color::RgbLowRes(r, g, b) => format!(
-      "\x1b[48;5;{}m",
-      16u16 + 36 * r as u16 + 6 * g as u16 + b as u16
-    ),
-    _ => "\x1b[49m".to_string(),
+    TermColor::Reset => "\x1b[49m".to_string(),
+    TermColor::Rgb(r, g, b) => format!("\x1b[48;2;{r};{g};{b}m"),
+    TermColor::Indexed(i) if i < 8 => format!("\x1b[{}m", 40 + i),
+    TermColor::Indexed(i) if i < 16 => format!("\x1b[{}m", 100 + (i - 8)),
+    TermColor::Indexed(i) => format!("\x1b[48;5;{}m", i),
   }
 }
 
-struct XtermJsBackend {
-  state: RefCell<BackendState>,
+// -------- Key parsing (string → internal key actions) --------
+
+enum WasmKey {
+  Char(char),
+  Ctrl(char),
+  Alt(char),
+  Enter,
+  Esc,
+  Backspace,
+  Tab,
+  Up,
+  Down,
+  Left,
+  Right,
+  Home,
+  End,
+  Delete,
+  PageUp,
+  PageDown,
 }
 
-impl XtermJsBackend {
-  fn new(cols: usize, rows: usize) -> Self {
-    Self {
-      state: RefCell::new(BackendState::new(cols, rows)),
-    }
-  }
-}
-
-impl cursive::backend::Backend for XtermJsBackend {
-  fn poll_event(&mut self) -> Option<Event> {
-    // Apply any pending resize first
-    if let Some((cols, rows)) = RESIZE_STAGE.with(|s| s.borrow_mut().take()) {
-      self.state.borrow_mut().resize(cols, rows);
-    }
-    // Drain staged events from wasm_send_key
-    EVENT_STAGE.with(|e| e.borrow_mut().pop_front())
-  }
-
-  fn set_title(&mut self, _title: String) {}
-
-  fn refresh(&mut self) {
-    let rendered = self.state.borrow().render_ansi();
-    ANSI_OUTPUT.with(|a| *a.borrow_mut() = rendered);
-  }
-
-  fn has_colors(&self) -> bool {
-    true
-  }
-
-  fn screen_size(&self) -> Vec2 {
-    let s = self.state.borrow();
-    Vec2::new(s.cols, s.rows)
-  }
-
-  fn move_to(&self, pos: Vec2) {
-    self.state.borrow_mut().cursor = pos;
-  }
-
-  fn print(&self, text: &str) {
-    let mut s = self.state.borrow_mut();
-    let cx = s.cursor.x;
-    let cy = s.cursor.y;
-    let fg = s.fg;
-    let bg = s.bg;
-    let reverse = s.reverse;
-    let n = text.chars().count();
-    for (i, ch) in text.chars().enumerate() {
-      if let Some(idx) = s.cell_idx(cx + i, cy) {
-        s.cells[idx] = ScreenCell {
-          ch,
-          fg,
-          bg,
-          reverse,
-        };
+fn parse_key(s: &str) -> Vec<WasmKey> {
+  let mut out = Vec::new();
+  match s {
+    "\r" | "\n" => out.push(WasmKey::Enter),
+    "\x1b" => out.push(WasmKey::Esc),
+    "\x7f" | "\x08" => out.push(WasmKey::Backspace),
+    "\t" => out.push(WasmKey::Tab),
+    "\x1b[A" | "\x1bOA" => out.push(WasmKey::Up),
+    "\x1b[B" | "\x1bOB" => out.push(WasmKey::Down),
+    "\x1b[C" | "\x1bOC" => out.push(WasmKey::Right),
+    "\x1b[D" | "\x1bOD" => out.push(WasmKey::Left),
+    "\x1b[H" | "\x1bOH" => out.push(WasmKey::Home),
+    "\x1b[F" | "\x1bOF" => out.push(WasmKey::End),
+    "\x1b[3~" => out.push(WasmKey::Delete),
+    "\x1b[5~" => out.push(WasmKey::PageUp),
+    "\x1b[6~" => out.push(WasmKey::PageDown),
+    s => {
+      let bytes = s.as_bytes();
+      if bytes.len() == 1 {
+        let b = bytes[0];
+        if (1..=26).contains(&b) {
+          out.push(WasmKey::Ctrl((b'a' + b - 1) as char));
+        } else if b >= 0x20 {
+          out.push(WasmKey::Char(b as char));
+        }
+      } else if bytes.len() >= 2 && bytes[0] == b'\x1b' {
+        let rest = &s[1..];
+        let rest_bytes = rest.as_bytes();
+        if rest_bytes.len() == 1 {
+          let b = rest_bytes[0];
+          if (1..=26).contains(&b) {
+            out.push(WasmKey::Alt((b'a' + b - 1) as char));
+          } else if b >= 0x20 && b < 0x7f {
+            out.push(WasmKey::Alt(b as char));
+          }
+        }
+      } else {
+        for ch in s.chars() {
+          if !ch.is_control() {
+            out.push(WasmKey::Char(ch));
+          }
+        }
       }
     }
-    s.cursor.x += n;
   }
-
-  fn clear(&self, color: Color) {
-    let mut s = self.state.borrow_mut();
-    let fg = s.fg;
-    for cell in s.cells.iter_mut() {
-      *cell = ScreenCell {
-        ch: ' ',
-        fg,
-        bg: color,
-        reverse: false,
-      };
-    }
-    s.cursor = Vec2::zero();
-  }
-
-  fn set_color(&self, colors: ColorPair) -> ColorPair {
-    let mut s = self.state.borrow_mut();
-    let prev = ColorPair {
-      front: s.fg,
-      back: s.bg,
-    };
-    s.fg = colors.front;
-    s.bg = colors.back;
-    prev
-  }
-
-  fn set_effect(&self, effect: Effect) {
-    if effect == Effect::Reverse {
-      self.state.borrow_mut().reverse = true;
-    }
-  }
-
-  fn unset_effect(&self, effect: Effect) {
-    if effect == Effect::Reverse {
-      self.state.borrow_mut().reverse = false;
-    }
-  }
-  fn name(&self) -> &str {
-    "xterm.js"
-  }
+  out
 }
+
+// -------- Background tick context --------
 
 struct WasmCtx {
   playhead: Arc<Playhead>,
   regex_tx: Sender<crate::core::engine::regex::Message>,
+  sym_state: Arc<SymSpellState>,
+  ui_rx: std::sync::mpsc::Receiver<UIUpdate>,
+  pending_ui: Vec<UIUpdate>,
   regex_handler: crate::core::engine::regex::RegExpHandler,
   regex_cache: RegexCache,
   metronome: Metronome,
@@ -277,13 +185,12 @@ struct WasmCtx {
   midi: crate::core::io::midi::Midi,
   clock_accum_ms: f64,
   clock_tick: usize,
-  current_tempo: std::sync::Arc<std::sync::Mutex<usize>>,
+  current_tempo: Arc<std::sync::Mutex<usize>>,
   committed_tempo: usize,
 }
 
 impl WasmCtx {
   fn tick(&mut self, elapsed_ms: f64) {
-    // poll the current tempo and send an update if it has changed since the last tick
     {
       let current = *self.current_tempo.lock().unwrap();
       if current != self.committed_tempo {
@@ -295,13 +202,11 @@ impl WasmCtx {
       }
     }
 
-    // 1. Drain metronome control messages (StartStop, Tempo, …)
     self.metronome.wasm_tick();
 
-    // 2. Advance internal clock if playing
     if self.metronome.wasm_is_playing() {
       let bpm = self.metronome.wasm_current_bpm().max(1.0);
-      let ms_per_tick = 60_000.0 / (bpm * 16.0); // 16 ticks per beat
+      let ms_per_tick = 60_000.0 / (bpm * 16.0);
       self.clock_accum_ms += elapsed_ms;
       while self.clock_accum_ms >= ms_per_tick {
         self.clock_accum_ms -= ms_per_tick;
@@ -313,119 +218,56 @@ impl WasmCtx {
       }
     }
 
-    // 3. Drain the playhead message queue
     self.playhead.wasm_tick();
 
-    // 4. Process queued UI updates → push closures to cb_sink
-    self.playhead.wasm_tick_ui(&self.regex_tx);
+    while let Ok(update) = self.ui_rx.try_recv() {
+      self.pending_ui.push(update);
+    }
 
-    // 5. Drain the regex handler
     self.regex_handler.wasm_tick(&mut self.regex_cache);
-
-    // 6. Process MIDI messages and fire pending note-offs
     self.midi.wasm_tick(self.clock_tick);
   }
 }
 
-thread_local! {
-  static RUNNER: RefCell<Option<cursive::CursiveRunner<cursive::Cursive>>> =
-    RefCell::new(None);
-  static CTX: RefCell<Option<WasmCtx>> = RefCell::new(None);
+// -------- UI context (AppState + GridEditor + backend) --------
+
+struct WasmUiCtx {
+  state: AppState,
+  grid: GridEditor,
+  backend: BackendState,
+  cmd_mgr: crate::core::command::register::CommandManager,
 }
 
-fn parse_key(s: &str) -> Vec<Event> {
-  let mut out = Vec::new();
-  match s {
-    "\r" | "\n" => out.push(Event::Key(Key::Enter)),
-    "\x1b" => out.push(Event::Key(Key::Esc)),
-    "\x7f" | "\x08" => out.push(Event::Key(Key::Backspace)),
-    "\t" => out.push(Event::Key(Key::Tab)),
-    "\x1b[A" | "\x1bOA" => out.push(Event::Key(Key::Up)),
-    "\x1b[B" | "\x1bOB" => out.push(Event::Key(Key::Down)),
-    "\x1b[C" | "\x1bOC" => out.push(Event::Key(Key::Right)),
-    "\x1b[D" | "\x1bOD" => out.push(Event::Key(Key::Left)),
-    "\x1b[H" | "\x1bOH" => out.push(Event::Key(Key::Home)),
-    "\x1b[F" | "\x1bOF" => out.push(Event::Key(Key::End)),
-    "\x1b[3~" => out.push(Event::Key(Key::Del)),
-    "\x1b[5~" => out.push(Event::Key(Key::PageUp)),
-    "\x1b[6~" => out.push(Event::Key(Key::PageDown)),
-    "\x1b[2~" => out.push(Event::Key(Key::Ins)),
-    // Alt+arrow keys (xterm modifier format)
-    "\x1b[1;3A" => out.push(Event::Alt(Key::Up)),
-    "\x1b[1;3B" => out.push(Event::Alt(Key::Down)),
-    "\x1b[1;3C" => out.push(Event::Alt(Key::Right)),
-    "\x1b[1;3D" => out.push(Event::Alt(Key::Left)),
-    s => {
-      let bytes = s.as_bytes();
-      if bytes.len() == 1 {
-        let b = bytes[0];
-        if b >= 1 && b <= 26 {
-          // Ctrl+letter
-          out.push(Event::CtrlChar((b'a' + b - 1) as char));
-        } else if b >= 0x20 {
-          out.push(Event::Char(b as char));
-        }
-      } else if bytes.len() >= 2 && bytes[0] == b'\x1b' {
-        // Alt+key: xterm.js sends ESC followed by the key sequence
-        let rest = &s[1..];
-        let rest_bytes = rest.as_bytes();
-        if rest_bytes.len() == 1 {
-          let b = rest_bytes[0];
-          if b >= 1 && b <= 26 {
-            // Alt+Ctrl+letter
-            out.push(Event::AltChar((b'a' + b - 1) as char));
-          } else if b >= 0x20 && b < 0x7f {
-            // Alt+printable ASCII
-            out.push(Event::AltChar(b as char));
-          }
-        } else {
-          // Alt+multi-char: parse the inner sequence and wrap in Alt
-          for ev in parse_key(rest) {
-            match ev {
-              Event::Key(k) => out.push(Event::Alt(k)),
-              Event::Char(c) => out.push(Event::AltChar(c)),
-              other => out.push(other),
-            }
-          }
-        }
-      } else {
-        // Multi-byte UTF-8 (emoji, accented chars, etc.)
-        for ch in s.chars() {
-          if !ch.is_control() {
-            out.push(Event::Char(ch));
-          }
-        }
-      }
-    }
-  }
-  out
+thread_local! {
+  static CTX: RefCell<Option<WasmCtx>> = RefCell::new(None);
+  static UI: RefCell<Option<WasmUiCtx>> = RefCell::new(None);
+  static ANSI_OUTPUT: RefCell<String> = RefCell::new(String::new());
 }
 
 /// Initialise the application. Call once before anything else.
-/// `cols` and `rows` should match xterm.js terminal dimensions.
 #[wasm_bindgen]
 pub fn wasm_init(cols: u32, rows: u32) {
   console_error_panic_hook::set_once();
 
   let mut components = initialize_components();
-  setup_ui(&mut components);
 
   let playhead = components.playhead;
-  let regex_tx = components.regex_handler.tx.clone();
+  let sym_state = Arc::clone(&playhead.sym_state);
+  let regex_tx = components.regex_tx.clone();
   let regex_handler = components.regex_handler;
   let metronome_tx = components.metronome.tx.clone();
   let metronome = components.metronome;
   let midi = components.midi;
-  let current_tempo = std::sync::Arc::clone(&components.current_tempo);
+  let ui_rx = components.ui_rx;
+  let current_tempo = Arc::clone(&components.current_tempo);
   let committed_tempo = *current_tempo.lock().unwrap();
-
-  // Build the runner with our custom backend
-  let backend = Box::new(XtermJsBackend::new(cols as usize, rows as usize));
-  let runner = components.cursive.into_runner(backend);
 
   let ctx = WasmCtx {
     playhead,
-    regex_tx,
+    regex_tx: regex_tx.clone(),
+    sym_state,
+    ui_rx,
+    pending_ui: Vec::new(),
     regex_handler,
     regex_cache: RegexCache::new(),
     metronome,
@@ -437,106 +279,626 @@ pub fn wasm_init(cols: u32, rows: u32) {
     committed_tempo,
   };
 
-  RUNNER.with(|r| *r.borrow_mut() = Some(runner));
+  use crate::view::consts::{CONSOLE_HEIGHT, PADDING_X, PADDING_Y};
+  let playhead_tx = components.playhead_tx.clone();
+  let mut grid = GridEditor::new(playhead_tx);
+  grid.regex_tx = Some(regex_tx);
+  let init_w = cols as u16;
+  let init_h = rows as u16;
+  let grid_w = init_w.saturating_sub(PADDING_X * 2) as usize;
+  let grid_h = init_h.saturating_sub(CONSOLE_HEIGHT + 2 + PADDING_Y * 2) as usize;
+  grid.resize(crate::core::geom::Vec2::new(grid_w, grid_h));
+
+  let mut state = AppState::default();
+  state.resize(cols as u16, rows as u16);
+  state.focus = Focus::Grid;
+  state.midi_status = ctx.midi.out_device_name();
+  grid.is_canvas_focused = true;
+
+  set_grid_contents(&mut grid, crate::core::consts::MANIFESTO_TEXT.to_string());
+
+  let ui_ctx = WasmUiCtx {
+    state,
+    grid,
+    backend: BackendState::new(cols as u16, rows as u16),
+    cmd_mgr: components.cmd_mgr,
+  };
+
   CTX.with(|c| *c.borrow_mut() = Some(ctx));
+  UI.with(|u| *u.borrow_mut() = Some(ui_ctx));
 }
 
 /// Advance one frame. Call at ~60 fps from `requestAnimationFrame`.
-/// `elapsed_ms` - milliseconds since the previous call.
 #[wasm_bindgen]
 pub fn wasm_step(elapsed_ms: f64) {
-  // Tick all background processing (clock, playhead, regex, UI queue)
   CTX.with(|c| {
     if let Some(ctx) = c.borrow_mut().as_mut() {
       ctx.tick(elapsed_ms);
     }
   });
 
-  // process all pending events + cb_sink callbacks, then redraw
-  RUNNER.with(|r| {
-    if let Some(runner) = r.borrow_mut().as_mut() {
-      runner.process_events();
-      runner.refresh();
+  let maybe_ui = CTX.with(|c| {
+    c.borrow_mut().as_mut().map(|ctx| {
+      (
+        std::mem::take(&mut ctx.pending_ui),
+        Arc::clone(&ctx.sym_state),
+        ctx.regex_tx.clone(),
+      )
+    })
+  });
+
+  if let Some((pending_ui, sym_state, regex_tx)) = maybe_ui {
+    UI.with(|u| {
+      if let Some(ui) = u.borrow_mut().as_mut() {
+        for update in pending_ui {
+          match &update {
+            UIUpdate::TmpAppendSpace => {
+              sym_state.handle_buf_append_space(&mut ui.state);
+              continue;
+            }
+            UIUpdate::TmpAppend(idx) => {
+              sym_state.handle_buf_append(&ui.grid, &mut ui.state, *idx);
+              continue;
+            }
+            UIUpdate::RplCycle(area) => {
+              let area = *area;
+              sym_state.handle_rpl_cycle(&mut ui.grid, &mut ui.state, area);
+              continue;
+            }
+            _ => {}
+          }
+          apply_ui_update(update, &mut ui.state);
+        }
+
+        // Sync grid's PlayheadUI from AppState.
+        ui.grid.playhead_ui = ui.state.playhead_ui.clone();
+        ui.grid.playhead_ui.focus_mode =
+          crate::core::consts::FOCUS_MODE.load(std::sync::atomic::Ordering::Relaxed);
+
+        // Advance symspell animation.
+        if let Some(tick) = sym_state.advance_anim_frame() {
+          sym_state.render_anim_tick(&mut ui.grid, &mut ui.state, tick, &regex_tx);
+        }
+
+        // Draw frame into backend buffer.
+        draw_wasm_frame(&ui.state, &ui.grid, &mut ui.backend.buf);
+
+        // Render ANSI.
+        let ansi = ui.backend.render_ansi();
+        ANSI_OUTPUT.with(|a| *a.borrow_mut() = ansi);
+      }
+    });
+  }
+}
+
+fn draw_wasm_frame(state: &AppState, grid: &GridEditor, buf: &mut ScreenBuffer) {
+  use crate::terminal::cell::Color;
+  use crate::view::console::draw_console;
+  use crate::view::consts::{CONSOLE_HEIGHT, PADDING_X, PADDING_Y};
+  use crate::view::menubar::draw_menubar;
+  use crate::view::printer::{apply_style, draw_dialog, CellStyle};
+
+  buf.clear();
+  let w = buf.width;
+
+  let bx0 = PADDING_X.saturating_sub(1);
+  let bx1 = w.saturating_sub(PADDING_X);
+  let by0 = PADDING_Y;
+  let by1 = 1 + PADDING_Y + CONSOLE_HEIGHT;
+  let focused = matches!(state.focus, crate::app_state::Focus::RegexInput);
+  let border_col = if focused {
+    Color::Rgb(255, 255, 255)
+  } else {
+    Color::Rgb(60, 60, 60)
+  };
+  let bstyle = CellStyle {
+    fg: border_col,
+    bg: Color::Reset,
+    reverse: false,
+  };
+
+  for x in bx0..=bx1 {
+    let top_ch = if x == bx0 {
+      '┌'
+    } else if x == bx1 {
+      '┐'
+    } else {
+      '─'
+    };
+    let bot_ch = if x == bx0 {
+      '└'
+    } else if x == bx1 {
+      '┘'
+    } else {
+      '─'
+    };
+    if let Some(c) = buf.get_mut(x, by0) {
+      apply_style(c, top_ch, bstyle);
+    }
+    if let Some(c) = buf.get_mut(x, by1) {
+      apply_style(c, bot_ch, bstyle);
+    }
+  }
+  for y in by0 + 1..by1 {
+    if let Some(c) = buf.get_mut(bx0, y) {
+      apply_style(c, '│', bstyle);
+    }
+    if let Some(c) = buf.get_mut(bx1, y) {
+      apply_style(c, '│', bstyle);
+    }
+  }
+
+  draw_console(state, buf, PADDING_X, 1 + PADDING_Y, w, CONSOLE_HEIGHT);
+  grid.draw_to_buf(buf, PADDING_X, 2 + PADDING_Y + CONSOLE_HEIGHT);
+
+  if state.show_menubar {
+    draw_menubar(state, buf, 0);
+  }
+
+  if state.show_about {
+    let mut lines: Vec<String> = vec![
+      format!("{}  v{}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION")),
+      String::new(),
+    ];
+    let words: Vec<&str> = env!("CARGO_PKG_DESCRIPTION").split_whitespace().collect();
+    for chunk in words.chunks(6) {
+      lines.push(chunk.join(" "));
+    }
+    lines.push(String::new());
+    lines.push("press any key to close".to_string());
+    let refs: Vec<&str> = lines.iter().map(|s| s.as_str()).collect();
+    draw_dialog(buf, state.width, state.height, &refs);
+  }
+
+  if state.show_docs {
+    draw_dialog(
+      buf,
+      state.width,
+      state.height,
+      &["docs", "", "coming soon...", "", "press any key to close"],
+    );
+  }
+}
+
+/// Map a WasmKey to the binding string used in binding.rs (e.g. "Space", "Ctrl+f").
+/// Returns None for keys handled elsewhere (Esc, Ctrl+b, grid nav keys).
+fn wasm_key_to_binding(key: &WasmKey) -> Option<&'static str> {
+  match key {
+    WasmKey::Char(' ') => Some("Space"),
+    WasmKey::Char('q') => Some("q"),
+    WasmKey::Char('>') => Some(">"),
+    WasmKey::Char('<') => Some("<"),
+    WasmKey::Char('}') => Some("}"),
+    WasmKey::Char('{') => Some("{"),
+    WasmKey::Char('~') => Some("~"),
+    WasmKey::Char('!') => Some("!"),
+    WasmKey::Char('i') => Some("i"),
+    WasmKey::Char('p') => Some("p"),
+    WasmKey::Char('I') => Some("I"),
+    WasmKey::Char('P') => Some("P"),
+    WasmKey::Char('|') => Some("Pipe"),
+    WasmKey::Char('@') => Some("@"),
+    WasmKey::Char('[') => Some("["),
+    WasmKey::Char(']') => Some("]"),
+    WasmKey::Char('+') => Some("Shift+Plus"),
+    WasmKey::Char('_') => Some("Shift+Underscore"),
+    WasmKey::Char('=') => Some("Equal"),
+    WasmKey::Char('-') => Some("Minus"),
+    WasmKey::Ctrl('f') => Some("Ctrl+f"),
+    WasmKey::Ctrl('r') => Some("Ctrl+r"),
+    WasmKey::Ctrl('d') => Some("Ctrl+d"),
+    WasmKey::Ctrl('p') => Some("Ctrl+p"),
+    WasmKey::Ctrl('a') => Some("Ctrl+a"),
+    WasmKey::Ctrl('u') => Some("Ctrl+u"),
+    WasmKey::Ctrl('e') => Some("Ctrl+e"),
+    WasmKey::Ctrl('n') => Some("Ctrl+n"),
+    WasmKey::Ctrl('s') => Some("Ctrl+s"),
+    WasmKey::Ctrl('o') => Some("Ctrl+o"),
+    WasmKey::Ctrl('y') => Some("Ctrl+y"),
+    WasmKey::Ctrl('z') => Some("Ctrl+z"),
+    WasmKey::Ctrl('t') => Some("Ctrl+t"),
+    _ => None,
+  }
+}
+
+/// Map a WasmKey to the platform-independent MenuNavKey for menu navigation.
+fn wasm_key_to_menu_nav(key: &WasmKey) -> crate::view::menubar::MenuNavKey {
+  use crate::view::menubar::MenuNavKey;
+  match key {
+    WasmKey::Left => MenuNavKey::Left,
+    WasmKey::Right => MenuNavKey::Right,
+    WasmKey::Up => MenuNavKey::Up,
+    WasmKey::Down => MenuNavKey::Down,
+    WasmKey::Enter => MenuNavKey::Enter,
+    WasmKey::Esc => MenuNavKey::Esc,
+    _ => MenuNavKey::Other,
+  }
+}
+
+/// Forward keyboard input from xterm.js.
+#[wasm_bindgen]
+pub fn wasm_send_key(key: String) {
+  let keys = parse_key(&key);
+  UI.with(|u| {
+    if let Some(ui) = u.borrow_mut().as_mut() {
+      let mut should_quit = false;
+      for wkey in keys {
+        dispatch_wasm_key(wkey, ui, &mut should_quit);
+      }
     }
   });
 }
 
-/// Forward keyboard input from xterm.js `terminal.onData(data => wasm_send_key(data))`.
-/// Events are staged and consumed on the next `wasm_step` call.
-#[wasm_bindgen]
-pub fn wasm_send_key(key: String) {
-  let events = parse_key(&key);
-  EVENT_STAGE.with(|e| e.borrow_mut().extend(events));
+fn dispatch_wasm_key(key: WasmKey, ui: &mut WasmUiCtx, should_quit: &mut bool) {
+  use crate::core::consts;
+  use crate::core::playhead::Direction;
+  use crate::view::menubar::{handle_menu_nav, MenuAction};
+
+  // Dismiss dialogs on any key.
+  if ui.state.show_about || ui.state.show_docs {
+    ui.state.show_about = false;
+    ui.state.show_docs = false;
+    return;
+  }
+
+  match ui.state.focus {
+    Focus::RegexInput => {
+      let changed = match &key {
+        WasmKey::Esc => {
+          ui.state.focus = Focus::Grid;
+          ui.grid.is_canvas_focused = true;
+          false
+        }
+        WasmKey::Char(c) => {
+          matches!(
+            ui.state.line_editor.insert_char(*c),
+            crate::view::line_editor::LineEditorAction::Changed
+          )
+        }
+        WasmKey::Backspace => {
+          matches!(
+            ui.state.line_editor.backspace(),
+            crate::view::line_editor::LineEditorAction::Changed
+          )
+        }
+        WasmKey::Delete => {
+          matches!(
+            ui.state.line_editor.delete_forward(),
+            crate::view::line_editor::LineEditorAction::Changed
+          )
+        }
+        WasmKey::Left => {
+          ui.state.line_editor.move_left();
+          false
+        }
+        WasmKey::Right => {
+          ui.state.line_editor.move_right();
+          false
+        }
+        WasmKey::Home => {
+          ui.state.line_editor.move_home();
+          false
+        }
+        WasmKey::End => {
+          ui.state.line_editor.move_end();
+          false
+        }
+        WasmKey::Ctrl('a') => {
+          ui.state.line_editor.move_home();
+          false
+        }
+        WasmKey::Ctrl('e') => {
+          ui.state.line_editor.move_end();
+          false
+        }
+        WasmKey::Ctrl('u') => {
+          matches!(
+            ui.state.line_editor.kill_before_cursor(),
+            crate::view::line_editor::LineEditorAction::Changed
+          )
+        }
+        WasmKey::Ctrl('k') => {
+          matches!(
+            ui.state.line_editor.kill_after_cursor(),
+            crate::view::line_editor::LineEditorAction::Changed
+          )
+        }
+        _ => false,
+      };
+
+      if changed {
+        let pattern = ui.state.line_editor.content().to_string();
+        if let Some(ref tx) = ui.grid.regex_tx {
+          if pattern.is_empty() {
+            let _ = tx.send(crate::core::engine::regex::Message::Clear);
+          } else {
+            let _ = tx.send(crate::core::engine::regex::Message::Solve(
+              crate::core::engine::regex::EventData {
+                text: ui.grid.text_contents(),
+                pattern,
+                flags: ui.state.flags.to_flag_str().to_string(),
+                grid_width: ui.grid.grid.width,
+              },
+            ));
+          }
+        }
+      }
+    }
+
+    Focus::Menu => {
+      // Ctrl+b while menu is open closes the menubar.
+      if matches!(&key, WasmKey::Ctrl('b')) {
+        ui.state.show_menubar = false;
+        ui.state.focus = Focus::Grid;
+        ui.state.menu.visible = false;
+        ui.state.menu.active_menu = None;
+        return;
+      }
+
+      let nav = wasm_key_to_menu_nav(&key);
+      let action = handle_menu_nav(&mut ui.state.menu, nav);
+      let mut close_after = false;
+      match action {
+        MenuAction::None => {}
+        MenuAction::Close => {
+          ui.state.show_menubar = false;
+          ui.state.focus = Focus::Grid;
+        }
+        MenuAction::Quit => *should_quit = true,
+        MenuAction::ToggleClock => {
+          use std::sync::atomic::Ordering;
+          let was = consts::CLOCK_ENABLED.load(Ordering::Relaxed);
+          consts::CLOCK_ENABLED.store(!was, Ordering::Relaxed);
+        }
+        MenuAction::ToggleFocus => {
+          use std::sync::atomic::Ordering;
+          let was = consts::FOCUS_MODE.load(Ordering::Relaxed);
+          consts::FOCUS_MODE.store(!was, Ordering::Relaxed);
+        }
+        MenuAction::ReleaseAll => close_after = true,
+        MenuAction::ClearQueue => {
+          let _ = ui
+            .cmd_mgr
+            .playhead_tx()
+            .send(crate::core::playhead::Message::ClearQueue());
+          close_after = true;
+        }
+        MenuAction::InsertFile => close_after = true,
+        MenuAction::About => {
+          ui.state.show_about = true;
+          close_after = true;
+        }
+        MenuAction::ShowDocs => {
+          ui.state.show_docs = true;
+          close_after = true;
+        }
+        MenuAction::MidiOutputSelected(_) | MenuAction::MidiInputSelected(_) => {
+          close_after = true;
+        }
+        MenuAction::ScaleLeftSelected(idx) => {
+          use crate::core::tonal::scale::ScaleMode;
+          if let Some(mode) = ScaleMode::all().get(idx) {
+            let _ = ui
+              .cmd_mgr
+              .playhead_tx()
+              .send(crate::core::playhead::Message::SetScaleModeLeft(*mode));
+          }
+          close_after = true;
+        }
+        MenuAction::ScaleTopSelected(idx) => {
+          use crate::core::tonal::scale::ScaleMode;
+          if let Some(mode) = ScaleMode::all().get(idx) {
+            let _ = ui
+              .cmd_mgr
+              .playhead_tx()
+              .send(crate::core::playhead::Message::SetScaleModeTop(*mode));
+          }
+          close_after = true;
+        }
+        MenuAction::ScaleRootSelected(idx) => {
+          use crate::core::tonal::scale::ScaleRoot;
+          if let Some(root) = ScaleRoot::all().get(idx) {
+            let _ = ui
+              .cmd_mgr
+              .playhead_tx()
+              .send(crate::core::playhead::Message::SetScaleRootTop(*root));
+          }
+          close_after = true;
+        }
+      }
+      if close_after {
+        ui.state.show_menubar = false;
+        ui.state.menu.active_menu = None;
+        ui.state.focus = Focus::Grid;
+      }
+    }
+
+    Focus::Grid => {
+      // Ctrl+b toggles menubar (handled before cmd_mgr, mirrors native behavior).
+      if matches!(&key, WasmKey::Ctrl('b')) {
+        ui.state.show_menubar = !ui.state.show_menubar;
+        if ui.state.show_menubar {
+          ui.state.focus = Focus::Menu;
+          ui.state.menu.visible = true;
+          ui.state.menu.active_menu = None;
+          ui.state.menu.focused_tab = 0;
+        } else {
+          ui.state.menu.visible = false;
+          ui.state.menu.active_menu = None;
+        }
+        return;
+      }
+
+      // Esc switches to RegexInput (same as native Grid focus handler).
+      if matches!(&key, WasmKey::Esc) {
+        ui.state.focus = Focus::RegexInput;
+        ui.grid.is_canvas_focused = false;
+        return;
+      }
+
+      // Try command bindings (Space, q, >, <, Ctrl+f, Ctrl+r, etc.).
+      if let Some(key_str) = wasm_key_to_binding(&key) {
+        if ui
+          .cmd_mgr
+          .dispatch_command_str(key_str, &mut ui.state, &mut ui.grid, should_quit)
+        {
+          return;
+        }
+      }
+
+      // Grid navigation and split-char keys.
+      match &key {
+        WasmKey::Char('h') => {
+          ui.grid.commit_or_move(Direction::Left);
+        }
+        WasmKey::Char('j') => {
+          ui.grid.commit_or_move(Direction::Down);
+        }
+        WasmKey::Char('k') => {
+          ui.grid.commit_or_move(Direction::Up);
+        }
+        WasmKey::Char('l') => {
+          ui.grid.commit_or_move(Direction::Right);
+        }
+        WasmKey::Char('H') => {
+          ui.grid.scale_action((-1, 0));
+        }
+        WasmKey::Char('J') => {
+          ui.grid.scale_action((0, -1));
+        }
+        WasmKey::Char('K') => {
+          ui.grid.scale_action((0, 1));
+        }
+        WasmKey::Char('L') => {
+          ui.grid.scale_action((1, 0));
+        }
+        WasmKey::Alt('h') => {
+          ui.grid
+            .alt_action(Direction::Left, consts::MOVE_X_STEP_SIZE);
+        }
+        WasmKey::Alt('j') => {
+          ui.grid
+            .alt_action(Direction::Down, consts::MOVE_Y_STEP_SIZE);
+        }
+        WasmKey::Alt('k') => {
+          ui.grid.alt_action(Direction::Up, consts::MOVE_Y_STEP_SIZE);
+        }
+        WasmKey::Alt('l') => {
+          ui.grid
+            .alt_action(Direction::Right, consts::MOVE_X_STEP_SIZE);
+        }
+        WasmKey::Ctrl('h') => {
+          ui.grid.start_aim_if_needed();
+          ui.grid.update_aim(Direction::Left, 1);
+        }
+        WasmKey::Ctrl('j') => {
+          ui.grid.start_aim_if_needed();
+          ui.grid.update_aim(Direction::Down, 1);
+        }
+        WasmKey::Ctrl('k') => {
+          ui.grid.start_aim_if_needed();
+          ui.grid.update_aim(Direction::Up, 1);
+        }
+        WasmKey::Ctrl('l') => {
+          ui.grid.start_aim_if_needed();
+          ui.grid.update_aim(Direction::Right, 1);
+        }
+        WasmKey::Char(c) if ('1'..='7').contains(c) => {
+          ui.grid.sgr_leak_state = 0;
+          ui.grid.handle_split_char(*c);
+        }
+        _ => {
+          ui.grid.sgr_leak_state = 0;
+        }
+      }
+    }
+  }
 }
 
-/// Returns the ANSI byte-string to write to `terminal.write()`.
-/// Call after `wasm_step`.
+/// Returns the ANSI string to write to `terminal.write()`.
 #[wasm_bindgen]
 pub fn wasm_render() -> String {
   ANSI_OUTPUT.with(|a| a.borrow().clone())
 }
 
 /// Forward a mouse event from the browser.
-/// `kind`   – 0 = press, 1 = hold/drag, 2 = release
-/// `button` – 0 = left, 1 = middle, 2 = right
-/// `col`, `row` – terminal cell coordinates (0-based)
+/// `kind` - 0=press, 1=hold/drag, 2=release
+/// `button` - 0=left, 1=middle, 2=right
 #[wasm_bindgen]
-pub fn wasm_send_mouse(kind: u8, button: u8, col: u32, row: u32) {
-  let btn = match button {
-    1 => MouseButton::Middle,
-    2 => MouseButton::Right,
-    _ => MouseButton::Left,
-  };
-  let event = match kind {
-    0 => MouseEvent::Press(btn),
-    1 => MouseEvent::Hold(btn),
-    2 => MouseEvent::Release(btn),
-    _ => return,
-  };
-  EVENT_STAGE.with(|e| {
-    e.borrow_mut().push_back(Event::Mouse {
-      offset: Vec2::zero(),
-      position: Vec2::new(col as usize, row as usize),
-      event,
-    });
+pub fn wasm_send_mouse(kind: u8, _button: u8, col: u32, row: u32) {
+  use crate::view::consts::{CONSOLE_HEIGHT, PADDING_X, PADDING_Y};
+
+  UI.with(|u| {
+    if let Some(ui) = u.borrow_mut().as_mut() {
+      let panel_x = PADDING_X as usize;
+      let panel_y = (2 + PADDING_Y + CONSOLE_HEIGHT) as usize;
+      let adj_col = (col as usize).saturating_sub(panel_x.saturating_sub(1));
+      let adj_row = (row as usize).saturating_sub(panel_y);
+      let position = crate::core::geom::Vec2::new(adj_col, adj_row);
+      let offset = crate::core::geom::Vec2::zero();
+      match kind {
+        0 => {
+          ui.grid.handle_mouse_press(offset, position);
+        }
+        1 => {
+          ui.grid.handle_mouse_hold(offset, position);
+        }
+        _ => {}
+      }
+    }
   });
 }
 
 /// Notify the backend of a terminal resize.
 #[wasm_bindgen]
 pub fn wasm_resize(cols: u32, rows: u32) {
-  RESIZE_STAGE.with(|s| *s.borrow_mut() = Some((cols as usize, rows as usize)));
+  use crate::view::consts::{CONSOLE_HEIGHT, PADDING_X, PADDING_Y};
+  let w = cols as u16;
+  let h = rows as u16;
+  let grid_w = w.saturating_sub(PADDING_X * 2) as usize;
+  let grid_h = h.saturating_sub(CONSOLE_HEIGHT + 2 + PADDING_Y * 2) as usize;
+  UI.with(|u| {
+    if let Some(ui) = u.borrow_mut().as_mut() {
+      ui.backend.resize(w, h);
+      ui.state.resize(w, h);
+      ui.grid.resize(crate::core::geom::Vec2::new(grid_w, grid_h));
+    }
+  });
 }
 
-/// Set the regex input field and trigger pattern matching.
-/// Equivalent to the user typing into the "RGXP" input in the console.
+/// Set the regex input and trigger pattern matching.
 #[wasm_bindgen]
 pub fn wasm_set_input(pattern: String) {
-  RUNNER.with(|r| {
-    if let Some(runner) = r.borrow_mut().as_mut() {
-      let cb = runner.call_on_name(
-        crate::view::consts::regex_input_unit_view,
-        |v: &mut cursive::views::EditView| v.set_content(pattern),
-      );
-      if let Some(cb) = cb {
-        cb(runner);
+  UI.with(|u| {
+    if let Some(ui) = u.borrow_mut().as_mut() {
+      ui.state.line_editor.set_content(&pattern);
+      if !pattern.is_empty() {
+        if let Some(ref tx) = ui.grid.regex_tx {
+          let _ = tx.send(crate::core::engine::regex::Message::Solve(
+            crate::core::engine::regex::EventData {
+              text: ui.grid.text_contents(),
+              pattern,
+              flags: ui.state.flags.to_flag_str().to_string(),
+              grid_width: ui.grid.grid.width,
+            },
+          ));
+        }
       }
     }
   });
 }
 
+/// Load file contents into the grid.
 #[wasm_bindgen]
 pub fn wasm_load_file(contents: String) {
-  RUNNER.with(|r| {
-    if let Some(runner) = r.borrow_mut().as_mut() {
-      crate::view::menubar::set_contents(runner, contents);
+  UI.with(|u| {
+    if let Some(ui) = u.borrow_mut().as_mut() {
+      set_grid_contents(&mut ui.grid, contents);
     }
   });
 }
 
-/// Pop one raw MIDI message (3 bytes) from the output queue.
-/// Returns `undefined` when the queue is empty.
-/// JS: `let msg; while ((msg = wasm_take_midi_message()) !== undefined) midiOut.send(msg);`
+/// Pop one raw MIDI message from the output queue.
 #[wasm_bindgen]
 pub fn wasm_take_midi_message() -> Option<Vec<u8>> {
   CTX.with(|c| {

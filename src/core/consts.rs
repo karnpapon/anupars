@@ -79,16 +79,7 @@ pub fn app_empty_dir() -> &'static str {
 
 // View identifier constants are now defined in `view::consts`.
 // Re-exported here so existing `consts::foo_unit_view` paths continue to compile.
-pub use crate::view::consts::{
-  bpm_status_unit_view, buf_controller_section_view, buf_status_unit_view,
-  canvas_editor_section_view, chn_status_unit_view, control_section_view, display_view,
-  doc_unit_view, file_contents_unit_view, file_explorer_unit_view, input_controller_section_view,
-  input_status_unit_view, len_status_unit_view, luck_unit_view, main_section_view,
-  midi_status_unit_view, mode_unit_view, movement_unit_view, playhead_controller_section_view,
-  pos_status_unit_view, ratio_status_unit_view, regex_err_display_unit_view, regex_input_unit_view,
-  regex_matches_amount_unit_view, rpl_status_unit_view, status_controller_section_view,
-  sym_status_unit_view, tilt_unit_view, GRID_COL_SPACING, GRID_ROW_SPACING,
-};
+pub use crate::view::consts::{GRID_COL_SPACING, GRID_ROW_SPACING};
 
 // Timing constants
 pub const TEMPO_CHECK_INTERVAL_MS: u64 = 100;

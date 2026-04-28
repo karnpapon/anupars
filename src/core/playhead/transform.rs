@@ -1,11 +1,9 @@
 use std::sync::atomic::Ordering;
 
-use cursive::views::{Canvas, TextView};
-use cursive::Vec2;
-use cursive::XY;
+use crate::core::geom::Vec2;
+use crate::core::geom::XY;
 
-use crate::core::{consts, utils};
-use crate::view::grid::GridEditor;
+use crate::core::utils;
 use crate::view::rect::Rect;
 
 use std::collections::HashMap;
@@ -34,28 +32,9 @@ impl Playhead {
     drop(area_mutex);
 
     let chn_str = self.compute_chn_str(pos);
-    let cb_sink = self.cb_sink.clone();
-    cb_sink
-      .send(Box::new(move |siv| {
-        siv.call_on_name(consts::pos_status_unit_view, move |view: &mut TextView| {
-          view.set_content(utils::build_pos_status_str(pos));
-        });
-        siv.call_on_name(consts::input_status_unit_view, |view: &mut TextView| {
-          view.set_content("-");
-        });
-        siv.call_on_name(consts::chn_status_unit_view, |view: &mut TextView| {
-          view.set_content(chn_str);
-        });
-        siv.call_on_name(
-          consts::canvas_editor_section_view,
-          move |canvas: &mut Canvas<GridEditor>| {
-            let editor = canvas.state_mut();
-            editor.playhead_ui.playhead_pos = pos;
-            editor.playhead_ui.playhead_area = area;
-          },
-        );
-      }))
-      .unwrap();
+    let _ = self.ui_tx.send(UIUpdate::PlayheadPosAndArea(pos, area));
+    let _ = self.ui_tx.send(UIUpdate::InputStatus("-".to_string()));
+    let _ = self.ui_tx.send(UIUpdate::ChnStatus(chn_str));
     self.enqueue_sym_space();
   }
 
@@ -141,8 +120,7 @@ impl Playhead {
   }
 
   pub(super) fn update_active_pos_ui(&self, active_pos: Vec2) {
-    let mut queue = self.ui_update_queue.lock().unwrap();
-    queue.push_back(UIUpdate::ActivePos(active_pos));
+    let _ = self.ui_tx.send(UIUpdate::ActivePos(active_pos));
   }
 
   pub(super) fn handle_set_active_pos(&self, tick: usize) {
@@ -348,8 +326,7 @@ impl Playhead {
           };
           let x = area.left() + sweep_rel.min(area_width.saturating_sub(1));
           self.modes.sweep_x.store(x, Ordering::Relaxed);
-          let mut q = self.ui_update_queue.lock().unwrap();
-          q.push_back(UIUpdate::SweepX(x));
+          let _ = self.ui_tx.send(UIUpdate::SweepX(x));
           x
         } else {
           abs_x
@@ -487,24 +464,9 @@ impl Playhead {
     self.set_current_pos(position, offset);
     self.reset_accumulation_counter();
 
-    let mutex_pos = self.pos.lock().unwrap();
-    let pos = *mutex_pos;
-    drop(mutex_pos);
-    let cb_sink = self.cb_sink.clone();
-    cb_sink
-      .send(Box::new(move |siv| {
-        siv.call_on_name(consts::input_status_unit_view, |view: &mut TextView| {
-          view.set_content("-");
-        });
-        siv.call_on_name(
-          consts::canvas_editor_section_view,
-          move |canvas: &mut Canvas<GridEditor>| {
-            let editor = canvas.state_mut();
-            editor.playhead_ui.playhead_pos = pos;
-          },
-        );
-      }))
-      .unwrap();
+    let pos = *self.pos.lock().unwrap();
+    let _ = self.ui_tx.send(UIUpdate::InputStatus("-".to_string()));
+    let _ = self.ui_tx.send(UIUpdate::CanvasPlayheadPos(pos));
     self.enqueue_sym_space();
   }
 
@@ -516,27 +478,13 @@ impl Playhead {
     let w = area.width();
     let h = area.height();
     let playhead_area = *area;
-    let cb_sink = self.cb_sink.clone();
+    drop(area);
 
-    cb_sink
-      .send(Box::new(move |siv| {
-        siv.call_on_name(consts::input_status_unit_view, |view: &mut TextView| {
-          view.set_content("-");
-        });
-
-        siv.call_on_name(consts::len_status_unit_view, move |view: &mut TextView| {
-          view.set_content(utils::build_len_status_str((w, h)));
-        });
-
-        siv.call_on_name(
-          consts::canvas_editor_section_view,
-          move |canvas: &mut Canvas<GridEditor>| {
-            let editor = canvas.state_mut();
-            editor.playhead_ui.playhead_area = playhead_area;
-          },
-        );
-      }))
-      .unwrap();
+    let _ = self.ui_tx.send(UIUpdate::InputStatus("-".to_string()));
+    let _ = self
+      .ui_tx
+      .send(UIUpdate::LenStatus(utils::build_len_status_str((w, h))));
+    let _ = self.ui_tx.send(UIUpdate::CanvasPlayheadArea(playhead_area));
   }
 
   pub(super) fn handle_scale(&self, size: (i32, i32)) {
@@ -546,27 +494,16 @@ impl Playhead {
     let area = self.area.lock().unwrap();
     let playhead_area = *area;
     let area_size = area.size();
-    let cb_sink = self.cb_sink.clone();
+    drop(area);
 
-    cb_sink
-      .send(Box::new(move |siv| {
-        siv.call_on_name(consts::input_status_unit_view, |view: &mut TextView| {
-          view.set_content("-");
-        });
-
-        siv.call_on_name(consts::len_status_unit_view, move |view: &mut TextView| {
-          view.set_content(utils::build_len_status_str((area_size.x, area_size.y)));
-        });
-
-        siv.call_on_name(
-          consts::canvas_editor_section_view,
-          move |canvas: &mut Canvas<GridEditor>| {
-            let editor = canvas.state_mut();
-            editor.playhead_ui.playhead_area = playhead_area;
-          },
-        );
-      }))
-      .unwrap();
+    let _ = self.ui_tx.send(UIUpdate::InputStatus("-".to_string()));
+    let _ = self
+      .ui_tx
+      .send(UIUpdate::LenStatus(utils::build_len_status_str((
+        area_size.x,
+        area_size.y,
+      ))));
+    let _ = self.ui_tx.send(UIUpdate::CanvasPlayheadArea(playhead_area));
   }
 }
 

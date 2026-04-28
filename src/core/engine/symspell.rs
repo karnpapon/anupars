@@ -6,8 +6,6 @@ use std::sync::{Arc, Mutex};
 #[cfg(not(target_arch = "wasm32"))]
 use std::thread;
 
-use cursive::views::{Canvas, EditView, TextView};
-use cursive::Cursive;
 use ringbuffer::{AllocRingBuffer, RingBuffer};
 use symspell_rs::SymSpell;
 
@@ -110,56 +108,36 @@ impl SymSpellState {
 
   /// Render one animation frame into the grid.
   /// On the final frame, re-runs the active regex pattern against the new text.
-  /// Called from inside a `cb_sink` closure (cursive main thread).
   pub fn render_anim_tick(
     &self,
-    siv: &mut Cursive,
+    grid: &mut GridEditor,
+    app_state: &mut crate::app_state::AppState,
     tick: AnimTick,
     regex_tx: &Sender<regex::Message>,
   ) {
     let (sym_text, area, base_text, frame, total_frames) = tick;
     let is_last = frame + 1 >= total_frames;
     let intermediate = compute_anim_frame(&base_text, &area, &sym_text, frame);
-    let intermediate_for_regex = if is_last {
-      Some(intermediate.clone())
-    } else {
-      None
-    };
 
-    let gw = siv
-      .call_on_name(
-        consts::canvas_editor_section_view,
-        move |canvas: &mut Canvas<GridEditor>| {
-          let editor = canvas.state_mut();
-          editor.update_text_contents(&intermediate);
-          editor.update_grid_src();
-          editor.grid.width
-        },
-      )
-      .unwrap_or(0);
+    grid.update_text_contents(&intermediate);
+    grid.update_grid_src();
+    let gw = grid.grid.width;
 
     if is_last {
-      if let Some(final_text) = intermediate_for_regex {
-        let pattern = siv
-          .call_on_name(consts::regex_input_unit_view, |v: &mut EditView| {
-            v.get_content().as_ref().clone()
-          })
-          .unwrap_or_default();
-        if !pattern.is_empty() {
-          let _ = regex_tx.send(regex::Message::Solve(regex::EventData {
-            text: final_text,
-            pattern,
-            flags: "i".to_string(),
-            grid_width: gw,
-          }));
-        }
+      let pattern = app_state.line_editor.content().to_string();
+      if !pattern.is_empty() {
+        let _ = regex_tx.send(regex::Message::Solve(regex::EventData {
+          text: intermediate,
+          pattern,
+          flags: "i".to_string(),
+          grid_width: gw,
+        }));
       }
     }
   }
 
-  /// Append a space to the buffer and refresh the status view.
-  /// Used by both `TmpAppendSpace` and the direct cb_sink path in move handlers.
-  pub fn handle_buf_append_space(&self, siv: &mut Cursive) {
+  /// Append a space to the buffer and refresh the status field.
+  pub fn handle_buf_append_space(&self, app_state: &mut crate::app_state::AppState) {
     let display = {
       let mut buf = self.buf_buf.lock().unwrap();
       let last = buf.back().copied();
@@ -173,28 +151,18 @@ impl SymSpellState {
         s
       }
     };
-    siv.call_on_name(consts::buf_status_unit_view, move |view: &mut TextView| {
-      view.set_content(display);
-    });
+    app_state.buf_status = display;
   }
 
   /// Append the character at grid index `idx` to the buffer, then run
-  /// SymSpell on the accumulated word and update the status view.
-  pub fn handle_buf_append(&self, siv: &mut Cursive, idx: usize) {
-    let ch = siv
-      .call_on_name(
-        consts::canvas_editor_section_view,
-        move |canvas: &mut Canvas<GridEditor>| {
-          canvas
-            .state_mut()
-            .grid
-            .data
-            .get(idx)
-            .copied()
-            .unwrap_or('\0')
-        },
-      )
-      .unwrap_or('\0');
+  /// SymSpell on the accumulated word and update the status fields.
+  pub fn handle_buf_append(
+    &self,
+    grid: &GridEditor,
+    app_state: &mut crate::app_state::AppState,
+    idx: usize,
+  ) {
+    let ch = grid.grid.data.get(idx).copied().unwrap_or('\0');
 
     if ch.is_alphabetic() {
       let new_tmp = {
@@ -202,13 +170,11 @@ impl SymSpellState {
         buf.enqueue(ch);
         buf.iter().collect::<String>()
       };
-      siv.call_on_name(consts::buf_status_unit_view, |view: &mut TextView| {
-        view.set_content(new_tmp.clone());
-      });
+      app_state.buf_status = new_tmp.clone();
       let sym_result = {
         let ss = self.symspell.lock().unwrap();
         match ss.as_ref() {
-          None => String::new(), // loading
+          None => String::new(),
           Some(ss) => ss
             .lookup_compound(new_tmp.trim(), 2, &None, false)
             .into_iter()
@@ -218,21 +184,20 @@ impl SymSpellState {
         }
       };
       if !sym_result.is_empty() {
-        siv.call_on_name(consts::sym_status_unit_view, move |view: &mut TextView| {
-          view.set_content(sym_result);
-        });
+        app_state.sym_status = sym_result;
       }
     }
   }
 
   /// Advance the replacement state machine and, when a suggestion becomes
   /// armed, kick off character-by-character animation.
-  pub fn handle_rpl_cycle(&self, siv: &mut Cursive, old_area: Rect) {
-    let sym = siv
-      .call_on_name(consts::sym_status_unit_view, |v: &mut TextView| {
-        v.get_content().source().to_string()
-      })
-      .unwrap_or_default();
+  pub fn handle_rpl_cycle(
+    &self,
+    grid: &mut GridEditor,
+    app_state: &mut crate::app_state::AppState,
+    old_area: Rect,
+  ) {
+    let sym = app_state.sym_status.clone();
 
     let mut state = self.rpl_state.lock().unwrap();
     let apply_opt: Option<(String, Rect)> = match mem::replace(&mut *state, RplPendingState::Empty)
@@ -259,49 +224,15 @@ impl SymSpellState {
       }
     };
 
-    let rpl_display = match &*state {
+    app_state.rpl_status = match &*state {
       RplPendingState::Armed(s, _) => format!("[armed] {}", s),
       RplPendingState::Waiting(s, _) => s.clone(),
       RplPendingState::Empty => "-".to_string(),
     };
     drop(state);
 
-    siv.call_on_name(consts::rpl_status_unit_view, move |v: &mut TextView| {
-      v.set_content(rpl_display);
-    });
-
     if let Some((sym_text, area)) = apply_opt {
-      let base_text = siv
-        .call_on_name(
-          consts::canvas_editor_section_view,
-          |canvas: &mut Canvas<GridEditor>| canvas.state_mut().text_contents(),
-        )
-        .unwrap_or_default();
-
-      // Remove regex highlights only for the cells being replaced so the rest
-      // of the grid keeps its highlights during the animation.
-      // They will be restored for the new text once the last frame fires the
-      // regex re-match in render_anim_tick.
-      // let area_for_clear = area;
-      // siv.call_on_name(
-      //   consts::canvas_editor_section_view,
-      //   move |canvas: &mut Canvas<GridEditor>| {
-      //     let editor = canvas.state_mut();
-      //     let gw = editor.grid.width;
-      //     if let Some(ref mut matcher) = editor.playhead_ui.text_matcher {
-      //       matcher.retain(|&idx, _| {
-      //         let x = idx % gw;
-      //         let y = idx / gw;
-      //         x < area_for_clear.top_left.x
-      //           || x >= area_for_clear.top_left.x + area_for_clear.width()
-      //           || y < area_for_clear.top_left.y
-      //           || y >= area_for_clear.top_left.y + area_for_clear.height()
-      //       });
-      //     }
-      //   },
-      // );
-
-      // 5 frames per character (3 × '_', 2 × '▌') at 16 ms ≈ 80 ms per char.
+      let base_text = grid.text_contents();
       let total_frames = sym_text.chars().count() * 5 + 1;
       *self.text_reveal_anim.lock().unwrap() = Some(TextRevealAnimState {
         sym_text,

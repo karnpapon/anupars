@@ -1,21 +1,21 @@
 use std::collections::BTreeSet;
 use std::collections::HashMap;
-use std::collections::VecDeque;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::mpsc::{channel, Sender};
+
+#[cfg(target_arch = "wasm32")]
+use std::sync::mpsc::Receiver;
+
 use std::sync::Arc;
 use std::sync::Mutex;
 #[cfg(not(target_arch = "wasm32"))]
 use std::thread;
 
-use cursive::views::{Canvas, TextView};
-use cursive::Vec2;
+use crate::core::geom::Vec2;
 
-use crate::core::engine::regex;
 use crate::core::engine::symspell::SymSpellState;
 use crate::core::io::midi as io_midi;
 use crate::core::{consts, engine::regex::Match, utils};
-use crate::view::grid::GridEditor;
 use crate::view::rect::Rect;
 
 // Existing core submodules
@@ -91,7 +91,7 @@ pub struct Playhead {
   sweep_row_mode: Arc<Mutex<SweepRowMode>>,
 
   // Threading/sync state
-  pub ui_update_queue: Arc<Mutex<VecDeque<UIUpdate>>>,
+  pub ui_tx: Sender<UIUpdate>,
   step_index: Arc<Mutex<usize>>,
   ratchet_generation: Arc<AtomicUsize>,
   /// Remaining fast-division steps within the current regex match span.
@@ -99,7 +99,9 @@ pub struct Playhead {
 
   pub sym_state: Arc<SymSpellState>,
 
-  cb_sink: cursive::CbSink,
+  /// WASM only: receiver for the UI update channel, drained each frame in wasm.rs.  
+  #[cfg(target_arch = "wasm32")]
+  pub ui_rx: Mutex<Option<Receiver<UIUpdate>>>,
 
   /// WASM only: the receiver for the playhead message channel, stored here
   /// because `run()` would normally give it to a background thread.
@@ -108,7 +110,7 @@ pub struct Playhead {
 }
 
 impl Playhead {
-  pub fn new(midi_tx: Sender<io_midi::Message>, cb_sink: cursive::CbSink) -> Self {
+  pub fn new(midi_tx: Sender<io_midi::Message>, ui_tx: Sender<UIUpdate>) -> Self {
     let position_calc = Arc::new(PositionCalculator::new());
 
     let grid = GridState::new();
@@ -162,14 +164,15 @@ impl Playhead {
       position_calc,
       midi_handler,
       accumulation_counter: Arc::new(Mutex::new(0)),
-      ui_update_queue: Arc::new(Mutex::new(VecDeque::new())),
+      ui_tx,
       step_index: Arc::new(Mutex::new(0)),
       ratchet_generation,
       match_span_remaining: Arc::new(AtomicUsize::new(0)),
       sym_state: Arc::new(SymSpellState::new()),
-      cb_sink,
       #[cfg(target_arch = "wasm32")]
       wasm_rx: std::sync::Mutex::new(None),
+      #[cfg(target_arch = "wasm32")]
+      ui_rx: std::sync::Mutex::new(None),
     }
   }
 
@@ -239,23 +242,15 @@ impl Playhead {
     drop(area);
 
     let chn_str = self.compute_chn_str(Vec2::new(pos_x, pos_y));
-    let cb_sink = self.cb_sink.clone();
-
-    cb_sink
-      .send(Box::new(move |siv| {
-        siv.call_on_name(consts::pos_status_unit_view, move |view: &mut TextView| {
-          view.set_content(utils::build_pos_status_str((pos_x, pos_y).into()))
-        });
-
-        siv.call_on_name(consts::len_status_unit_view, move |view: &mut TextView| {
-          view.set_content(utils::build_len_status_str((w, h)));
-        });
-
-        siv.call_on_name(consts::chn_status_unit_view, |view: &mut TextView| {
-          view.set_content(chn_str);
-        });
-      }))
-      .unwrap();
+    let _ = self
+      .ui_tx
+      .send(UIUpdate::PosStatus(utils::build_pos_status_str(
+        (pos_x, pos_y).into(),
+      )));
+    let _ = self
+      .ui_tx
+      .send(UIUpdate::LenStatus(utils::build_len_status_str((w, h))));
+    let _ = self.ui_tx.send(UIUpdate::ChnStatus(chn_str));
   }
 
   fn handle_set_matcher(&self, matcher: Option<HashMap<usize, Match>>) {
@@ -263,21 +258,12 @@ impl Playhead {
 
     let text_matcher = self.text_matcher.lock().unwrap();
     let mm = text_matcher.clone();
+    drop(text_matcher);
     let regex_indexes_cloned = self.regex_indexes.clone();
-    let cb_sink = self.cb_sink.clone();
-
-    cb_sink
-      .send(Box::new(move |siv| {
-        siv.call_on_name(
-          consts::canvas_editor_section_view,
-          move |canvas: &mut Canvas<GridEditor>| {
-            let editor = canvas.state_mut();
-            editor.playhead_ui.text_matcher = mm;
-            editor.playhead_ui.regex_indexes = regex_indexes_cloned;
-          },
-        );
-      }))
-      .unwrap();
+    let _ = self.ui_tx.send(UIUpdate::TextMatcher {
+      matcher: mm,
+      regex_indexes: regex_indexes_cloned,
+    });
   }
 
   fn handle_set_grid_size(&self, width: usize, height: usize) {
@@ -294,19 +280,9 @@ impl Playhead {
       .store(height, Ordering::Relaxed);
 
     let queue_manager_cloned = self.queue_manager.clone();
-    let cb_sink = self.cb_sink.clone();
-
-    cb_sink
-      .send(Box::new(move |siv| {
-        siv.call_on_name(
-          consts::canvas_editor_section_view,
-          move |canvas: &mut Canvas<GridEditor>| {
-            let editor = canvas.state_mut();
-            editor.playhead_ui.queue_manager = queue_manager_cloned;
-          },
-        );
-      }))
-      .unwrap();
+    let _ = self
+      .ui_tx
+      .send(UIUpdate::QueueManagerUpdate(queue_manager_cloned));
   }
 
   fn handle_set_grid_splits(&self, v: usize, h: usize) {
@@ -314,27 +290,21 @@ impl Playhead {
     self.grid.h_splits.store(h, Ordering::Relaxed);
     let pos = *self.pos.lock().unwrap();
     let chn_str = self.compute_chn_str(pos);
-    let mut q = self.ui_update_queue.lock().unwrap();
-    q.push_back(UIUpdate::GridSplits(v, h));
-    q.push_back(UIUpdate::ChnStatus(chn_str));
+    let _ = self.ui_tx.send(UIUpdate::GridSplits(v, h));
+    let _ = self.ui_tx.send(UIUpdate::ChnStatus(chn_str));
   }
 
   fn handle_clear_queue(&self) {
     self.queue_manager.clear_all();
     self.reset_accumulation_counter();
-    let cb_sink = self.cb_sink.clone();
-    let _ = cb_sink.send(Box::new(move |siv| {
-      siv.call_on_name(consts::input_status_unit_view, |view: &mut TextView| {
-        view.set_content("-");
-      });
-    }));
+    let _ = self.ui_tx.send(UIUpdate::InputStatus("-".to_string()));
   }
 
   /// WASM: set up channels without spawning any threads.
   /// Returns the `Sender` for keybindings; the `Receiver` is stored inside
   /// the `Playhead` and drained by `wasm_tick()` each frame.
   #[cfg(target_arch = "wasm32")]
-  pub fn wasm_setup(self: Arc<Self>, _regex_tx: Sender<regex::Message>) -> Sender<Message> {
+  pub fn wasm_setup(self: Arc<Self>) -> Sender<Message> {
     let (tx, rx) = channel();
     *self.wasm_rx.lock().unwrap() = Some(rx);
     tx
@@ -369,6 +339,9 @@ impl Playhead {
           }
           Message::SetActivePos(tick) => {
             self.handle_set_active_pos(tick);
+          }
+          Message::SetCurrentBar(bar) => {
+            let _ = self.ui_tx.send(UIUpdate::CurrentBar(bar));
           }
           Message::Scale(dir) => {
             self.handle_scale(dir);
@@ -486,141 +459,21 @@ impl Playhead {
           }
           Message::ToggleSpatialKeyboard() => {
             let prev = self.modes.keyboard_top_active.load(Ordering::Relaxed);
+            let new_val = !prev;
             self
               .modes
               .keyboard_top_active
-              .store(!prev, Ordering::Relaxed);
+              .store(new_val, Ordering::Relaxed);
+            let _ = self.ui_tx.send(UIUpdate::CanvasKeyboardTopActive(new_val));
           }
         }
       }
     }
-  }
-
-  /// WASM: process queued UI updates and animation frames, flushing them to cb_sink.
-  #[cfg(target_arch = "wasm32")]
-  pub fn wasm_tick_ui(self: &Arc<Self>, regex_tx: &Sender<regex::Message>) {
-    use crate::core::engine::symspell::AnimTick;
-
-    let anim_tick: Option<AnimTick> = self.sym_state.advance_anim_frame();
-
-    let updates: Vec<crate::core::playhead::UIUpdate> = {
-      let mut queue = self.ui_update_queue.lock().unwrap();
-      queue.drain(..).collect()
-    };
-
-    if updates.is_empty() && anim_tick.is_none() {
-      return;
-    }
-
-    let sym_state_cb = Arc::clone(&self.sym_state);
-    let regex_tx_cb = regex_tx.clone();
-
-    let _ = self.cb_sink.send(Box::new(move |siv| {
-      let sym_state = sym_state_cb;
-      let regex_tx = regex_tx_cb;
-
-      if let Some(tick) = anim_tick {
-        sym_state.render_anim_tick(siv, tick, &regex_tx);
-      }
-
-      for update in updates {
-        match update {
-          UIUpdate::ActivePos(active_pos) => {
-            siv.call_on_name(
-              crate::core::consts::canvas_editor_section_view,
-              move |canvas: &mut cursive::views::Canvas<crate::view::grid::GridEditor>| {
-                let editor = canvas.state_mut();
-                editor.playhead_ui.actived_pos = active_pos;
-              },
-            );
-          }
-          UIUpdate::AccumulationCounter(count, total) => {
-            siv.call_on_name(
-              crate::core::consts::input_status_unit_view,
-              move |view: &mut cursive::views::TextView| {
-                view.set_content(format!("@ {}/{}", count, total));
-              },
-            );
-          }
-          UIUpdate::PlayheadPosAndArea(pos, area) => {
-            siv.call_on_name(
-              crate::core::consts::canvas_editor_section_view,
-              move |canvas: &mut cursive::views::Canvas<crate::view::grid::GridEditor>| {
-                let editor = canvas.state_mut();
-                editor.playhead_ui.playhead_pos = pos;
-                editor.playhead_ui.playhead_area = area;
-              },
-            );
-            siv.call_on_name(
-              crate::core::consts::pos_status_unit_view,
-              move |view: &mut cursive::views::TextView| {
-                view.set_content(crate::core::utils::build_pos_status_str(pos));
-              },
-            );
-            let area_size = area.size();
-            siv.call_on_name(
-              crate::core::consts::len_status_unit_view,
-              move |view: &mut cursive::views::TextView| {
-                view.set_content(crate::core::utils::build_len_status_str((
-                  area_size.x,
-                  area_size.y,
-                )));
-              },
-            );
-          }
-          UIUpdate::ChnStatus(chn_str) => {
-            siv.call_on_name(
-              crate::core::consts::chn_status_unit_view,
-              |view: &mut cursive::views::TextView| {
-                view.set_content(chn_str);
-              },
-            );
-          }
-          UIUpdate::GridSplits(v, h) => {
-            siv.call_on_name(
-              crate::core::consts::canvas_editor_section_view,
-              move |canvas: &mut cursive::views::Canvas<crate::view::grid::GridEditor>| {
-                let editor = canvas.state_mut();
-                editor.playhead_ui.grid_v_splits = v;
-                editor.playhead_ui.grid_h_splits = h;
-              },
-            );
-          }
-          UIUpdate::AimedArea(aimed_area) => {
-            siv.call_on_name(
-              crate::core::consts::canvas_editor_section_view,
-              move |canvas: &mut cursive::views::Canvas<crate::view::grid::GridEditor>| {
-                let editor = canvas.state_mut();
-                editor.playhead_ui.aimed_area = aimed_area;
-              },
-            );
-          }
-          UIUpdate::TmpAppendSpace => sym_state.handle_buf_append_space(siv),
-          UIUpdate::TmpAppend(idx) => sym_state.handle_buf_append(siv, idx),
-          UIUpdate::RplCycle(old_area) => sym_state.handle_rpl_cycle(siv, old_area),
-          UIUpdate::SweepX(x) => {
-            siv.call_on_name(
-              crate::core::consts::canvas_editor_section_view,
-              |canvas: &mut cursive::views::Canvas<crate::view::grid::GridEditor>| {
-                canvas.state_mut().playhead_ui.sweep_x = x;
-              },
-            );
-          }
-        }
-      }
-    }));
   }
 
   #[cfg(not(target_arch = "wasm32"))]
-  pub fn run(self: Arc<Self>, regex_tx: Sender<regex::Message>) -> Sender<Message> {
+  pub fn run(self: Arc<Self>) -> Sender<Message> {
     let (tx, rx) = channel();
-
-    Playhead::spawn_ui_processor(
-      Arc::clone(&self.ui_update_queue),
-      self.cb_sink.clone(),
-      Arc::clone(&self.sym_state),
-      regex_tx,
-    );
 
     thread::Builder::new()
       .name(crate::core::consts::THREAD_NAME_PLAYHEAD.to_string())
@@ -649,6 +502,9 @@ impl Playhead {
             }
             Message::SetActivePos(tick) => {
               self.handle_set_active_pos(tick);
+            }
+            Message::SetCurrentBar(bar) => {
+              let _ = self.ui_tx.send(UIUpdate::CurrentBar(bar));
             }
             Message::Scale(dir) => {
               self.handle_scale(dir);
@@ -766,10 +622,12 @@ impl Playhead {
             }
             Message::ToggleSpatialKeyboard() => {
               let prev = self.modes.keyboard_top_active.load(Ordering::Relaxed);
+              let new_val = !prev;
               self
                 .modes
                 .keyboard_top_active
-                .store(!prev, Ordering::Relaxed);
+                .store(new_val, Ordering::Relaxed);
+              let _ = self.ui_tx.send(UIUpdate::CanvasKeyboardTopActive(new_val));
             }
           }
         }
@@ -783,7 +641,7 @@ impl Playhead {
 #[cfg(test)]
 mod tests {
   use super::test_helpers::make_playhead;
-  use cursive::Vec2;
+  use crate::core::geom::Vec2;
   use std::sync::atomic::Ordering;
 
   #[test]

@@ -4,19 +4,10 @@ use crate::core::command::register::CommandManager;
 use crate::core::consts;
 use crate::core::engine::regex::RegExpHandler;
 use crate::core::io::midi;
-use crate::core::playhead::{Message as PlayheadMessage, Playhead};
+use crate::core::playhead::{Message as PlayheadMessage, Playhead, UIUpdate};
 use crate::core::timing::metronome::{Message, Metronome};
-use crate::view::menubar::{set_contents, Menubar};
-#[cfg(target_arch = "wasm32")]
-use cursive::theme::{BaseColor, Color, PaletteColor};
-use cursive::theme::{BorderStyle, Palette};
-#[cfg(target_arch = "wasm32")]
-use cursive::views::Dialog;
-use cursive::views::TextView;
-use cursive::Cursive;
 use num_rational::Ratio;
 use num_traits::FromPrimitive;
-use std::rc::Rc;
 use std::sync::mpsc::Sender;
 use std::sync::{Arc, Mutex};
 #[cfg(not(target_arch = "wasm32"))]
@@ -25,15 +16,9 @@ use std::thread;
 use std::time::Duration;
 use std::time::Instant;
 
-use consts::{DEFAULT_TEMPO, MANIFESTO_TEXT, TEMPO_CHECK_INTERVAL_MS, TEMPO_RESET_DELAY_MS};
+use consts::{DEFAULT_TEMPO, TEMPO_CHECK_INTERVAL_MS, TEMPO_RESET_DELAY_MS};
 
 use crate::view::layout::Program;
-
-pub type UserData = Rc<UserDataInner>;
-pub struct UserDataInner {
-  pub cmd: CommandManager,
-  pub midi_tx: Sender<midi::Message>,
-}
 
 #[derive(Clone, PartialEq, Eq)]
 pub enum AppMode {
@@ -98,173 +83,84 @@ impl AppMode {
 
 /// Application components bundle
 pub struct Application {
-  pub cursive: Cursive,
   pub midi: midi::Midi,
   pub regex_handler: RegExpHandler,
+  pub regex_tx: Sender<crate::core::engine::regex::Message>,
   pub program: Program,
   pub playhead_tx: Sender<PlayheadMessage>,
   pub metronome: Metronome,
-  /// for tracking holding keypress
   pub last_key_time: Arc<Mutex<Option<Instant>>>,
   pub current_tempo: Arc<Mutex<usize>>,
-
-  // WASM-only: the Arc<Playhead> so wasm.rs can call wasm_tick()/wasm_tick_ui()
+  pub ui_tx: Sender<UIUpdate>,
+  pub ui_rx: std::sync::mpsc::Receiver<UIUpdate>,
+  pub cmd_mgr: CommandManager,
+  #[cfg(not(target_arch = "wasm32"))]
+  pub sym_state: std::sync::Arc<crate::core::engine::symspell::SymSpellState>,
   #[cfg(target_arch = "wasm32")]
   pub playhead: std::sync::Arc<Playhead>,
 }
 
-/// Initialize the default cursive theme with simple borders and terminal colors
-fn init_cursive_theme(cursive: &mut Cursive) {
-  #[allow(unused_mut)] // mut is required by the wasm32 cfg block below
-  let mut palette = Palette::terminal_default();
-
-  // In WASM the backend stores raw Color values - TerminalDefault is emitted
-  // as \x1b[39m/\x1b[49m which xterm.js renders identically for all cells,
-  // making highlighted cells indistinguishable from normal ones.
-  // Set explicit colors so the highlight contrast is visible.
-  #[cfg(target_arch = "wasm32")]
-  {
-    palette[PaletteColor::Highlight] = Color::Dark(BaseColor::White);
-    palette[PaletteColor::HighlightText] = Color::Dark(BaseColor::Black);
-    palette[PaletteColor::HighlightInactive] = Color::Dark(BaseColor::White);
-  }
-
-  cursive.set_theme(cursive::theme::Theme {
-    shadow: false,
-    borders: BorderStyle::Simple,
-    palette,
-  });
-}
-
 /// Initialize all application components
 pub fn initialize_components() -> Application {
-  let mut cursive = Cursive::new();
-  init_cursive_theme(&mut cursive);
-
   let mut midi = midi::Midi::new();
   midi.init().unwrap();
 
-  let regex_handler = RegExpHandler::new(cursive.cb_sink().clone());
   let last_key_time = Arc::new(Mutex::new(None));
   let current_tempo = Arc::new(Mutex::new(DEFAULT_TEMPO));
   let prog = Program::new();
 
-  let playhead_area =
-    std::sync::Arc::new(Playhead::new(midi.tx.clone(), cursive.cb_sink().clone()));
+  let (ui_tx, ui_rx) = std::sync::mpsc::channel::<UIUpdate>();
+
+  let playhead_area = std::sync::Arc::new(Playhead::new(midi.tx.clone(), ui_tx.clone()));
 
   #[cfg(not(target_arch = "wasm32"))]
-  let playhead_tx = std::sync::Arc::clone(&playhead_area).run(regex_handler.tx.clone());
+  let sym_state = std::sync::Arc::clone(&playhead_area.sym_state);
+
+  #[cfg(not(target_arch = "wasm32"))]
+  let playhead_tx = std::sync::Arc::clone(&playhead_area).run();
 
   #[cfg(target_arch = "wasm32")]
-  let playhead_tx = std::sync::Arc::clone(&playhead_area).wasm_setup(regex_handler.tx.clone());
+  let playhead_tx = std::sync::Arc::clone(&playhead_area).wasm_setup();
 
-  let mut metronome = Metronome::new(cursive.cb_sink().clone(), playhead_tx.clone());
+  let regex_handler = RegExpHandler::new(ui_tx.clone(), playhead_tx.clone());
+  let regex_tx = regex_handler.tx.clone();
+  let mut metronome = Metronome::new(ui_tx.clone(), playhead_tx.clone());
 
   metronome.set_midi_tx(midi.tx.clone());
   midi.enable_clock(false);
 
-  // fwd incoming MIDI clock bytes to the metronome for external sync.
-  // The closure captures only a Sender<metronome::Message> so there is no
-  // circular module dependency between `midi` and `metronome`.
   let metro_tx_for_midi = metronome.tx.clone();
   midi.set_ext_clock_handler(move |byte| {
     let _ = metro_tx_for_midi.send(Message::ExternalClock(byte));
   });
 
-  let midi_tx = midi.tx.clone();
-
-  cursive.set_on_pre_event_inner(cursive::event::Event::CtrlChar('c'), move |_| {
-    let _ = midi_tx.send(midi::Message::ClearMsgConfig());
-    let _ = midi_tx.send(midi::Message::Panic());
-    None
-  });
+  let mut cmd_mgr = CommandManager::new(
+    prog.clone(),
+    metronome.tx.clone(),
+    ui_tx.clone(),
+    Arc::clone(&current_tempo),
+    Arc::clone(&last_key_time),
+    playhead_tx.clone(),
+  );
+  cmd_mgr.register_all();
 
   Application {
-    cursive,
     midi,
     regex_handler,
+    regex_tx,
     program: prog,
     playhead_tx,
     metronome,
     last_key_time,
     current_tempo,
+    ui_tx,
+    ui_rx,
+    cmd_mgr,
+    #[cfg(not(target_arch = "wasm32"))]
+    sym_state,
     #[cfg(target_arch = "wasm32")]
     playhead: playhead_area,
   }
-}
-
-/// Setup the user interface, menus, and views
-pub fn setup_ui(components: &mut Application) {
-  let midi_tx = components.midi.tx.clone();
-  let playhead_tx = components.playhead_tx.clone();
-  let metronome_tx = components.metronome.tx.clone();
-
-  let mut command_manager = CommandManager::new(
-    components.program.clone(),
-    metronome_tx.clone(),
-    components.cursive.cb_sink().clone(),
-    Arc::clone(&components.current_tempo),
-    Arc::clone(&components.last_key_time),
-    playhead_tx.clone(),
-  );
-
-  command_manager.register_all();
-  command_manager.register_keybindings(&mut components.cursive);
-
-  components.cursive.set_autohide_menu(true);
-  components.cursive.set_autorefresh(false); // Prevent unintended events
-
-  components.cursive.set_user_data(Rc::new(UserDataInner {
-    cmd: command_manager,
-    midi_tx: midi_tx.clone(),
-  }));
-
-  let main_view = components
-    .program
-    .build(components.regex_handler.tx.clone(), playhead_tx);
-
-  let devices = components.midi.get_available_devices();
-  let menu_app = Menubar::build_menu_app(&devices, midi_tx.clone());
-  let menu_view = Menubar::build_menu_view();
-  let menu_help = Menubar::build_menu_help();
-
-  components
-    .cursive
-    .menubar()
-    .add_subtree("anupars", menu_app)
-    .add_subtree("view", menu_view)
-    .add_subtree("help", menu_help)
-    .add_delimiter()
-    .add_leaf("quit", |s| {
-      #[cfg(not(target_arch = "wasm32"))]
-      s.quit();
-      #[cfg(target_arch = "wasm32")]
-      s.add_layer(
-        Dialog::info(
-          "\"quit\" is only available in the terminal-based app.\n\nclose the browser tab to exit.",
-        )
-        .title("quit"),
-      );
-    });
-
-  components.cursive.add_layer(main_view);
-
-  // Load the manifesto text automatically on startup. Queued via cb_sink so
-  // it runs after the first layout pass, when grid dimensions are known.
-  components
-    .cursive
-    .cb_sink()
-    .send(Box::new(|siv| {
-      set_contents(siv, MANIFESTO_TEXT.to_string());
-    }))
-    .unwrap();
-
-  components
-    .cursive
-    .call_on_name(consts::midi_status_unit_view, |view: &mut TextView| {
-      view.set_content(components.midi.out_device_name());
-    })
-    .unwrap();
 }
 
 /// Spawn a background thread to monitor key press timing and reset tempo
@@ -313,4 +209,383 @@ pub fn spawn_background_threads(
     .name(consts::THREAD_NAME_METRONOME.to_string())
     .spawn(move || metronome.run())
     .expect("Failed to spawn metronome thread");
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+#[allow(clippy::too_many_arguments)]
+pub fn run_event_loop(
+  ui_rx: std::sync::mpsc::Receiver<crate::core::playhead::UIUpdate>,
+  playhead_tx: std::sync::mpsc::Sender<crate::core::playhead::Message>,
+  cmd_mgr: &CommandManager,
+  sym_state: std::sync::Arc<crate::core::engine::symspell::SymSpellState>,
+  regex_tx: std::sync::mpsc::Sender<crate::core::engine::regex::Message>,
+  midi_tx: std::sync::mpsc::Sender<midi::Message>,
+  renderer: &mut crate::terminal::Renderer,
+  midi_output_devices: Vec<String>,
+  midi_input_devices: Vec<String>,
+  initial_midi_device: String,
+) -> std::io::Result<()> {
+  use crate::app_state::{apply_ui_update, AppState, Focus};
+  use crate::view::consts::{CONSOLE_HEIGHT, PADDING_X, PADDING_Y};
+  use crate::view::grid::GridEditor;
+  use crate::view::menubar::{handle_menu_key, set_grid_contents, MenuAction};
+  use crate::view::ui_processor::apply_sym_anim_tick;
+  use crossterm::event::{poll, read, Event, KeyCode, KeyModifiers};
+  use std::time::Duration;
+
+  let mut state = AppState::default();
+  state.menu.midi_output_devices = midi_output_devices;
+  state.menu.midi_input_devices = midi_input_devices;
+  state.midi_status = initial_midi_device;
+  let mut should_quit = false;
+
+  let (init_w, init_h) = crossterm::terminal::size().unwrap_or((80, 24));
+  state.resize(init_w, init_h);
+
+  let mut grid = GridEditor::new(playhead_tx.clone());
+  grid.regex_tx = Some(regex_tx.clone());
+  let init_grid_h = init_h.saturating_sub(CONSOLE_HEIGHT + 2 + PADDING_Y * 2);
+  grid.resize(crate::core::geom::Vec2::new(
+    init_w.saturating_sub(PADDING_X * 2) as usize,
+    init_grid_h as usize,
+  ));
+
+  // Load the manifesto text after initial resize so grid dimensions are known.
+  set_grid_contents(&mut grid, consts::MANIFESTO_TEXT.to_string());
+
+  loop {
+    if poll(Duration::from_millis(16))? {
+      match read()? {
+        Event::Key(key) => {
+          if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('c') {
+            let _ = midi_tx.send(midi::Message::ClearMsgConfig());
+            let _ = midi_tx.send(midi::Message::Panic());
+            break;
+          }
+
+          if state.show_about {
+            state.show_about = false;
+            continue;
+          }
+
+          if state.show_docs {
+            state.show_docs = false;
+            continue;
+          }
+
+          if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('b') {
+            state.show_menubar = !state.show_menubar;
+            if state.show_menubar {
+              state.focus = Focus::Menu;
+              state.menu.visible = true;
+              state.menu.active_menu = None;
+              state.menu.focused_tab = 0;
+            } else {
+              state.focus = Focus::Grid;
+              state.menu.visible = false;
+              state.menu.active_menu = None;
+            }
+            continue;
+          }
+
+          match state.focus {
+            Focus::Menu => {
+              let action = handle_menu_key(&mut state.menu, key);
+              let mut close_after = false;
+              match action {
+                MenuAction::None => {}
+                MenuAction::Close => {
+                  state.show_menubar = false;
+                  state.focus = Focus::Grid;
+                }
+                MenuAction::Quit => {
+                  should_quit = true;
+                }
+                MenuAction::ReleaseAll => {
+                  let _ = midi_tx.send(midi::Message::ClearMsgConfig());
+                  let _ = midi_tx.send(midi::Message::Panic());
+                  close_after = true;
+                }
+                MenuAction::ClearQueue => {
+                  let _ = playhead_tx.send(crate::core::playhead::Message::ClearQueue());
+                  close_after = true;
+                }
+                MenuAction::ToggleClock => {
+                  use std::sync::atomic::Ordering;
+                  let was = consts::CLOCK_ENABLED.load(Ordering::Relaxed);
+                  consts::CLOCK_ENABLED.store(!was, Ordering::Relaxed);
+                  let _ = midi_tx.send(midi::Message::EnableClock(!was));
+                }
+                MenuAction::ToggleFocus => {
+                  use std::sync::atomic::Ordering;
+                  let was = consts::FOCUS_MODE.load(Ordering::Relaxed);
+                  consts::FOCUS_MODE.store(!was, Ordering::Relaxed);
+                }
+                MenuAction::InsertFile => {
+                  // TODO: file picker integration
+                  close_after = true;
+                }
+                MenuAction::About => {
+                  state.show_about = true;
+                  close_after = true;
+                }
+                MenuAction::ShowDocs => {
+                  state.show_docs = true;
+                  close_after = true;
+                }
+                MenuAction::MidiOutputSelected(idx) => {
+                  let _ = midi_tx.send(midi::Message::SwitchDevice(idx));
+                  if let Some(name) = state.menu.midi_output_devices.get(idx) {
+                    state.midi_status = name.clone();
+                  }
+                  close_after = true;
+                }
+                MenuAction::MidiInputSelected(_idx) => {
+                  // TODO: midi input switching not yet wired to a message
+                  close_after = true;
+                }
+                MenuAction::ScaleLeftSelected(idx) => {
+                  use crate::core::tonal::scale::ScaleMode;
+                  if let Some(mode) = ScaleMode::all().get(idx) {
+                    let _ =
+                      playhead_tx.send(crate::core::playhead::Message::SetScaleModeLeft(*mode));
+                  }
+                  close_after = true;
+                }
+                MenuAction::ScaleTopSelected(idx) => {
+                  use crate::core::tonal::scale::ScaleMode;
+                  if let Some(mode) = ScaleMode::all().get(idx) {
+                    let _ =
+                      playhead_tx.send(crate::core::playhead::Message::SetScaleModeTop(*mode));
+                  }
+                  close_after = true;
+                }
+                MenuAction::ScaleRootSelected(idx) => {
+                  use crate::core::tonal::scale::ScaleRoot;
+                  if let Some(root) = ScaleRoot::all().get(idx) {
+                    let _ =
+                      playhead_tx.send(crate::core::playhead::Message::SetScaleRootTop(*root));
+                  }
+                  close_after = true;
+                }
+              }
+              if close_after {
+                state.show_menubar = false;
+                state.menu.active_menu = None;
+                state.focus = Focus::Grid;
+              }
+            }
+            Focus::RegexInput => {
+              // Regex input handled by line_editor events - dispatch non-Esc keys to it.
+              use crossterm::event::KeyCode;
+              if key.code == KeyCode::Esc {
+                state.focus = Focus::Grid;
+              } else {
+                state.line_editor.handle_key(key);
+                // Trigger regex solve on each edit.
+                let pattern = state.line_editor.content().to_string();
+                if pattern.is_empty() {
+                  let _ = regex_tx.send(crate::core::engine::regex::Message::Clear);
+                } else {
+                  let _ = regex_tx.send(crate::core::engine::regex::Message::Solve(
+                    crate::core::engine::regex::EventData {
+                      text: grid.text_contents(),
+                      pattern,
+                      flags: state.flags.to_flag_str().to_string(),
+                      grid_width: grid.grid.width,
+                    },
+                  ));
+                }
+              }
+            }
+            Focus::Grid => {
+              if key.code == KeyCode::Esc {
+                state.focus = Focus::RegexInput;
+              } else if !cmd_mgr.dispatch_key(key, &mut state, &mut grid, &mut should_quit) {
+                crate::view::grid::handle_key_event(&mut grid, key);
+              }
+            }
+          }
+
+          if should_quit {
+            break;
+          }
+        }
+        Event::Mouse(mouse) => {
+          // Switch to grid focus on any click so mouse always works.
+          use crossterm::event::{MouseButton, MouseEventKind};
+          if matches!(
+            mouse.kind,
+            MouseEventKind::Down(MouseButton::Left)
+              | MouseEventKind::Down(MouseButton::Right)
+              | MouseEventKind::Down(MouseButton::Middle)
+          ) {
+            state.focus = Focus::Grid;
+          }
+          crate::view::grid::handle_mouse_event(
+            &mut grid,
+            mouse,
+            PADDING_X,
+            2 + PADDING_Y + CONSOLE_HEIGHT,
+          );
+        }
+        Event::Resize(w, h) => {
+          renderer.resize(w, h);
+          state.resize(w, h);
+          let grid_h = h.saturating_sub(CONSOLE_HEIGHT + 2 + PADDING_Y * 2);
+          grid.resize(crate::core::geom::Vec2::new(
+            w.saturating_sub(PADDING_X * 2) as usize,
+            grid_h as usize,
+          ));
+        }
+        _ => {}
+      }
+    }
+
+    // Drain UI updates from the playhead thread.
+    while let Ok(update) = ui_rx.try_recv() {
+      // Handle symspell-specific variants that need grid + state access.
+      match &update {
+        crate::core::playhead::UIUpdate::TmpAppendSpace => {
+          sym_state.handle_buf_append_space(&mut state);
+          continue;
+        }
+        crate::core::playhead::UIUpdate::TmpAppend(idx) => {
+          sym_state.handle_buf_append(&grid, &mut state, *idx);
+          continue;
+        }
+        crate::core::playhead::UIUpdate::RplCycle(area) => {
+          let area = *area;
+          sym_state.handle_rpl_cycle(&mut grid, &mut state, area);
+          continue;
+        }
+        _ => {}
+      }
+      apply_ui_update(update, &mut state);
+    }
+
+    grid.playhead_ui = state.playhead_ui.clone();
+    grid.playhead_ui.focus_mode = consts::FOCUS_MODE.load(std::sync::atomic::Ordering::Relaxed);
+    grid.is_canvas_focused = matches!(state.focus, Focus::Grid);
+    grid.apply_dice_scale_if_changed();
+
+    // Advance symspell animation if one is running.
+    apply_sym_anim_tick(&sym_state, &mut grid, &mut state, &regex_tx);
+
+    draw_frame(&state, &grid, renderer.current_mut());
+    renderer.flush(&mut std::io::stdout())?;
+  }
+  Ok(())
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn draw_frame(
+  state: &crate::app_state::AppState,
+  grid: &crate::view::grid::GridEditor,
+  buf: &mut crate::terminal::buffer::ScreenBuffer,
+) {
+  use crate::terminal::cell::Color;
+  use crate::view::console::draw_console;
+  use crate::view::consts::{CONSOLE_HEIGHT, PADDING_X, PADDING_Y};
+  use crate::view::menubar::draw_menubar;
+  use crate::view::printer::{apply_style, CellStyle};
+
+  buf.clear();
+  let w = buf.width;
+
+  let bx0 = PADDING_X.saturating_sub(1);
+  let bx1 = w.saturating_sub(PADDING_X);
+  let by0 = PADDING_Y;
+  let by1 = 1 + PADDING_Y + CONSOLE_HEIGHT;
+  let focused = matches!(state.focus, crate::app_state::Focus::RegexInput);
+  let border_col = if focused {
+    Color::Rgb(255, 255, 255)
+  } else {
+    Color::Rgb(60, 60, 60)
+  };
+  let bstyle = CellStyle {
+    fg: border_col,
+    bg: Color::Reset,
+    reverse: false,
+  };
+
+  for x in bx0..=bx1 {
+    let top_ch = if x == bx0 {
+      '┌'
+    } else if x == bx1 {
+      '┐'
+    } else {
+      '─'
+    };
+    let bot_ch = if x == bx0 {
+      '└'
+    } else if x == bx1 {
+      '┘'
+    } else {
+      '─'
+    };
+    if let Some(c) = buf.get_mut(x, by0) {
+      apply_style(c, top_ch, bstyle);
+    }
+    if let Some(c) = buf.get_mut(x, by1) {
+      apply_style(c, bot_ch, bstyle);
+    }
+  }
+  for y in by0 + 1..by1 {
+    if let Some(c) = buf.get_mut(bx0, y) {
+      apply_style(c, '│', bstyle);
+    }
+    if let Some(c) = buf.get_mut(bx1, y) {
+      apply_style(c, '│', bstyle);
+    }
+  }
+
+  draw_console(state, buf, PADDING_X, 1 + PADDING_Y, w, CONSOLE_HEIGHT);
+  grid.draw_to_buf(buf, PADDING_X, 2 + PADDING_Y + CONSOLE_HEIGHT);
+  if state.show_menubar {
+    draw_menubar(state, buf, 0);
+  }
+  if state.show_about {
+    draw_about_dialog(state, buf);
+  }
+  if state.show_docs {
+    draw_docs_dialog(state, buf);
+  }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn draw_about_dialog(
+  state: &crate::app_state::AppState,
+  buf: &mut crate::terminal::buffer::ScreenBuffer,
+) {
+  use crate::view::printer::draw_dialog;
+
+  let mut lines: Vec<String> = vec![
+    format!("{}  v{}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION")),
+    String::new(),
+  ];
+  let words: Vec<&str> = env!("CARGO_PKG_DESCRIPTION").split_whitespace().collect();
+  for chunk in words.chunks(6) {
+    lines.push(chunk.join(" "));
+  }
+  lines.push(String::new());
+  lines.push("press any key to close".to_string());
+
+  let refs: Vec<&str> = lines.iter().map(|s| s.as_str()).collect();
+  draw_dialog(buf, state.width, state.height, &refs);
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn draw_docs_dialog(
+  state: &crate::app_state::AppState,
+  buf: &mut crate::terminal::buffer::ScreenBuffer,
+) {
+  use crate::view::printer::draw_dialog;
+
+  draw_dialog(
+    buf,
+    state.width,
+    state.height,
+    &["docs", "", "coming soon...", "", "press any key to close"],
+  );
 }

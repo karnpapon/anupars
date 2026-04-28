@@ -1,4 +1,4 @@
-use cursive::XY;
+use crate::core::geom::XY;
 use std::time::{Duration, Instant};
 
 use super::consts;

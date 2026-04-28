@@ -1,9 +1,6 @@
-use cursive::views::{Canvas, TextView};
-use cursive::Vec2;
+use crate::core::geom::Vec2;
 
 use super::Direction;
-use crate::core::{consts, utils};
-use crate::view::grid::GridEditor;
 use crate::view::rect::Rect;
 
 use super::{Playhead, UIUpdate};
@@ -15,8 +12,7 @@ impl Playhead {
     let start_area = Rect::from_size(current_pos, area_size);
 
     *self.aimed_area.lock().unwrap() = Some(start_area);
-    let mut q = self.ui_update_queue.lock().unwrap();
-    q.push_back(UIUpdate::AimedArea(Some(start_area)));
+    let _ = self.ui_tx.send(UIUpdate::AimedArea(Some(start_area)));
   }
 
   pub(super) fn handle_update_aim(&self, direction: Direction, canvas_size: Vec2, step: usize) {
@@ -39,8 +35,7 @@ impl Playhead {
     *aimed = Some(new_aimed_area);
     drop(aimed);
 
-    let mut q = self.ui_update_queue.lock().unwrap();
-    q.push_back(UIUpdate::AimedArea(Some(new_aimed_area)));
+    let _ = self.ui_tx.send(UIUpdate::AimedArea(Some(new_aimed_area)));
   }
 
   pub(super) fn handle_commit_aim(&self) {
@@ -59,56 +54,20 @@ impl Playhead {
       drop(actived);
 
       let chn_str = self.compute_chn_str(target_pos);
-      let area_size = aimed_area.size();
-      let pos_status = utils::build_pos_status_str(target_pos);
-      let len_status = utils::build_len_status_str((area_size.x, area_size.y));
-      let cb_sink = self.cb_sink.clone();
 
-      cb_sink
-        .send(Box::new(move |siv| {
-          siv.call_on_name(
-            consts::canvas_editor_section_view,
-            move |canvas: &mut Canvas<GridEditor>| {
-              let editor = canvas.state_mut();
-              editor.playhead_ui.playhead_pos = target_pos;
-              editor.playhead_ui.playhead_area = aimed_area;
-              editor.playhead_ui.aimed_area = None;
-            },
-          );
-
-          siv.call_on_name(consts::pos_status_unit_view, move |view: &mut TextView| {
-            view.set_content(pos_status.clone());
-          });
-
-          siv.call_on_name(consts::len_status_unit_view, move |view: &mut TextView| {
-            view.set_content(len_status.clone());
-          });
-
-          siv.call_on_name(consts::chn_status_unit_view, move |view: &mut TextView| {
-            view.set_content(chn_str.clone());
-          });
-        }))
-        .unwrap();
+      let _ = self
+        .ui_tx
+        .send(UIUpdate::PlayheadPosAndArea(target_pos, aimed_area));
+      let _ = self.ui_tx.send(UIUpdate::AimedArea(None));
+      let _ = self.ui_tx.send(UIUpdate::ChnStatus(chn_str));
     } else {
-      let cb_sink = self.cb_sink.clone();
-      cb_sink
-        .send(Box::new(move |siv| {
-          siv.call_on_name(
-            consts::canvas_editor_section_view,
-            move |canvas: &mut Canvas<GridEditor>| {
-              let editor = canvas.state_mut();
-              editor.playhead_ui.aimed_area = None;
-            },
-          );
-        }))
-        .unwrap();
+      let _ = self.ui_tx.send(UIUpdate::AimedArea(None));
     }
   }
 
   pub(super) fn handle_cancel_aim(&self) {
     *self.aimed_area.lock().unwrap() = None;
-    let mut q = self.ui_update_queue.lock().unwrap();
-    q.push_back(UIUpdate::AimedArea(None));
+    let _ = self.ui_tx.send(UIUpdate::AimedArea(None));
   }
 }
 
@@ -116,8 +75,8 @@ impl Playhead {
 mod tests {
   use super::super::test_helpers::make_playhead;
   use super::Direction;
+  use crate::core::geom::Vec2;
   use crate::view::rect::Rect;
-  use cursive::Vec2;
 
   #[test]
   fn start_aim_initialises_aimed_area_at_current_pos_and_size() {

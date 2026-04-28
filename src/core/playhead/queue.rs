@@ -91,6 +91,7 @@ impl fmt::Display for QueueItem {
   }
 }
 /// Manages operator queue, event queue, and pushed positions
+#[derive(Debug)]
 pub struct QueueManager {
   pub operator_queue: Arc<Mutex<ArrayVec<QueueItem, { consts::OP_QUEUE_CAPACITY }>>>,
   pub event_queue:

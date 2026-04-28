@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::sync::atomic::Ordering;
 
-use cursive::Vec2;
+use crate::core::geom::Vec2;
 
 use crate::core::consts;
 use crate::core::engine::regex;
@@ -25,8 +25,7 @@ impl Playhead {
   }
 
   pub(super) fn update_accumulation_ui(&self, count: usize, total: usize) {
-    let mut queue = self.ui_update_queue.lock().unwrap();
-    queue.push_back(UIUpdate::AccumulationCounter(count, total));
+    let _ = self.ui_tx.send(UIUpdate::AccumulationCounter(count, total));
   }
 
   pub(super) fn handle_silent_step(&self, matcher: &HashMap<usize, regex::Match>) {
@@ -198,10 +197,12 @@ impl Playhead {
     *actived = Vec2::zero();
     drop(actived);
 
-    let mut queue = self.ui_update_queue.lock().unwrap();
-    queue.push_back(UIUpdate::PlayheadPosAndArea(new_pos, new_area));
-    queue.push_back(UIUpdate::ChnStatus(self.compute_chn_str(new_pos)));
-    drop(queue);
+    let _ = self
+      .ui_tx
+      .send(UIUpdate::PlayheadPosAndArea(new_pos, new_area));
+    let _ = self
+      .ui_tx
+      .send(UIUpdate::ChnStatus(self.compute_chn_str(new_pos)));
 
     self.enqueue_sym_rpl_cycle(prev_area);
     self.enqueue_sym_space();

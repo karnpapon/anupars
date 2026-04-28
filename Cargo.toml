@@ -18,7 +18,6 @@ name = "anupars"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-cursive = { version = "*", default-features = false }
 lazy_static = "1.5.0"
 dirs = "5.0.1"
 log = "0.4.22"
@@ -40,8 +39,7 @@ symspell_rs = { version = "6.8.3" }
 # https://github.com/Boddlnagg/midir/issues/94
 midir = { version = "0.10.3", features = ["coremidi_send_timestamped"] }
 crossbeam = "0.8.4"
-# re-enable crossterm backend for native builds
-cursive = { version = "*", features = ["crossterm-backend"] }
+crossterm = { version = "0.28", features = ["event-stream"] }
 
 # WASM-only dependencies
 [target.'cfg(target_arch = "wasm32")'.dependencies]
