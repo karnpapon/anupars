@@ -1,10 +1,14 @@
+#[cfg(not(target_arch = "wasm32"))]
 use midir::{MidiInput, MidiInputConnection, MidiOutput, MidiOutputConnection, MidiOutputPort};
+#[cfg(target_arch = "wasm32")]
+use std::collections::{HashMap, VecDeque};
+#[cfg(not(target_arch = "wasm32"))]
 use std::error::Error;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::{Arc, Mutex};
+#[cfg(not(target_arch = "wasm32"))]
 use std::thread;
-// use std::time::Duration;
 
 use crate::core::consts;
 use crate::core::engine::stack::{self, Stack};
@@ -145,6 +149,7 @@ impl MidiMsg {
   }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 pub struct Midi {
   pub midi: Mutex<Option<MidiOutput>>,
   pub out_device: Mutex<Option<MidiOutputConnection>>,
@@ -166,6 +171,27 @@ pub struct Midi {
   ext_clock_callback: Mutex<Option<Box<dyn Fn(u8) + Send>>>,
 }
 
+/// WASM Midi: no hardware, queues raw MIDI bytes for JS to drain via `wasm_take_midi_message`.
+#[cfg(target_arch = "wasm32")]
+pub struct Midi {
+  pub tx: Sender<Message>,
+  pub rx: Receiver<Message>,
+  pub msg_config_list: Arc<Mutex<Vec<MidiMsg>>>,
+  #[allow(dead_code)]
+  clock_input_enabled: Arc<AtomicBool>,
+  /// Raw MIDI bytes waiting to be drained by JS (3-byte messages).
+  pub out_queue: VecDeque<Vec<u8>>,
+  /// Last note triggered with `hold=true` (for de-duplication / release on change).
+  last_held_note: Option<MidiMsg>,
+  /// (fire_at_clock_tick, msg) pairs — NoteOff sent when clock_tick >= fire_at.
+  pending_offs: Vec<(usize, MidiMsg)>,
+  /// Notes currently in hold state (no auto-release until explicit Release).
+  held_notes: HashMap<(u8, u8, u8), MidiMsg>,
+  /// Current BPM (updated via SetTempo).
+  bpm: usize,
+}
+
+#[cfg(not(target_arch = "wasm32"))]
 impl Midi {
   fn handle_push(&self, stack_tx: std::sync::mpsc::Sender<stack::Message>, midi_msg: MidiMsg) {
     let _ = stack_tx.send(stack::Message::Push(midi_msg));
@@ -375,71 +401,6 @@ impl Midi {
     midi_msg_config_list.push(midi);
   }
 
-  /// Calculate velocity based on position and mode
-  fn calculate_velocity(params: &TriggerParams) -> u8 {
-    let ref_velocity = MAX_VELOCITY
-      - (params.active_pos_y as f32 / params.grid_height as f32) * (MAX_VELOCITY - MIN_VELOCITY);
-
-    let vel = if params.is_sweep {
-      // Sweep mode: scale velocity by distance from active position
-      let distance = (params.trigger_pos_y as i32 - params.active_pos_y as i32).abs() as f32;
-      let max_distance = params.grid_height as f32;
-      let proximity_ratio = (1.0 - (distance / max_distance)).max(0.0);
-      (ref_velocity * proximity_ratio).round() as u8 / 2
-    } else {
-      ref_velocity.round() as u8
-    };
-
-    vel.max(MIN_VELOCITY as u8)
-  }
-
-  /// Calculate note length based on BPM, distance, DynLength mode, and DIV setting.
-  ///
-  /// At high DIV values (32, 64) steps fire very rapidly, so the note must release
-  /// before the next step arrives.  The `div` parameter (ratio.1) is used to derive
-  /// the maximum allowed frames:
-  ///   step_frames = 30 000 / (div * bpm)   [each frame = 8 ms]
-  /// The result is clamped to 85 % of that window so there is always a gap between
-  /// note-off and the next note-on.
-  fn calculate_note_length(bpm: usize, distance_to_next: usize, div: usize) -> u8 {
-    let base_bpm = consts::DEFAULT_TEMPO;
-
-    // Maximum frames the note may last before the next step fires.
-    // step_frames = (64/div * tick_ms) / 8ms  where tick_ms = 60000/(bpm*16)
-    //             = 30000 / (div * bpm)
-    // Apply 85 % fill so the note-off arrives before the next note-on.
-    let step_max_frames: u8 = if div > 0 && bpm > 0 {
-      let full_step = 30_000usize / (div.max(1) * bpm.max(1));
-      (full_step * 85 / 100).clamp(1, 127) as u8
-    } else {
-      127
-    };
-
-    if distance_to_next == DYNLENGTH_DEFAULT_DISTANCE {
-      // DynLength OFF: fixed shorter duration to prevent overlap in fast playback
-      let calculated_length = if bpm > 0 {
-        ((BASE_LENGTH_FIXED * base_bpm) / bpm).max(1)
-      } else {
-        BASE_LENGTH_FIXED
-      };
-      (calculated_length as u8).min(step_max_frames)
-    } else {
-      // DynLength ON: dynamic duration based on distance to next trigger
-      let calculated_length = if bpm > 0 {
-        ((BASE_LENGTH_DYNAMIC * base_bpm) / bpm).max(1)
-      } else {
-        BASE_LENGTH_DYNAMIC
-      };
-
-      // Distance factor: 1→0.25x (staccato), 4→1.0x (neutral), 16→4.0x (sustained)
-      let distance_factor = (distance_to_next.min(16) as f32 / 4.0).clamp(0.25, 4.0);
-      let length_with_distance = (calculated_length as f32 * distance_factor).round() as usize;
-
-      let min_len = MIN_AUDIBLE_LENGTH.min(step_max_frames);
-      (length_with_distance as u8).clamp(min_len, step_max_frames)
-    }
-  }
-
   /// Trigger MIDI note with position and scale information
   fn trigger_w_position(&self, params: TriggerParams) {
     if params.grid_height == 0 {
@@ -453,27 +414,9 @@ impl Midi {
       params.scale_root_offset,
     );
 
-    let velocity = Self::calculate_velocity(&params);
-    let note_length = Self::calculate_note_length(params.bpm, params.distance_to_next, params.div);
-
-    // Derive MIDI channel from grid position when splits are active
-    let channel: u8 = {
-      let v = params.grid_v_splits.max(1);
-      let h = params.grid_h_splits.max(1);
-      let col_w = if v > 1 && params.grid_width > 0 {
-        (params.grid_width / v).max(1)
-      } else {
-        params.grid_width.max(1)
-      };
-      let row_h = if h > 1 && params.grid_height > 0 {
-        (params.grid_height / h).max(1)
-      } else {
-        params.grid_height.max(1)
-      };
-      let col_idx = (params.x_position / col_w).min(v.saturating_sub(1));
-      let row_idx = (params.trigger_pos_y / row_h).min(h.saturating_sub(1));
-      (row_idx * v + col_idx) as u8
-    };
+    let velocity = calculate_velocity(&params);
+    let note_length = calculate_note_length(params.bpm, params.distance_to_next, params.div);
+    let channel = channel_from_position(&params);
 
     let midi_msg = MidiMsg::from(note_index, octave, note_length, velocity, channel);
 
@@ -520,59 +463,20 @@ impl Midi {
     }
   }
 
-  fn build_midi_msg(&self, midi_msg: &MidiMsg, down: bool) -> [u8; 3] {
-    let note_event = if down {
-      u8::from(MidiStatusMsg::NoteOn) + midi_msg.channel
-    } else {
-      u8::from(MidiStatusMsg::NoteOff) + midi_msg.channel
-    };
-
-    [
-      note_event,
-      convert_to_midi_note_num(midi_msg.octave, midi_msg.note).0,
-      midi_msg.velocity,
-    ]
-  }
-
-  fn build_pitch_bend_msg(&self, midi_msg: &MidiMsg) -> Option<[u8; 3]> {
-    let (_, pitch_bend) = convert_to_midi_note_num(midi_msg.octave, midi_msg.note);
-    if pitch_bend.abs() < 0.01 {
-      return None; // No pitch bend needed
-    }
-
-    // MIDI pitch bend: 14-bit value, center = 8192, range typically ±2 semitones
-    // pitch_bend is in cents, convert to 14-bit MIDI value
-    let bend_range_semitones = 2.0; // Standard pitch bend range
-    let bend_ratio = pitch_bend / (bend_range_semitones * 100.0);
-    let bend_value = (8192.0 + (bend_ratio * 8192.0)).clamp(0.0, 16383.0) as u16;
-
-    let lsb = (bend_value & MidiStatusMsg::BitMask7 as u16) as u8;
-    let msb = ((bend_value >> 7) & MidiStatusMsg::BitMask7 as u16) as u8;
-
-    Some([
-      u8::from(MidiStatusMsg::PitchBend) + midi_msg.channel,
-      lsb,
-      msb,
-    ])
-  }
-
   pub fn trigger(&self, midi_msg: &MidiMsg, down: bool) -> Result<(), &str> {
     match self.out_device.lock() {
       Ok(mut conn_out) => {
         let Some(connection_out) = conn_out.as_mut() else {
           return Ok(());
         };
-
-        // Send pitch bend first if needed (only on note-on)
         if down {
-          if let Some(pitch_bend_msg) = self.build_pitch_bend_msg(midi_msg) {
-            connection_out.send(&pitch_bend_msg).unwrap();
+          if let Some(pb) = build_pitch_bend_bytes(midi_msg) {
+            connection_out.send(&pb).unwrap();
           }
         }
-
-        // Send note-on or note-off
-        let built_msg = self.build_midi_msg(midi_msg, down);
-        connection_out.send(&built_msg).unwrap();
+        connection_out
+          .send(&build_midi_msg_bytes(midi_msg, down))
+          .unwrap();
         Ok(())
       }
       _ => Err("send_midi_note_out::error"),
@@ -656,6 +560,105 @@ impl Midi {
   }
 }
 
+/// Calculate velocity based on position and mode (shared by native + WASM).
+fn calculate_velocity(params: &TriggerParams) -> u8 {
+  let ref_velocity = MAX_VELOCITY
+    - (params.active_pos_y as f32 / params.grid_height as f32) * (MAX_VELOCITY - MIN_VELOCITY);
+
+  let vel = if params.is_sweep {
+    let distance = (params.trigger_pos_y as i32 - params.active_pos_y as i32).abs() as f32;
+    let max_distance = params.grid_height as f32;
+    let proximity_ratio = (1.0 - (distance / max_distance)).max(0.0);
+    (ref_velocity * proximity_ratio).round() as u8 / 2
+  } else {
+    ref_velocity.round() as u8
+  };
+
+  vel.max(MIN_VELOCITY as u8)
+}
+
+/// Calculate note length (shared by native + WASM).
+fn calculate_note_length(bpm: usize, distance_to_next: usize, div: usize) -> u8 {
+  let base_bpm = consts::DEFAULT_TEMPO;
+
+  let step_max_frames: u8 = if div > 0 && bpm > 0 {
+    let full_step = 30_000usize / (div.max(1) * bpm.max(1));
+    (full_step * 85 / 100).clamp(1, 127) as u8
+  } else {
+    127
+  };
+
+  if distance_to_next == DYNLENGTH_DEFAULT_DISTANCE {
+    let calculated_length = if bpm > 0 {
+      ((BASE_LENGTH_FIXED * base_bpm) / bpm).max(1)
+    } else {
+      BASE_LENGTH_FIXED
+    };
+    (calculated_length as u8).min(step_max_frames)
+  } else {
+    let calculated_length = if bpm > 0 {
+      ((BASE_LENGTH_DYNAMIC * base_bpm) / bpm).max(1)
+    } else {
+      BASE_LENGTH_DYNAMIC
+    };
+    let distance_factor = (distance_to_next.min(16) as f32 / 4.0).clamp(0.25, 4.0);
+    let length_with_distance = (calculated_length as f32 * distance_factor).round() as usize;
+    let min_len = MIN_AUDIBLE_LENGTH.min(step_max_frames);
+    (length_with_distance as u8).clamp(min_len, step_max_frames)
+  }
+}
+
+/// Build a 3-byte NoteOn/NoteOff message (shared by native + WASM).
+fn build_midi_msg_bytes(midi_msg: &MidiMsg, down: bool) -> [u8; 3] {
+  let note_event = if down {
+    u8::from(MidiStatusMsg::NoteOn) + midi_msg.channel
+  } else {
+    u8::from(MidiStatusMsg::NoteOff) + midi_msg.channel
+  };
+  [
+    note_event,
+    convert_to_midi_note_num(midi_msg.octave, midi_msg.note).0,
+    midi_msg.velocity,
+  ]
+}
+
+/// Build a 3-byte pitch-bend message if needed (shared by native + WASM).
+fn build_pitch_bend_bytes(midi_msg: &MidiMsg) -> Option<[u8; 3]> {
+  let (_, pitch_bend) = convert_to_midi_note_num(midi_msg.octave, midi_msg.note);
+  if pitch_bend.abs() < 0.01 {
+    return None;
+  }
+  let bend_range_semitones = 2.0_f32;
+  let bend_ratio = pitch_bend / (bend_range_semitones * 100.0);
+  let bend_value = (8192.0 + (bend_ratio * 8192.0)).clamp(0.0, 16383.0) as u16;
+  let lsb = (bend_value & MidiStatusMsg::BitMask7 as u16) as u8;
+  let msb = ((bend_value >> 7) & MidiStatusMsg::BitMask7 as u16) as u8;
+  Some([
+    u8::from(MidiStatusMsg::PitchBend) + midi_msg.channel,
+    lsb,
+    msb,
+  ])
+}
+
+/// Compute channel from grid split position (shared by native + WASM).
+fn channel_from_position(params: &TriggerParams) -> u8 {
+  let v = params.grid_v_splits.max(1);
+  let h = params.grid_h_splits.max(1);
+  let col_w = if v > 1 && params.grid_width > 0 {
+    (params.grid_width / v).max(1)
+  } else {
+    params.grid_width.max(1)
+  };
+  let row_h = if h > 1 && params.grid_height > 0 {
+    (params.grid_height / h).max(1)
+  } else {
+    params.grid_height.max(1)
+  };
+  let col_idx = (params.x_position / col_w).min(v.saturating_sub(1));
+  let row_idx = (params.trigger_pos_y / row_h).min(h.saturating_sub(1));
+  (row_idx * v + col_idx) as u8
+}
+
 /// Convert octave and note (with fractional semitones) to MIDI note number and pitch bend in cents
 /// Returns (midi_note, pitch_bend_cents)
 pub fn convert_to_midi_note_num(octave: u8, note: f32) -> (u8, f32) {
@@ -667,6 +670,14 @@ pub fn convert_to_midi_note_num(octave: u8, note: f32) -> (u8, f32) {
   (midi_note, pitch_bend_cents)
 }
 
+#[cfg(not(target_arch = "wasm32"))]
+impl Default for Midi {
+  fn default() -> Self {
+    Self::new()
+  }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
 impl Midi {
   pub fn init(&mut self) -> Result<(), Box<dyn Error>> {
     let midi_out = MidiOutput::new("MIDI Output")?;
@@ -819,5 +830,259 @@ impl Midi {
         }
       })
       .expect("Failed to spawn midi-processor thread");
+  }
+}
+
+// ── WASM implementation ───────────────────────────────────────────────────────
+#[cfg(target_arch = "wasm32")]
+impl Midi {
+  pub fn new() -> Self {
+    let (tx, rx) = channel();
+    Self {
+      tx,
+      rx,
+      msg_config_list: Arc::new(Mutex::new(Vec::new())),
+      clock_input_enabled: Arc::new(AtomicBool::new(false)),
+      out_queue: VecDeque::new(),
+      last_held_note: None,
+      pending_offs: Vec::new(),
+      held_notes: HashMap::new(),
+      bpm: consts::DEFAULT_TEMPO,
+    }
+  }
+
+  pub fn init(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+    Ok(())
+  }
+
+  /// Called by `wasm_init` — nothing to start in WASM (no thread).
+  pub fn run(self) {}
+
+  pub fn get_available_devices(&self) -> Vec<(String, usize)> {
+    vec![]
+  }
+
+  pub fn out_device_name(&self) -> String {
+    "Web MIDI (WASM)".to_string()
+  }
+
+  pub fn enable_clock(&self, _enabled: bool) {}
+  pub fn set_ext_clock_handler(&self, _cb: impl Fn(u8) + Send + 'static) {}
+
+  pub fn trigger(&self, _midi_msg: &MidiMsg, _down: bool) -> Result<(), &str> {
+    Ok(())
+  }
+
+  // ── Internal helpers ────────────────────────────────────────────────────────
+
+  fn enqueue_note_on(&mut self, msg: &MidiMsg) {
+    if let Some(pb) = build_pitch_bend_bytes(msg) {
+      self.out_queue.push_back(pb.to_vec());
+    }
+    self
+      .out_queue
+      .push_back(build_midi_msg_bytes(msg, true).to_vec());
+  }
+
+  fn enqueue_note_off(&mut self, msg: &MidiMsg) {
+    self
+      .out_queue
+      .push_back(build_midi_msg_bytes(msg, false).to_vec());
+  }
+
+  fn schedule_note_off(&mut self, msg: MidiMsg, clock_tick: usize) {
+    let note_key = (msg.note.round() as u8, msg.octave, msg.channel);
+    // Remove any existing pending-off for this note (prevents double NoteOff)
+    self
+      .pending_offs
+      .retain(|(_, m)| (m.note.round() as u8, m.octave, m.channel) != note_key);
+    self
+      .pending_offs
+      .push((clock_tick + msg.length as usize, msg));
+  }
+
+  fn release_held_note(&mut self, note_key: (u8, u8, u8)) {
+    if let Some(msg) = self.held_notes.remove(&note_key) {
+      // Also remove any pending-off for it (held notes don't auto-off)
+      self
+        .pending_offs
+        .retain(|(_, m)| (m.note.round() as u8, m.octave, m.channel) != note_key);
+      self.enqueue_note_off(&msg);
+    }
+  }
+
+  fn trigger_w_position_wasm(&mut self, params: TriggerParams, clock_tick: usize) {
+    if params.grid_height == 0 {
+      return;
+    }
+    let (note_index, octave) = params.scale_mode.pos_to_scale_note(
+      params.y_position,
+      params.grid_height,
+      consts::BASE_OCTAVE,
+      params.scale_root_offset,
+    );
+    let velocity = calculate_velocity(&params);
+    let note_length = calculate_note_length(self.bpm, params.distance_to_next, params.div);
+    let channel = channel_from_position(&params);
+    let midi_msg = MidiMsg::from(note_index, octave, note_length, velocity, channel);
+    let note_key = (
+      midi_msg.note.round() as u8,
+      midi_msg.octave,
+      midi_msg.channel,
+    );
+
+    if params.hold {
+      let prev_key = self
+        .last_held_note
+        .as_ref()
+        .map(|p| (p.note.round() as u8, p.octave, p.channel));
+
+      match prev_key {
+        Some(k) if k == note_key => return, // same note, no-op
+        Some(k) => {
+          self.release_held_note(k);
+        }
+        None => {}
+      }
+
+      self.enqueue_note_on(&midi_msg);
+      self.held_notes.insert(note_key, midi_msg.clone());
+      self.last_held_note = Some(midi_msg);
+    } else {
+      // Release any previously held note
+      if let Some(prev) = self.last_held_note.take() {
+        let k = (prev.note.round() as u8, prev.octave, prev.channel);
+        self.release_held_note(k);
+      }
+      // Remove any existing pending-off for this note before scheduling a new one
+      self
+        .pending_offs
+        .retain(|(_, m)| (m.note.round() as u8, m.octave, m.channel) != note_key);
+      self.enqueue_note_on(&midi_msg);
+      self.schedule_note_off(midi_msg, clock_tick);
+    }
+  }
+
+  fn send_all_notes_off_wasm(&mut self) {
+    for ch in 0u8..16 {
+      // All Notes Off (CC 123)
+      self.out_queue.push_back(vec![
+        u8::from(MidiStatusMsg::ControlChange) + ch,
+        u8::from(MidiStatusMsg::AllNotesOff),
+        0,
+      ]);
+      // All Sound Off (CC 120)
+      self.out_queue.push_back(vec![
+        u8::from(MidiStatusMsg::ControlChange) + ch,
+        u8::from(MidiStatusMsg::AllSoundOff),
+        0,
+      ]);
+    }
+  }
+
+  // ── Main tick called from WasmCtx::tick() ──────────────────────────────────
+
+  /// Drain the message channel and fire any pending note-offs.
+  /// `clock_tick` is the current monotonic tick counter from `WasmCtx`.
+  pub fn wasm_tick(&mut self, clock_tick: usize) {
+    // 1. Fire pending note-offs whose deadline has been reached
+    let mut to_fire: Vec<MidiMsg> = Vec::new();
+    self.pending_offs.retain(|(fire_at, msg)| {
+      if clock_tick >= *fire_at {
+        to_fire.push(msg.clone());
+        false
+      } else {
+        true
+      }
+    });
+    for msg in to_fire {
+      self.enqueue_note_off(&msg);
+    }
+
+    // 2. Drain message channel
+    loop {
+      match self.rx.try_recv() {
+        Ok(msg) => self.handle_message(msg, clock_tick),
+        Err(_) => break,
+      }
+    }
+  }
+
+  fn handle_message(&mut self, msg: Message, clock_tick: usize) {
+    match msg {
+      Message::TriggerWithPosition(params) => {
+        self.trigger_w_position_wasm(params, clock_tick);
+      }
+      Message::Trigger(midi_msg, down) => {
+        if down {
+          self.enqueue_note_on(&midi_msg);
+        } else {
+          self.enqueue_note_off(&midi_msg);
+        }
+      }
+      Message::Push(midi_msg) => {
+        // Push = NoteOn already sent; just schedule NoteOff
+        self.schedule_note_off(midi_msg, clock_tick);
+      }
+      Message::Hold(midi_msg) => {
+        let note_key = (
+          midi_msg.note.round() as u8,
+          midi_msg.octave,
+          midi_msg.channel,
+        );
+        self.held_notes.insert(note_key, midi_msg);
+      }
+      Message::Release(midi_msg) => {
+        let note_key = (
+          midi_msg.note.round() as u8,
+          midi_msg.octave,
+          midi_msg.channel,
+        );
+        self.release_held_note(note_key);
+      }
+      Message::ReleaseAll() => {
+        let held: Vec<MidiMsg> = self.held_notes.values().cloned().collect();
+        self.held_notes.clear();
+        self.pending_offs.clear();
+        self.last_held_note = None;
+        for m in held {
+          self.enqueue_note_off(&m);
+        }
+      }
+      Message::ControlChange {
+        channel,
+        cc_number,
+        cc_value,
+      } => {
+        self.out_queue.push_back(vec![
+          u8::from(MidiStatusMsg::ControlChange) + (channel & 0x0F),
+          cc_number,
+          cc_value,
+        ]);
+      }
+      Message::Panic() => {
+        self.held_notes.clear();
+        self.pending_offs.clear();
+        self.last_held_note = None;
+        self.send_all_notes_off_wasm();
+      }
+      Message::SetTempo(bpm) => {
+        self.bpm = bpm;
+      }
+      // Ignored in WASM (no hardware, no clock output)
+      Message::SetMsgConfig(_)
+      | Message::ClearMsgConfig()
+      | Message::SwitchDevice(_)
+      | Message::DisconnectOutput()
+      | Message::ClockStart()
+      | Message::ClockStop()
+      | Message::ClockTick()
+      | Message::ClockContinue()
+      | Message::ClockSongPosition(_)
+      | Message::EnableClock(_)
+      | Message::ExternalClock(_)
+      | Message::EnableClockInput(_)
+      | Message::ConnectInput(_) => {}
+    }
   }
 }

@@ -2,7 +2,9 @@ use std::collections::VecDeque;
 use std::sync::atomic::Ordering;
 use std::sync::mpsc::Sender;
 use std::sync::{Arc, Mutex};
+#[cfg(not(target_arch = "wasm32"))]
 use std::thread;
+#[cfg(not(target_arch = "wasm32"))]
 use std::time::Duration;
 
 use cursive::views::{Canvas, TextView};
@@ -16,6 +18,7 @@ use crate::view::rect::Rect;
 use crate::core::playhead::{Playhead, UIUpdate};
 
 impl Playhead {
+  #[cfg(not(target_arch = "wasm32"))]
   pub fn spawn_ui_processor(
     ui_queue: Arc<Mutex<VecDeque<UIUpdate>>>,
     cb_sink: cursive::CbSink,

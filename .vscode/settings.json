@@ -1,6 +1,8 @@
 {
   "editor.formatOnSave": true,
   "rust-analyzer.check.extraEnv": {},
+  // "rust-analyzer.cargo.target": "wasm32-unknown-unknown",
+  // "rust-analyzer.cargo.features": ["all"],
   "[typst]": {
     "editor.formatOnSave": true
   }

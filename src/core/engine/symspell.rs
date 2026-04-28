@@ -1,7 +1,9 @@
 use std::mem;
+#[cfg(not(target_arch = "wasm32"))]
 use std::path::Path;
 use std::sync::mpsc::Sender;
 use std::sync::{Arc, Mutex};
+#[cfg(not(target_arch = "wasm32"))]
 use std::thread;
 
 use cursive::views::{Canvas, EditView, TextView};
@@ -39,18 +41,41 @@ pub struct SymSpellState {
   symspell: Arc<Mutex<Option<SymSpell>>>,
 }
 
+impl Default for SymSpellState {
+  fn default() -> Self {
+    Self::new()
+  }
+}
+
 impl SymSpellState {
   pub fn new() -> Self {
     let symspell: Arc<Mutex<Option<SymSpell>>> = Arc::new(Mutex::new(None));
-    let symspell_bg = Arc::clone(&symspell);
-    thread::Builder::new()
-      .name(consts::THREAD_NAME_SYMSPELL_LOADER.to_string())
-      .spawn(move || {
-        let mut inner = SymSpell::new(2, None, 7, 1);
-        let _ = inner.load_dictionary(Path::new(consts::FREQ_DICT_PATH), 0, 1, " ");
-        *symspell_bg.lock().unwrap() = Some(inner);
-      })
-      .expect("Failed to spawn symspell loader thread");
+
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+      let symspell_bg = Arc::clone(&symspell);
+      thread::Builder::new()
+        .name(consts::THREAD_NAME_SYMSPELL_LOADER.to_string())
+        .spawn(move || {
+          let mut inner = SymSpell::new(2, None, 7, 1);
+          let _ = inner.load_dictionary(Path::new(consts::FREQ_DICT_PATH), 0, 1, " ");
+          *symspell_bg.lock().unwrap() = Some(inner);
+        })
+        .expect("Failed to spawn symspell loader thread");
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    {
+      const DICT: &str = include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/data/frequency_dictionary_en_10k.txt"
+      ));
+      let mut inner = SymSpell::new(2, None, 7, 1);
+      for line in DICT.lines() {
+        inner.load_dictionary_line(line, 0, 1, " ");
+      }
+      *symspell.lock().unwrap() = Some(inner);
+    }
 
     SymSpellState {
       buf_buf: Arc::new(Mutex::new(AllocRingBuffer::new(consts::TMP_BUF_SIZE))),

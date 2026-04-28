@@ -7,7 +7,11 @@ use crate::core::io::midi;
 use crate::core::playhead::{Message as PlayheadMessage, Playhead};
 use crate::core::timing::metronome::{Message, Metronome};
 use crate::view::menubar::{set_contents, Menubar};
+#[cfg(target_arch = "wasm32")]
+use cursive::theme::{BaseColor, Color, PaletteColor};
 use cursive::theme::{BorderStyle, Palette};
+#[cfg(target_arch = "wasm32")]
+use cursive::views::Dialog;
 use cursive::views::TextView;
 use cursive::Cursive;
 use num_rational::Ratio;
@@ -15,8 +19,11 @@ use num_traits::FromPrimitive;
 use std::rc::Rc;
 use std::sync::mpsc::Sender;
 use std::sync::{Arc, Mutex};
+#[cfg(not(target_arch = "wasm32"))]
 use std::thread;
-use std::time::{Duration, Instant};
+#[cfg(not(target_arch = "wasm32"))]
+use std::time::Duration;
+use std::time::Instant;
 
 use consts::{DEFAULT_TEMPO, MANIFESTO_TEXT, TEMPO_CHECK_INTERVAL_MS, TEMPO_RESET_DELAY_MS};
 
@@ -100,11 +107,28 @@ pub struct Application {
   /// for tracking holding keypress
   pub last_key_time: Arc<Mutex<Option<Instant>>>,
   pub current_tempo: Arc<Mutex<usize>>,
+
+  // WASM-only: the Arc<Playhead> so wasm.rs can call wasm_tick()/wasm_tick_ui()
+  #[cfg(target_arch = "wasm32")]
+  pub playhead: std::sync::Arc<Playhead>,
 }
 
 /// Initialize the default cursive theme with simple borders and terminal colors
 fn init_cursive_theme(cursive: &mut Cursive) {
-  let palette = Palette::terminal_default();
+  #[allow(unused_mut)] // mut is required by the wasm32 cfg block below
+  let mut palette = Palette::terminal_default();
+
+  // In WASM the backend stores raw Color values - TerminalDefault is emitted
+  // as \x1b[39m/\x1b[49m which xterm.js renders identically for all cells,
+  // making highlighted cells indistinguishable from normal ones.
+  // Set explicit colors so the highlight contrast is visible.
+  #[cfg(target_arch = "wasm32")]
+  {
+    palette[PaletteColor::Highlight] = Color::Dark(BaseColor::White);
+    palette[PaletteColor::HighlightText] = Color::Dark(BaseColor::Black);
+    palette[PaletteColor::HighlightInactive] = Color::Dark(BaseColor::White);
+  }
+
   cursive.set_theme(cursive::theme::Theme {
     shadow: false,
     borders: BorderStyle::Simple,
@@ -127,7 +151,13 @@ pub fn initialize_components() -> Application {
 
   let playhead_area =
     std::sync::Arc::new(Playhead::new(midi.tx.clone(), cursive.cb_sink().clone()));
+
+  #[cfg(not(target_arch = "wasm32"))]
   let playhead_tx = std::sync::Arc::clone(&playhead_area).run(regex_handler.tx.clone());
+
+  #[cfg(target_arch = "wasm32")]
+  let playhead_tx = std::sync::Arc::clone(&playhead_area).wasm_setup(regex_handler.tx.clone());
+
   let mut metronome = Metronome::new(cursive.cb_sink().clone(), playhead_tx.clone());
 
   metronome.set_midi_tx(midi.tx.clone());
@@ -158,6 +188,8 @@ pub fn initialize_components() -> Application {
     metronome,
     last_key_time,
     current_tempo,
+    #[cfg(target_arch = "wasm32")]
+    playhead: playhead_area,
   }
 }
 
@@ -203,7 +235,17 @@ pub fn setup_ui(components: &mut Application) {
     .add_subtree("view", menu_view)
     .add_subtree("help", menu_help)
     .add_delimiter()
-    .add_leaf("quit", |s| s.quit());
+    .add_leaf("quit", |s| {
+      #[cfg(not(target_arch = "wasm32"))]
+      s.quit();
+      #[cfg(target_arch = "wasm32")]
+      s.add_layer(
+        Dialog::info(
+          "\"quit\" is only available in the terminal-based app.\n\nclose the browser tab to exit.",
+        )
+        .title("quit"),
+      );
+    });
 
   components.cursive.add_layer(main_view);
 
@@ -226,6 +268,7 @@ pub fn setup_ui(components: &mut Application) {
 }
 
 /// Spawn a background thread to monitor key press timing and reset tempo
+#[cfg(not(target_arch = "wasm32"))]
 fn spawn_tempo_monitor_thread(
   last_key_time: Arc<Mutex<Option<Instant>>>,
   current_tempo: Arc<Mutex<usize>>,
@@ -251,6 +294,7 @@ fn spawn_tempo_monitor_thread(
 }
 
 /// Spawn all background worker threads
+#[cfg(not(target_arch = "wasm32"))]
 pub fn spawn_background_threads(
   last_key_time: Arc<Mutex<Option<Instant>>>,
   current_tempo: Arc<Mutex<usize>>,

@@ -23,6 +23,12 @@ pub struct Stack {
   // pub stack_msg_config: Arc<Mutex<Vec<midi::MidiMsg>>>,
 }
 
+impl Default for Stack {
+  fn default() -> Self {
+    Self::new()
+  }
+}
+
 impl Stack {
   pub fn new() -> Stack {
     Stack {

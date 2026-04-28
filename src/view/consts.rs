@@ -1,4 +1,4 @@
-//! View identifier constants — names used with `call_on_name` / `find_name`.
+//! View identifier constants - names used with `call_on_name` / `find_name`.
 //!
 //! Naming convention: `<identifier>_<category>_view`
 //! where `category` is `unit` (leaf widget) or `section` (container).

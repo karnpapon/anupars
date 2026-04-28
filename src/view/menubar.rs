@@ -37,6 +37,7 @@ use crate::core::io::midi;
 use crate::core::playhead;
 use crate::core::tonal::scale;
 use crate::core::utils;
+#[cfg(not(target_arch = "wasm32"))]
 use midir;
 
 use super::grid::GridEditor;
@@ -122,7 +123,8 @@ impl Menubar {
 
   pub fn build_menu_app(midi_devices: &[(String, usize)], midi_tx: Sender<midi::Message>) -> Tree {
     // Persist MIDI state for later full-menubar rebuilds.
-    let midi_input_devices = {
+    #[cfg(not(target_arch = "wasm32"))]
+    let midi_input_devices: Vec<(String, usize)> = {
       match midir::MidiInput::new("anupars-query") {
         Err(_) => Vec::new(),
         Ok(inp) => inp
@@ -138,6 +140,8 @@ impl Menubar {
           .collect::<Vec<_>>(),
       }
     };
+    #[cfg(target_arch = "wasm32")]
+    let midi_input_devices: Vec<(String, usize)> = Vec::new();
     let state = MIDI_MENU_STATE.get_or_init(|| {
       Mutex::new((
         midi_devices.to_vec(),
@@ -338,7 +342,17 @@ fn rebuild_menubar(siv: &mut Cursive) {
     .add_subtree("view", menu_view)
     .add_subtree("help", menu_help)
     .add_delimiter()
-    .add_leaf("quit", |s| s.quit());
+    .add_leaf("quit", |s| {
+      #[cfg(not(target_arch = "wasm32"))]
+      s.quit();
+      #[cfg(target_arch = "wasm32")]
+      s.add_layer(
+        Dialog::info(
+          "\"quit\" is only available in the terminal-based app.\n\nclose the browser tab to exit.",
+        )
+        .title("quit"),
+      );
+    });
 }
 
 fn toggle_clock_out(
@@ -423,6 +437,7 @@ fn build_scale_root_menu_top() -> cursive::menu::Tree {
   })
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn dialog_file_explorer() -> OnEventView<ResizedView<Dialog>> {
   let default_path = get_default_database_path();
   let paths = fs::read_dir(default_path.unwrap())
@@ -438,15 +453,20 @@ fn dialog_file_explorer() -> OnEventView<ResizedView<Dialog>> {
   OnEventView::new(Dialog::around(listed_files_view(paths)).max_width(200)).on_event(
     Event::Key(Key::Esc),
     |s| {
-      // Menubar::show_file_explorer_view(s, false)
       s.pop_layer();
     },
   )
 }
 
 pub fn build_file_explorer_view(siv: &mut Cursive) {
+  #[cfg(not(target_arch = "wasm32"))]
   siv.add_layer(
     HideableView::new(dialog_file_explorer()).with_name(consts::file_explorer_unit_view),
+  );
+
+  #[cfg(target_arch = "wasm32")]
+  siv.add_layer(
+    Dialog::info("currently, insert a file not supported in browser").title("insert file"),
   );
 }
 
@@ -580,7 +600,7 @@ pub fn listed_files_view(dir: Vec<Result<Result<String, OsString>, io::Error>>) 
           .join(consts::DEFAULT_APP_FILENAME)
           .join(list_cloned.unwrap())
       })
-      .unwrap();
+      .unwrap_or_default();
     if i == 0 {
       first_file_path = select_value.clone();
     }
@@ -615,13 +635,19 @@ fn read_file(path: &Path) -> Result<String, Box<dyn Error>> {
 
 /// Return the path to the default location (~/.anupars/contents)
 fn get_default_database_path() -> Result<PathBuf, Box<dyn Error>> {
-  let mut path = match dirs::home_dir().map(|p| p.join(consts::DEFAULT_APP_DIRECTORY)) {
-    Some(d) => d,
-    None => return Err("invalid filename".into()),
-  };
-  path.push(consts::DEFAULT_APP_FILENAME);
-  if !path.is_dir() {
-    fs::create_dir_all(&path)?;
+  #[cfg(target_arch = "wasm32")]
+  return Err("filesystem not available in WASM".into());
+
+  #[cfg(not(target_arch = "wasm32"))]
+  {
+    let mut path = match dirs::home_dir().map(|p| p.join(consts::DEFAULT_APP_DIRECTORY)) {
+      Some(d) => d,
+      None => return Err("home directory not found".into()),
+    };
+    path.push(consts::DEFAULT_APP_FILENAME);
+    if !path.is_dir() {
+      fs::create_dir_all(&path)?;
+    }
+    Ok(path)
   }
-  Ok(path)
 }
