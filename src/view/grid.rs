@@ -34,6 +34,11 @@ pub struct GridEditor {
   pub last_pattern: String,
   pub last_flag_str: String,
   pub sgr_leak_state: u8,
+  pub dice_face: u8,
+  pub dice_enabled: bool,
+  pub dice_labels: Vec<(char, u8)>,
+  pub prev_dice_active_dot: Option<usize>,
+  pub dice_bars_div: usize,
 }
 
 impl GridEditor {
@@ -50,6 +55,11 @@ impl GridEditor {
       last_pattern: String::new(),
       last_flag_str: String::new(),
       sgr_leak_state: 0,
+      dice_face: 4,
+      dice_enabled: false,
+      dice_labels: vec![],
+      prev_dice_active_dot: None,
+      dice_bars_div: 1,
     }
   }
 
@@ -311,6 +321,86 @@ impl GridEditor {
     ));
   }
 
+  pub fn toggle_dice(&mut self) -> bool {
+    self.dice_enabled = !self.dice_enabled;
+    if self.dice_enabled {
+      self.reshuffle_dice_labels();
+    }
+    self.prev_dice_active_dot = None;
+    true
+  }
+
+  fn reshuffle_dice_labels(&mut self) {
+    self.dice_labels = (0..self.dice_point_count())
+      .map(|_| {
+        let prefix = if fastrand::bool() { '+' } else { '-' };
+        let value = fastrand::u8(0..=9);
+        (prefix, value)
+      })
+      .collect();
+  }
+
+  pub fn cycle_dice_face(&mut self) -> bool {
+    self.dice_face = if self.dice_face >= 6 {
+      1
+    } else {
+      self.dice_face + 1
+    };
+    if self.dice_enabled {
+      self.reshuffle_dice_labels();
+    }
+    self.prev_dice_active_dot = None;
+    true
+  }
+
+  fn dice_point_count(&self) -> usize {
+    match self.dice_face {
+      1 => 1,
+      2 => 2,
+      3 => 3,
+      4 => 4,
+      5 => 5,
+      _ => 6,
+    }
+  }
+
+  pub fn apply_dice_scale_if_changed(&mut self) {
+    if !self.dice_enabled {
+      return;
+    }
+    use crate::core::command::types::Adjustment;
+    let num_points = self.dice_point_count();
+    let active_dot = (self.playhead_ui.current_bar / self.dice_bars_div) % num_points;
+    if self.prev_dice_active_dot == Some(active_dot) {
+      return;
+    }
+    // even index = +digit steps up, odd index = -digit steps down
+    let (prefix, value) = self
+      .dice_labels
+      .get(active_dot)
+      .copied()
+      .unwrap_or(('+', 0));
+    let steps: i32 = if prefix == '+' {
+      value as i32
+    } else {
+      -(value as i32)
+    };
+    if steps > 0 {
+      for _ in 0..steps {
+        let _ = self
+          .playhead_tx
+          .send(PlayheadMessage::CycleScaleMode(Adjustment::Increase));
+      }
+    } else if steps < 0 {
+      for _ in 0..(-steps) {
+        let _ = self
+          .playhead_tx
+          .send(PlayheadMessage::CycleScaleMode(Adjustment::Decrease));
+      }
+    }
+    self.prev_dice_active_dot = Some(active_dot);
+  }
+
   pub fn clear_contents(&mut self) {
     self.grid = Matrix::new(self.grid.width, self.grid.height, '\0');
   }
@@ -321,6 +411,146 @@ impl GridEditor {
       .as_ref()
       .unwrap_or(&"".to_string())
       .to_string()
+  }
+
+  fn draw_keyboard_indicators(&self, buf: &mut ScreenBuffer, x_off: u16, y_off: u16) {
+    // Scale mode/root labels
+    let pui = &self.playhead_ui;
+    let root_note_top = pui.scale_root_top;
+    let scale_mode_top = pui.scale_mode_top;
+    let scale_mode_left = pui.scale_mode_left;
+    let scale_root_left = pui.scale_root_left;
+
+    let active_col = if !self.is_canvas_focused {
+      Color::Rgb(100, 100, 100)
+    } else {
+      Color::Rgb(255, 255, 255)
+    };
+    let inactive_col = Color::Rgb(100, 100, 100);
+    let (top_color, left_color) = if !self.is_canvas_focused {
+      (inactive_col, inactive_col)
+    } else if pui.keyboard_top_active {
+      (active_col, inactive_col)
+    } else {
+      (inactive_col, active_col)
+    };
+
+    let top_label = format!("{} {}", scale_mode_top.short_name(), root_note_top.name());
+    for (i, ch) in top_label.chars().enumerate() {
+      if let Some(c) = buf.get_mut(x_off + i as u16, y_off) {
+        apply_style(
+          c,
+          ch,
+          CellStyle {
+            fg: top_color,
+            bg: Color::Reset,
+            reverse: false,
+          },
+        );
+      }
+    }
+    let left_label = format!(
+      "{} {}",
+      scale_mode_left.short_name(),
+      scale_root_left.name()
+    );
+    for (i, ch) in left_label.chars().enumerate() {
+      if let Some(c) = buf.get_mut(x_off + i as u16, y_off + 2) {
+        apply_style(
+          c,
+          ch,
+          CellStyle {
+            fg: left_color,
+            bg: Color::Reset,
+            reverse: false,
+          },
+        );
+      }
+    }
+
+    // Keyboard focus indicator
+    let keyboard_label = if pui.keyboard_top_active {
+      "[  \u{2227}  ]"
+    } else {
+      "[  \u{2228}  ]"
+    };
+    let label_col = if self.is_canvas_focused {
+      Color::Rgb(200, 200, 200)
+    } else {
+      Color::Rgb(100, 100, 100)
+    };
+    for (i, ch) in keyboard_label.chars().enumerate() {
+      if let Some(c) = buf.get_mut(x_off + i as u16, y_off + 1) {
+        apply_style(
+          c,
+          ch,
+          CellStyle {
+            fg: label_col,
+            bg: Color::Reset,
+            reverse: false,
+          },
+        );
+      }
+    }
+  }
+
+  fn draw_keyboard_indicators_right(&self, buf: &mut ScreenBuffer, x_off: u16, y_off: u16) {
+    // dot positions (col_offset, row_offset) within the 7x3 area, clockwise from TL:
+    //   TL=(0,0)  TR=(5,0)
+    //   ML=(0,1)  C=(3,1)  MR=(5,1)
+    //   BL=(0,2)  BR=(5,2)
+    if !self.dice_enabled {
+      let placeholder_points: &[(u16, u16)] = &[(0, 0), (5, 0), (5, 2), (0, 2), (3, 1)];
+      let style = CellStyle {
+        fg: Color::Rgb(100, 100, 100),
+        bg: Color::Reset,
+        reverse: false,
+      };
+      for &(dx, dy) in placeholder_points {
+        let prefix = '±';
+        if let Some(c) = buf.get_mut(x_off + dx, y_off + dy) {
+          apply_style(c, prefix, style);
+        }
+        if let Some(c) = buf.get_mut(x_off + dx + 1, y_off + dy) {
+          apply_style(c, 'x', style);
+        }
+      }
+      return;
+    }
+
+    let points: &[(u16, u16)] = match self.dice_face {
+      1 => &[(3, 1)],
+      2 => &[(5, 0), (0, 2)],
+      3 => &[(5, 0), (3, 1), (0, 2)],
+      4 => &[(0, 0), (5, 0), (5, 2), (0, 2)],
+      5 => &[(0, 0), (5, 0), (5, 2), (0, 2), (3, 1)],
+      _ => &[(0, 0), (5, 0), (5, 1), (5, 2), (0, 2), (0, 1)],
+    };
+
+    let active_dot = (self.playhead_ui.current_bar / self.dice_bars_div) % points.len().max(1);
+
+    for (idx, &(dx, dy)) in points.iter().enumerate() {
+      let col = if idx == active_dot {
+        Color::Rgb(200, 200, 200)
+      } else {
+        Color::Rgb(100, 100, 100)
+      };
+      let (prefix, value) = self.dice_labels.get(idx).copied().unwrap_or(('+', 0));
+      let style = CellStyle {
+        fg: col,
+        bg: Color::Reset,
+        reverse: false,
+      };
+      if let Some(c) = buf.get_mut(x_off + dx, y_off + dy) {
+        apply_style(c, prefix, style);
+      }
+      let d0 = char::from_digit((value / 10) as u32, 10).unwrap_or('0');
+      let d1 = char::from_digit((value % 10) as u32, 10).unwrap_or('0');
+      let digit = if value >= 10 { d0 } else { d1 };
+      if let Some(c) = buf.get_mut(x_off + dx + 1, y_off + dy) {
+        apply_style(c, digit, style);
+      }
+    }
   }
 
   fn draw_keyboard_top_to_buf(&self, buf: &mut ScreenBuffer, x_off: u16, y_off: u16) {
@@ -641,88 +871,8 @@ impl GridEditor {
   /// Draw the entire grid panel into `buf` at offset `(x_off, y_off)`.
   pub fn draw_to_buf(&self, buf: &mut ScreenBuffer, x_off: u16, y_off: u16) {
     if self.show_keyboard {
+      self.draw_keyboard_indicators(buf, x_off, y_off);
       self.draw_keyboard_top_to_buf(buf, x_off + KEYBOARD_MARGIN_LEFT as u16, y_off);
-
-      // Scale mode/root labels
-      let pui = &self.playhead_ui;
-      let root_note_top = pui.scale_root_top;
-      let scale_mode_top = pui.scale_mode_top;
-      let scale_mode_left = pui.scale_mode_left;
-      let scale_root_left = pui.scale_root_left;
-
-      let active_col = if !self.is_canvas_focused {
-        Color::Rgb(100, 100, 100)
-      } else {
-        Color::Rgb(255, 255, 255)
-      };
-      let inactive_col = Color::Rgb(100, 100, 100);
-      let (top_color, left_color) = if !self.is_canvas_focused {
-        (inactive_col, inactive_col)
-      } else if pui.keyboard_top_active {
-        (active_col, inactive_col)
-      } else {
-        (inactive_col, active_col)
-      };
-
-      let top_label = format!("{} {}", scale_mode_top.short_name(), root_note_top.name());
-      for (i, ch) in top_label.chars().enumerate() {
-        if let Some(c) = buf.get_mut(x_off + i as u16, y_off) {
-          apply_style(
-            c,
-            ch,
-            CellStyle {
-              fg: top_color,
-              bg: Color::Reset,
-              reverse: false,
-            },
-          );
-        }
-      }
-      let left_label = format!(
-        "{} {}",
-        scale_mode_left.short_name(),
-        scale_root_left.name()
-      );
-      for (i, ch) in left_label.chars().enumerate() {
-        if let Some(c) = buf.get_mut(x_off + i as u16, y_off + 2) {
-          apply_style(
-            c,
-            ch,
-            CellStyle {
-              fg: left_color,
-              bg: Color::Reset,
-              reverse: false,
-            },
-          );
-        }
-      }
-
-      // Keyboard focus indicator
-      let keyboard_label = if pui.keyboard_top_active {
-        "[  \u{2227}  ]"
-      } else {
-        "[  \u{2228}  ]"
-      };
-      let label_col = if self.is_canvas_focused {
-        Color::Rgb(200, 200, 200)
-      } else {
-        Color::Rgb(100, 100, 100)
-      };
-      for (i, ch) in keyboard_label.chars().enumerate() {
-        if let Some(c) = buf.get_mut(x_off + i as u16, y_off + 1) {
-          apply_style(
-            c,
-            ch,
-            CellStyle {
-              fg: label_col,
-              bg: Color::Reset,
-              reverse: false,
-            },
-          );
-        }
-      }
-
-      // Left keyboard
       self.draw_keyboard_left_to_buf(buf, x_off, y_off + KEYBOARD_MARGIN_TOP as u16);
 
       // Bottom operators
@@ -743,6 +893,7 @@ impl GridEditor {
 
       // Right queue display
       let right_x = x_off + (KEYBOARD_MARGIN_LEFT + self.grid.width) as u16;
+      self.draw_keyboard_indicators_right(buf, right_x + 1, y_off);
       self.draw_queue_right_to_buf(buf, right_x, y_off + KEYBOARD_MARGIN_TOP as u16);
     }
 
@@ -863,6 +1014,7 @@ pub fn handle_key_event(canvas: &mut GridEditor, key: crossterm::event::KeyEvent
         canvas.start_aim_if_needed();
         canvas.update_aim(Direction::Right, 1)
       }
+      KeyCode::Char('g') => canvas.cycle_dice_face(),
       _ => false,
     };
   }
@@ -878,6 +1030,7 @@ pub fn handle_key_event(canvas: &mut GridEditor, key: crossterm::event::KeyEvent
   }
 
   match key.code {
+    KeyCode::Char('#') => canvas.toggle_dice(),
     KeyCode::Char('h') => canvas.commit_or_move(Direction::Left),
     KeyCode::Char('j') => canvas.commit_or_move(Direction::Down),
     KeyCode::Char('k') => canvas.commit_or_move(Direction::Up),

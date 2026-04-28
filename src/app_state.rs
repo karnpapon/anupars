@@ -252,5 +252,6 @@ pub fn apply_ui_update(update: UIUpdate, state: &mut AppState) {
     UIUpdate::CanvasScaleModeTop(m) => state.playhead_ui.scale_mode_top = m,
     UIUpdate::CanvasScaleModeLeft(m) => state.playhead_ui.scale_mode_left = m,
     UIUpdate::CanvasKeyboardTopActive(v) => state.playhead_ui.keyboard_top_active = v,
+    UIUpdate::CurrentBar(b) => state.playhead_ui.current_bar = b,
   }
 }

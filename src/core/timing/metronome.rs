@@ -125,11 +125,13 @@ impl Metronome {
     let clock_tx = clock.run(metronome_tx_cloned);
     let mut ext_beat_instant: Option<Instant> = None;
 
+    let mut prev_bar: usize = usize::MAX;
+
     for control_message in self.rx {
       match control_message {
         Message::Reset => {
           clock_tx.send(clock::Message::Reset).unwrap();
-
+          prev_bar = usize::MAX;
           self.current_position.store(0, Ordering::Relaxed);
           if let Some(ref midi_tx) = self.midi_tx {
             let _ = midi_tx.send(midi::Message::ClockSongPosition(0));
@@ -242,6 +244,12 @@ impl Metronome {
             .playhead_tx
             .send(playhead::Message::SetActivePos(tick))
             .unwrap();
+
+          let bar = time.bars().to_integer() as usize;
+          if bar != prev_bar {
+            prev_bar = bar;
+            let _ = self.playhead_tx.send(playhead::Message::SetCurrentBar(bar));
+          }
 
           // Send MIDI clock ticks
           // Internal: 16 ticks per quarter note (beat)

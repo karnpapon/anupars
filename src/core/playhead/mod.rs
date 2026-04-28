@@ -340,6 +340,9 @@ impl Playhead {
           Message::SetActivePos(tick) => {
             self.handle_set_active_pos(tick);
           }
+          Message::SetCurrentBar(bar) => {
+            let _ = self.ui_tx.send(UIUpdate::CurrentBar(bar));
+          }
           Message::Scale(dir) => {
             self.handle_scale(dir);
           }
@@ -499,6 +502,9 @@ impl Playhead {
             }
             Message::SetActivePos(tick) => {
               self.handle_set_active_pos(tick);
+            }
+            Message::SetCurrentBar(bar) => {
+              let _ = self.ui_tx.send(UIUpdate::CurrentBar(bar));
             }
             Message::Scale(dir) => {
               self.handle_scale(dir);

@@ -168,6 +168,7 @@ pub enum UIUpdate {
   CanvasScaleModeTop(scale::ScaleMode),
   CanvasScaleModeLeft(scale::ScaleMode),
   CanvasKeyboardTopActive(bool),
+  CurrentBar(usize),
 }
 
 #[derive(Clone)]
@@ -202,6 +203,7 @@ pub struct PlayheadUI {
   pub grid_h_splits: usize,
   pub focus_mode: bool,
   pub keyboard_top_active: bool,
+  pub current_bar: usize,
 }
 
 impl Default for PlayheadUI {
@@ -243,6 +245,7 @@ impl PlayheadUI {
       grid_h_splits: 1,
       focus_mode: false,
       keyboard_top_active: true,
+      current_bar: 0,
     }
   }
 }
@@ -255,6 +258,7 @@ pub enum Message {
   UpdateInfoStatusView(),
   SetGridArea(XY<usize>),
   SetActivePos(usize),
+  SetCurrentBar(usize),
   Scale((i32, i32)),
   SetMatcher(Option<HashMap<usize, Match>>),
   SetGridSize(usize, usize),
