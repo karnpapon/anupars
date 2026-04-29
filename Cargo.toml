@@ -7,8 +7,6 @@ authors = ["karnpapon <karnpapon@gmail.com>"]
 license = "MIT"
 repository = "https://github.com/karnpapon/anupars"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [[bin]]
 name = "anupars"
 path = "src/main.rs"
@@ -33,7 +31,6 @@ ringbuffer = "0.16.0"
 arrayvec = "0.7.6"
 symspell_rs = { version = "6.8.3" }
 
-# Native-only dependencies
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 # enable `coremidi_send_timestamped` otherwise Ableton wont recognize the MIDI events sent by midir
 # https://github.com/Boddlnagg/midir/issues/94
@@ -41,7 +38,6 @@ midir = { version = "0.10.3", features = ["coremidi_send_timestamped"] }
 crossbeam = "0.8.4"
 crossterm = { version = "0.28", features = ["event-stream"] }
 
-# WASM-only dependencies
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 wasm-bindgen = "0.2"
 console_error_panic_hook = "0.1"
