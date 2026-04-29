@@ -5,6 +5,8 @@ edition = "2021"
 description = "a tiny backend-agnostic step-sequencer/live-coding environment that harnesses the power of RegEx."
 authors = ["karnpapon <karnpapon@gmail.com>"]
 license = "MIT"
+readme = "README.md"
+homepage = "https://anupa.rs"
 repository = "https://github.com/karnpapon/anupars"
 
 [[bin]]
