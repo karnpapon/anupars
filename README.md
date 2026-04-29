@@ -133,6 +133,14 @@ That's all you need for a first session. Explore [Features](#features) and [Keyb
 - **Accumulation Mode (Semi Self-Configuration)**
   - Activate accumulation mode to let the system semi-autonomously reconfigure itself via [Queue System](#queue-system), stacking and evolving patterns for emergent musical results.
 
+- **Dice**
+  - A clock-driven scale sequencer displayed as a dice face in the top-right corner of the keyboard area. Toggle on/off with `Shift+#` (default: off).
+  - When **on**, the active face (1–6) is shown with labeled dots. Each dot carries a randomly assigned prefix (`+`/`-`) and a value (`0`–`9`), e.g. `+3` or `-7`. Labels are reshuffled on enable and on face cycle.
+  - Dots are ordered clockwise from the top-left corner (perimeter first, center last for face 5).
+  - The **active dot** — highlighted in bright white — advances one step every bar. When it reaches the last dot it wraps back to the first.
+  - On each advance, the active dot's signed value is applied as relative scale-mode steps on the currently active keyboard: `+N` cycles the scale up N times, `-N` cycles it down N times, `+0` leaves it unchanged. The scale list wraps. Switching between the top keyboard (`[∧]`) and left keyboard (`[∨]`) with `~` redirects Dice changes to whichever is active at the time of the next advance.
+  - Cycle through the six dice faces with `Ctrl+g`. Enabling the dice always resets to face 4 and reshuffles labels.
+
 - **Drone Mode**
   - A sustained-note layer that runs independently of the sequencer playback. Toggle with `Ctrl+o`.
   - When active, a vertical drone line appears at the left edge of the playhead area. Every row with a regex match at that x-column is held simultaneously, producing a chord that sustains until the line moves or the mode is toggled off.
@@ -287,6 +295,13 @@ it comprised of
 | `p` | Move Drone Right | Shift drone line one column right (within playhead area) |
 | `I` | Cycle Drone Channel Down | Previous MIDI channel (1–16, wraps); shown as `O<ch>` in status bar |
 | `P` | Cycle Drone Channel Up | Next MIDI channel (1–16, wraps); shown as `O<ch>` in status bar |
+
+## Dice
+
+| Key | Action | Description |
+|-----|--------|-------------|
+| `Ctrl+#` | Toggle Dice | Enable/disable the dice scale sequencer (resets to face 4 and reshuffles labels on enable) |
+| `Ctrl+g` | Cycle Dice Face | Step through dice faces 1–6 (reshuffles labels); wraps from 6 back to 1 |
 
 ## Tempo & Timing
 
