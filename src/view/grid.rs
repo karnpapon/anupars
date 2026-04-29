@@ -4,6 +4,7 @@ use crate::core::geom::Vec2;
 
 use ringbuffer::RingBuffer;
 
+use crate::core::command::types::Adjustment;
 use crate::core::playhead::queue::EVENT_OPERATORS;
 use crate::core::playhead::queue::QUEUE_OPERATORS;
 use crate::core::playhead::PlayheadUI;
@@ -324,6 +325,7 @@ impl GridEditor {
   pub fn toggle_dice(&mut self) -> bool {
     self.dice_enabled = !self.dice_enabled;
     if self.dice_enabled {
+      self.dice_face = 4;
       self.reshuffle_dice_labels();
     }
     self.prev_dice_active_dot = None;
@@ -331,7 +333,7 @@ impl GridEditor {
   }
 
   fn reshuffle_dice_labels(&mut self) {
-    self.dice_labels = (0..self.dice_point_count())
+    self.dice_labels = (0..dice_face_points(self.dice_face).len())
       .map(|_| {
         let prefix = if fastrand::bool() { '+' } else { '-' };
         let value = fastrand::u8(0..=9);
@@ -353,24 +355,12 @@ impl GridEditor {
     true
   }
 
-  fn dice_point_count(&self) -> usize {
-    match self.dice_face {
-      1 => 1,
-      2 => 2,
-      3 => 3,
-      4 => 4,
-      5 => 5,
-      _ => 6,
-    }
-  }
-
   pub fn apply_dice_scale_if_changed(&mut self) {
     if !self.dice_enabled {
       return;
     }
-    use crate::core::command::types::Adjustment;
-    let num_points = self.dice_point_count();
-    let active_dot = (self.playhead_ui.current_bar / self.dice_bars_div) % num_points;
+    let active_dot =
+      (self.playhead_ui.current_bar / self.dice_bars_div) % self.dice_labels.len().max(1);
     if self.prev_dice_active_dot == Some(active_dot) {
       return;
     }
@@ -518,14 +508,7 @@ impl GridEditor {
       return;
     }
 
-    let points: &[(u16, u16)] = match self.dice_face {
-      1 => &[(3, 1)],
-      2 => &[(5, 0), (0, 2)],
-      3 => &[(5, 0), (3, 1), (0, 2)],
-      4 => &[(0, 0), (5, 0), (5, 2), (0, 2)],
-      5 => &[(0, 0), (5, 0), (5, 2), (0, 2), (3, 1)],
-      _ => &[(0, 0), (5, 0), (5, 1), (5, 2), (0, 2), (0, 1)],
-    };
+    let points = dice_face_points(self.dice_face);
 
     let active_dot = (self.playhead_ui.current_bar / self.dice_bars_div) % points.len().max(1);
 
@@ -980,6 +963,17 @@ impl GridEditor {
         }
       }
     }
+  }
+}
+
+fn dice_face_points(face: u8) -> &'static [(u16, u16)] {
+  match face {
+    1 => &[(3, 1)],
+    2 => &[(5, 0), (0, 2)],
+    3 => &[(5, 0), (3, 1), (0, 2)],
+    4 => &[(0, 0), (5, 0), (5, 2), (0, 2)],
+    5 => &[(0, 0), (5, 0), (5, 2), (0, 2), (3, 1)],
+    _ => &[(0, 0), (5, 0), (5, 1), (5, 2), (0, 2), (0, 1)],
   }
 }
 
