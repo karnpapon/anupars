@@ -20,6 +20,7 @@ use consts::KEYBOARD_MARGIN_TOP;
 use consts::NOTE_NAMES;
 use consts::QUEUE_MARGIN_RIGHT;
 
+use crate::core::engine::mod_matrix::{ModMatrix, SourceValues, BAR_COUNT_PERIOD};
 use crate::core::engine::regex;
 use crate::core::playhead::{Direction, Message as PlayheadMessage};
 
@@ -38,8 +39,17 @@ pub struct GridEditor {
   pub dice_face: u8,
   pub dice_enabled: bool,
   pub dice_labels: Vec<(char, u8)>,
-  pub prev_dice_active_dot: Option<usize>,
   pub dice_bars_div: usize,
+  /// Signed step applied to dice_dot_idx each tick: +1 forward, -1 reverse, 0 hold.
+  pub dice_step: i8,
+  /// Owned dot index accumulator, replaces the implicit bar/div calculation.
+  pub dice_dot_idx: usize,
+  /// Last bar/div tick we fired on, used for change detection.
+  prev_bar_div_tick: Option<usize>,
+  /// Resolved face value after mod matrix, used for rendering.
+  pub dice_effective_face: u8,
+  /// Resolved bars_div after mod matrix, locked per phase cycle.
+  pub dice_effective_bars_div: usize,
 }
 
 impl GridEditor {
@@ -59,8 +69,12 @@ impl GridEditor {
       dice_face: 4,
       dice_enabled: false,
       dice_labels: vec![],
-      prev_dice_active_dot: None,
       dice_bars_div: 1,
+      dice_step: 1,
+      dice_dot_idx: 0,
+      prev_bar_div_tick: None,
+      dice_effective_face: 4,
+      dice_effective_bars_div: 1,
     }
   }
 
@@ -328,7 +342,9 @@ impl GridEditor {
       self.dice_face = 4;
       self.reshuffle_dice_labels();
     }
-    self.prev_dice_active_dot = None;
+    self.prev_bar_div_tick = None;
+    self.dice_dot_idx = 0;
+    self.dice_effective_face = self.dice_face;
     true
   }
 
@@ -351,23 +367,84 @@ impl GridEditor {
     if self.dice_enabled {
       self.reshuffle_dice_labels();
     }
-    self.prev_dice_active_dot = None;
+    self.prev_bar_div_tick = None;
+    self.dice_dot_idx = 0;
+    self.dice_effective_face = self.dice_face;
     true
   }
 
-  pub fn apply_dice_scale_if_changed(&mut self) {
+  /// Recompute dice_effective_face from the mod matrix using current sources.
+  /// Call this whenever mod matrix routes are modified.
+  pub fn refresh_dice_effective_face(&mut self, mod_matrix: &ModMatrix) {
+    let pui = &self.playhead_ui;
+    let area = pui.playhead_area;
+    let area_w = (area.bottom_right.x.saturating_sub(area.top_left.x) + 1).max(1);
+    let area_h = (area.bottom_right.y.saturating_sub(area.top_left.y) + 1).max(1);
+    let total = (area_w * area_h).max(1);
+    let linear = pui.actived_pos.y * area_w + pui.actived_pos.x;
+    let grid_w = self.grid.width.max(1);
+    let sources = SourceValues {
+      movement_phase: (linear as f32 / (total - 1).max(1) as f32).clamp(0.0, 1.0),
+      playhead_anchor_x: (pui.playhead_pos.x as f32 / grid_w as f32).clamp(0.0, 1.0),
+      bar_count: (pui.current_beat % BAR_COUNT_PERIOD) as f32 / BAR_COUNT_PERIOD as f32,
+    };
+    let output = mod_matrix.evaluate(&sources);
+    let face = output.face.unwrap_or(self.dice_face);
+    if face != self.dice_effective_face {
+      self.dice_effective_face = face;
+    }
+  }
+
+  pub fn apply_dice_scale_if_changed(&mut self, mod_matrix: &ModMatrix) {
     if !self.dice_enabled {
       return;
     }
-    let active_dot =
-      (self.playhead_ui.current_bar / self.dice_bars_div) % self.dice_labels.len().max(1);
-    if self.prev_dice_active_dot == Some(active_dot) {
+
+    // collect normalized source values from playhead state
+    let pui = &self.playhead_ui;
+    let area = pui.playhead_area;
+    let area_w = (area.bottom_right.x.saturating_sub(area.top_left.x) + 1).max(1);
+    let area_h = (area.bottom_right.y.saturating_sub(area.top_left.y) + 1).max(1);
+    let total = (area_w * area_h).max(1);
+    let linear = pui.actived_pos.y * area_w + pui.actived_pos.x;
+    let grid_w = self.grid.width.max(1);
+
+    let sources = SourceValues {
+      movement_phase: (linear as f32 / (total - 1).max(1) as f32).clamp(0.0, 1.0),
+      playhead_anchor_x: (pui.playhead_pos.x as f32 / grid_w as f32).clamp(0.0, 1.0),
+      bar_count: (pui.current_beat % BAR_COUNT_PERIOD) as f32 / BAR_COUNT_PERIOD as f32,
+    };
+
+    let output = mod_matrix.evaluate(&sources);
+
+    let effective_bars_div = output.bars_div.unwrap_or(self.dice_bars_div).max(1);
+    self.dice_effective_bars_div = effective_bars_div;
+    let effective_step = output.step_dir.unwrap_or(self.dice_step);
+
+    // fire on each new bar/div tick
+    let bar_div_tick = pui.current_bar / effective_bars_div;
+    if self.prev_bar_div_tick == Some(bar_div_tick) {
       return;
     }
-    // even index = +digit steps up, odd index = -digit steps down
+    self.prev_bar_div_tick = Some(bar_div_tick);
+
+    let dot_count = self.dice_labels.len().max(1);
+
+    // advance index by effective_step (rem_euclid handles negative wrap)
+    if effective_step != 0 {
+      self.dice_dot_idx =
+        ((self.dice_dot_idx as i32 + effective_step as i32).rem_euclid(dot_count as i32)) as usize;
+    }
+
+    // keep index in bounds for current effective face
+    let face_dot_count = dice_face_points_len(self.dice_effective_face);
+    if face_dot_count > 0 {
+      self.dice_dot_idx %= face_dot_count;
+    }
+
     let (prefix, value) = self
       .dice_labels
-      .get(active_dot)
+      .get(self.dice_dot_idx)
       .copied()
       .unwrap_or(('+', 0));
     let steps: i32 = if prefix == '+' {
@@ -388,7 +465,6 @@ impl GridEditor {
           .send(PlayheadMessage::CycleScaleMode(Adjustment::Decrease));
       }
     }
-    self.prev_dice_active_dot = Some(active_dot);
   }
 
   pub fn clear_contents(&mut self) {
@@ -490,17 +566,17 @@ impl GridEditor {
     //   ML=(0,1)  C=(3,1)  MR=(5,1)
     //   BL=(0,2)  BR=(5,2)
     if !self.dice_enabled {
-      let placeholder_points: &[(u16, u16)] = &[(0, 0), (5, 0), (5, 2), (0, 2), (3, 1)];
+      let placeholder_points: &[(u16, u16)] = &[(0, 0), (5, 0), (5, 2), (0, 2)];
       let style = CellStyle {
         fg: Color::Rgb(100, 100, 100),
         bg: Color::Reset,
         reverse: false,
       };
       for &(dx, dy) in placeholder_points {
-        let prefix = '±';
-        if let Some(c) = buf.get_mut(x_off + dx, y_off + dy) {
-          apply_style(c, prefix, style);
-        }
+        // let prefix = '±';
+        // if let Some(c) = buf.get_mut(x_off + dx, y_off + dy) {
+        //   apply_style(c, prefix, style);
+        // }
         if let Some(c) = buf.get_mut(x_off + dx + 1, y_off + dy) {
           apply_style(c, 'x', style);
         }
@@ -508,9 +584,8 @@ impl GridEditor {
       return;
     }
 
-    let points = dice_face_points(self.dice_face);
-
-    let active_dot = (self.playhead_ui.current_bar / self.dice_bars_div) % points.len().max(1);
+    let points = dice_face_points(self.dice_effective_face);
+    let active_dot = self.dice_dot_idx % points.len().max(1);
 
     for (idx, &(dx, dy)) in points.iter().enumerate() {
       let col = if idx == active_dot {
@@ -975,6 +1050,10 @@ fn dice_face_points(face: u8) -> &'static [(u16, u16)] {
     5 => &[(0, 0), (5, 0), (5, 2), (0, 2), (3, 1)],
     _ => &[(0, 0), (5, 0), (5, 1), (5, 2), (0, 2), (0, 1)],
   }
+}
+
+pub fn dice_face_points_len(face: u8) -> usize {
+  dice_face_points(face).len()
 }
 
 /// Dispatch a crossterm key event to the appropriate grid action.

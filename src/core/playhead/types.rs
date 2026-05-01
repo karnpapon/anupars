@@ -169,6 +169,7 @@ pub enum UIUpdate {
   CanvasScaleModeLeft(scale::ScaleMode),
   CanvasKeyboardTopActive(bool),
   CurrentBar(usize),
+  CurrentBeat(usize),
 }
 
 #[derive(Clone)]
@@ -204,6 +205,7 @@ pub struct PlayheadUI {
   pub focus_mode: bool,
   pub keyboard_top_active: bool,
   pub current_bar: usize,
+  pub current_beat: usize,
 }
 
 impl Default for PlayheadUI {
@@ -246,6 +248,7 @@ impl PlayheadUI {
       focus_mode: false,
       keyboard_top_active: true,
       current_bar: 0,
+      current_beat: 0,
     }
   }
 }
@@ -259,6 +262,7 @@ pub enum Message {
   SetGridArea(XY<usize>),
   SetActivePos(usize),
   SetCurrentBar(usize),
+  SetCurrentBeat(usize),
   Scale((i32, i32)),
   SetMatcher(Option<HashMap<usize, Match>>),
   SetGridSize(usize, usize),

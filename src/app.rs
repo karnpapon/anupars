@@ -2,6 +2,7 @@ use std::fmt;
 
 use crate::core::command::register::CommandManager;
 use crate::core::consts;
+use crate::core::engine::mod_matrix::{DiceDest, ModSource};
 use crate::core::engine::regex::RegExpHandler;
 use crate::core::io::midi;
 use crate::core::playhead::{Message as PlayheadMessage, Playhead, UIUpdate};
@@ -249,6 +250,7 @@ pub fn run_event_loop(
     init_w.saturating_sub(PADDING_X * 2) as usize,
     init_grid_h as usize,
   ));
+  state.grid_width = grid.grid.width;
 
   // Load the manifesto text after initial resize so grid dimensions are known.
   set_grid_contents(&mut grid, consts::MANIFESTO_TEXT.to_string());
@@ -376,13 +378,14 @@ pub fn run_event_loop(
               }
             }
             Focus::RegexInput => {
-              // Regex input handled by line_editor events - dispatch non-Esc keys to it.
-              use crossterm::event::KeyCode;
               if key.code == KeyCode::Esc {
                 state.focus = Focus::Grid;
+              } else if key.code == KeyCode::Tab {
+                state.focus = state.focus.tab_next();
+              } else if key.code == KeyCode::BackTab {
+                state.focus = state.focus.tab_prev();
               } else {
                 state.line_editor.handle_key(key);
-                // Trigger regex solve on each edit.
                 let pattern = state.line_editor.content().to_string();
                 if pattern.is_empty() {
                   let _ = regex_tx.send(crate::core::engine::regex::Message::Clear);
@@ -396,6 +399,78 @@ pub fn run_event_loop(
                     },
                   ));
                 }
+              }
+            }
+            Focus::FlagCaseSensitive | Focus::FlagMultiline => {
+              match key.code {
+                KeyCode::Esc => state.focus = Focus::Grid,
+                KeyCode::Tab => state.focus = state.focus.tab_next(),
+                KeyCode::BackTab => state.focus = state.focus.tab_prev(),
+                KeyCode::Char(' ') | KeyCode::Enter => {
+                  if matches!(state.focus, Focus::FlagCaseSensitive) {
+                    state.flags.case_sensitive = !state.flags.case_sensitive;
+                  } else {
+                    state.flags.multiline = !state.flags.multiline;
+                  }
+                  // re-solve with updated flags
+                  let pattern = state.line_editor.content().to_string();
+                  if !pattern.is_empty() {
+                    let _ = regex_tx.send(crate::core::engine::regex::Message::Solve(
+                      crate::core::engine::regex::EventData {
+                        text: grid.text_contents(),
+                        pattern,
+                        flags: state.flags.to_flag_str().to_string(),
+                        grid_width: grid.grid.width,
+                      },
+                    ));
+                  }
+                }
+                _ => {}
+              }
+            }
+            Focus::ModMatrix { row, col } => {
+              match key.code {
+                KeyCode::Esc => state.focus = Focus::Grid,
+                KeyCode::Tab => state.focus = state.focus.tab_next(),
+                KeyCode::BackTab => state.focus = state.focus.tab_prev(),
+                KeyCode::Up => state.focus = state.focus.mod_matrix_move(-1, 0),
+                KeyCode::Down => state.focus = state.focus.mod_matrix_move(1, 0),
+                KeyCode::Left => state.focus = state.focus.mod_matrix_move(0, -1),
+                KeyCode::Right => state.focus = state.focus.mod_matrix_move(0, 1),
+                KeyCode::Char(' ') | KeyCode::Enter => {
+                  let src = ModSource::ALL[row as usize];
+                  let dst = DiceDest::ALL[col as usize];
+                  let next = match state.mod_matrix.get_amount(src, dst) {
+                    None => 1.0,
+                    Some(v) if v > 0.0 => -1.0,
+                    _ => 0.0, // 0.0 removes the route
+                  };
+                  state.mod_matrix.set_route(src, dst, next);
+                  if dst == DiceDest::Face {
+                    grid.refresh_dice_effective_face(&state.mod_matrix);
+                  }
+                }
+                KeyCode::Char('+') | KeyCode::Char('=') => {
+                  let src = ModSource::ALL[row as usize];
+                  let dst = DiceDest::ALL[col as usize];
+                  let current = state.mod_matrix.get_amount(src, dst).unwrap_or(0.0);
+                  let next = ((current + 0.1) * 10.0).round() / 10.0;
+                  state.mod_matrix.set_route(src, dst, next.clamp(-1.0, 1.0));
+                  if dst == DiceDest::Face {
+                    grid.refresh_dice_effective_face(&state.mod_matrix);
+                  }
+                }
+                KeyCode::Char('-') => {
+                  let src = ModSource::ALL[row as usize];
+                  let dst = DiceDest::ALL[col as usize];
+                  let current = state.mod_matrix.get_amount(src, dst).unwrap_or(0.0);
+                  let next = ((current - 0.1) * 10.0).round() / 10.0;
+                  state.mod_matrix.set_route(src, dst, next.clamp(-1.0, 1.0));
+                  if dst == DiceDest::Face {
+                    grid.refresh_dice_effective_face(&state.mod_matrix);
+                  }
+                }
+                _ => {}
               }
             }
             Focus::Grid => {
@@ -437,12 +512,16 @@ pub fn run_event_loop(
             w.saturating_sub(PADDING_X * 2) as usize,
             grid_h as usize,
           ));
+          state.grid_width = grid.grid.width;
         }
         _ => {}
       }
     }
 
+    state.effective_bars_div = grid.dice_effective_bars_div;
+
     // Drain UI updates from the playhead thread.
+    let prev_anchor_x = state.playhead_ui.playhead_pos.x;
     while let Ok(update) = ui_rx.try_recv() {
       // Handle symspell-specific variants that need grid + state access.
       match &update {
@@ -467,7 +546,10 @@ pub fn run_event_loop(
     grid.playhead_ui = state.playhead_ui.clone();
     grid.playhead_ui.focus_mode = consts::FOCUS_MODE.load(std::sync::atomic::Ordering::Relaxed);
     grid.is_canvas_focused = matches!(state.focus, Focus::Grid);
-    grid.apply_dice_scale_if_changed();
+    if state.playhead_ui.playhead_pos.x != prev_anchor_x {
+      grid.refresh_dice_effective_face(&state.mod_matrix);
+    }
+    grid.apply_dice_scale_if_changed(&state.mod_matrix);
 
     // Advance symspell animation if one is running.
     apply_sym_anim_tick(&sym_state, &mut grid, &mut state, &regex_tx);

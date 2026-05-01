@@ -1,4 +1,5 @@
 use crate::core::consts;
+use crate::core::engine::mod_matrix::ModMatrix;
 use crate::core::playhead::movement::Movement;
 use crate::core::playhead::tilt::TiltMode;
 use crate::core::playhead::{PlayheadUI, UIUpdate};
@@ -10,7 +11,85 @@ pub enum Focus {
   Grid,
   #[default]
   RegexInput,
+  FlagCaseSensitive,
+  FlagMultiline,
+  /// Cursor inside the mod matrix grid. row/col are 0-based indices into
+  /// ModSource::ALL and DiceDest::ALL respectively.
+  ModMatrix {
+    row: u8,
+    col: u8,
+  },
   Menu,
+}
+
+impl Focus {
+  const MOD_ROWS: u8 = 3;
+  const MOD_COLS: u8 = 3;
+
+  /// Cycle to the next console input in Tab order.
+  pub fn tab_next(self) -> Self {
+    match self {
+      Focus::RegexInput => Focus::FlagCaseSensitive,
+      Focus::FlagCaseSensitive => Focus::FlagMultiline,
+      Focus::FlagMultiline => Focus::ModMatrix { row: 0, col: 0 },
+      Focus::ModMatrix { row, col } => {
+        let next_col = col + 1;
+        if next_col < Self::MOD_COLS {
+          Focus::ModMatrix { row, col: next_col }
+        } else {
+          let next_row = row + 1;
+          if next_row < Self::MOD_ROWS {
+            Focus::ModMatrix {
+              row: next_row,
+              col: 0,
+            }
+          } else {
+            Focus::RegexInput
+          }
+        }
+      }
+      other => other,
+    }
+  }
+
+  /// Cycle to the previous console input in Tab order.
+  pub fn tab_prev(self) -> Self {
+    match self {
+      Focus::RegexInput => Focus::ModMatrix {
+        row: Self::MOD_ROWS - 1,
+        col: Self::MOD_COLS - 1,
+      },
+      Focus::FlagCaseSensitive => Focus::RegexInput,
+      Focus::FlagMultiline => Focus::FlagCaseSensitive,
+      Focus::ModMatrix { row, col } => {
+        if col > 0 {
+          Focus::ModMatrix { row, col: col - 1 }
+        } else if row > 0 {
+          Focus::ModMatrix {
+            row: row - 1,
+            col: Self::MOD_COLS - 1,
+          }
+        } else {
+          Focus::FlagMultiline
+        }
+      }
+      other => other,
+    }
+  }
+
+  /// Move cursor within the mod matrix grid, clamped to bounds.
+  pub fn mod_matrix_move(self, dr: i8, dc: i8) -> Self {
+    if let Focus::ModMatrix { row, col } = self {
+      let new_row = (row as i8 + dr).clamp(0, Self::MOD_ROWS as i8 - 1) as u8;
+      let new_col = (col as i8 + dc).clamp(0, Self::MOD_COLS as i8 - 1) as u8;
+      Focus::ModMatrix {
+        row: new_row,
+        col: new_col,
+      }
+    } else {
+      self
+    }
+  }
 }
 
 /// Regex flag toggles shown in the console panel.
@@ -104,12 +183,19 @@ pub struct AppState {
   pub rpl_status: String,
   pub regex_input: String,
 
+  /// Mod matrix routes for Dice modulation.
+  pub mod_matrix: ModMatrix,
+
   /// Welcome / doc text shown in the display panel.
   pub display_text: String,
 
   /// Terminal dimensions, updated on Resize events.
   pub width: u16,
   pub height: u16,
+  /// Grid character matrix width, updated whenever grid is resized.
+  pub grid_width: usize,
+  /// Current effective bars_div from dice mod matrix, updated each frame.
+  pub effective_bars_div: usize,
 
   /// Keyboard focus.
   pub focus: Focus,
@@ -148,9 +234,12 @@ impl Default for AppState {
       sym_status: String::new(),
       rpl_status: String::new(),
       regex_input: String::new(),
+      mod_matrix: ModMatrix::default(),
       display_text: String::new(),
       width: 0,
       height: 0,
+      grid_width: 0,
+      effective_bars_div: 1,
       focus: Focus::RegexInput,
       show_menubar: false,
       show_about: false,
@@ -253,5 +342,6 @@ pub fn apply_ui_update(update: UIUpdate, state: &mut AppState) {
     UIUpdate::CanvasScaleModeLeft(m) => state.playhead_ui.scale_mode_left = m,
     UIUpdate::CanvasKeyboardTopActive(v) => state.playhead_ui.keyboard_top_active = v,
     UIUpdate::CurrentBar(b) => state.playhead_ui.current_bar = b,
+    UIUpdate::CurrentBeat(b) => state.playhead_ui.current_beat = b,
   }
 }

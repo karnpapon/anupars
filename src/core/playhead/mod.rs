@@ -343,6 +343,9 @@ impl Playhead {
           Message::SetCurrentBar(bar) => {
             let _ = self.ui_tx.send(UIUpdate::CurrentBar(bar));
           }
+          Message::SetCurrentBeat(beat) => {
+            let _ = self.ui_tx.send(UIUpdate::CurrentBeat(beat));
+          }
           Message::Scale(dir) => {
             self.handle_scale(dir);
           }
@@ -505,6 +508,9 @@ impl Playhead {
             }
             Message::SetCurrentBar(bar) => {
               let _ = self.ui_tx.send(UIUpdate::CurrentBar(bar));
+            }
+            Message::SetCurrentBeat(beat) => {
+              let _ = self.ui_tx.send(UIUpdate::CurrentBeat(beat));
             }
             Message::Scale(dir) => {
               self.handle_scale(dir);
