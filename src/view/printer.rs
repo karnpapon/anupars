@@ -10,6 +10,31 @@ use crate::terminal::cell::{Cell, Color};
 use crate::view::consts::{EMPTY_CHAR, REST_CHAR};
 use std::collections::HashMap;
 
+pub fn primary() -> Color {
+  Color::Rgb(200, 200, 200)
+}
+pub fn secondary() -> Color {
+  Color::Rgb(100, 100, 100)
+}
+pub fn dim() -> Color {
+  Color::Rgb(80, 80, 80)
+}
+pub fn subtle() -> Color {
+  Color::Rgb(120, 120, 120)
+}
+pub fn canvas() -> Color {
+  Color::Rgb(60, 60, 60)
+}
+pub fn danger() -> Color {
+  Color::Rgb(160, 60, 60)
+}
+pub fn white() -> Color {
+  Color::Rgb(255, 255, 255)
+}
+pub fn black() -> Color {
+  Color::Rgb(0, 0, 0)
+}
+
 #[derive(Clone, Default, Debug)]
 pub struct Matrix<T> {
   pub data: Vec<T>,
@@ -105,8 +130,8 @@ impl CellStyle {
 
   pub fn highlight() -> Self {
     Self {
-      fg: Color::Rgb(0, 0, 0),
-      bg: Color::Rgb(255, 255, 255),
+      fg: black(),
+      bg: white(),
       reverse: false,
     }
   }
@@ -542,17 +567,17 @@ pub fn draw_dialog(buf: &mut ScreenBuffer, screen_w: u16, screen_h: u16, lines: 
 
   let bg = Color::Reset;
   let border_style = CellStyle {
-    fg: Color::Rgb(200, 200, 200),
+    fg: primary(),
     bg,
     reverse: false,
   };
   let text_style = CellStyle {
-    fg: Color::Rgb(200, 200, 200),
+    fg: primary(),
     bg,
     reverse: false,
   };
   let dim_style = CellStyle {
-    fg: Color::Rgb(80, 80, 80),
+    fg: dim(),
     bg,
     reverse: false,
   };

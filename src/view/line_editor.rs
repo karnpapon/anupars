@@ -147,7 +147,7 @@ impl LineEditor {
   /// The visible window scrolls to keep the cursor in view.
   /// When `focused` is true the cursor position is highlighted.
   pub fn draw(&self, buf: &mut ScreenBuffer, x: u16, y: u16, width: u16, focused: bool) {
-    use crate::terminal::cell::Color;
+    use crate::view::printer::{black, white};
 
     let chars: Vec<char> = self.buf.chars().collect();
     let cursor_char = self.buf[..self.cursor].chars().count();
@@ -159,18 +159,18 @@ impl LineEditor {
     };
 
     let text_style = CellStyle {
-      fg: Color::Rgb(0, 0, 0),
-      bg: Color::Rgb(255, 255, 255),
+      fg: black(),
+      bg: white(),
       reverse: false,
     };
     let cursor_style = CellStyle {
-      fg: Color::Rgb(255, 255, 255),
-      bg: Color::Rgb(0, 0, 0),
+      fg: white(),
+      bg: black(),
       reverse: false,
     };
     let empty_style = CellStyle {
-      fg: Color::Rgb(0, 0, 0),
-      bg: Color::Rgb(255, 255, 255),
+      fg: black(),
+      bg: white(),
       reverse: false,
     };
 

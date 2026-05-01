@@ -376,7 +376,7 @@ fn draw_wasm_frame(state: &AppState, grid: &GridEditor, buf: &mut ScreenBuffer) 
   use crate::view::console::draw_console;
   use crate::view::consts::{CONSOLE_HEIGHT, PADDING_X, PADDING_Y};
   use crate::view::menubar::draw_menubar;
-  use crate::view::printer::{apply_style, draw_dialog, CellStyle};
+  use crate::view::printer::{apply_style, canvas, draw_dialog, white, CellStyle};
 
   buf.clear();
   let w = buf.width;
@@ -386,11 +386,7 @@ fn draw_wasm_frame(state: &AppState, grid: &GridEditor, buf: &mut ScreenBuffer) 
   let by0 = PADDING_Y;
   let by1 = 1 + PADDING_Y + CONSOLE_HEIGHT;
   let focused = matches!(state.focus, crate::app_state::Focus::RegexInput);
-  let border_col = if focused {
-    Color::Rgb(255, 255, 255)
-  } else {
-    Color::Rgb(60, 60, 60)
-  };
+  let border_col = if focused { white() } else { canvas() };
   let bstyle = CellStyle {
     fg: border_col,
     bg: Color::Reset,

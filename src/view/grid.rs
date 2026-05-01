@@ -11,7 +11,7 @@ use crate::core::playhead::PlayheadUI;
 use crate::core::{consts, playhead::queue::PendingJumpPosition};
 use crate::terminal::buffer::ScreenBuffer;
 use crate::terminal::cell::Color;
-use crate::view::printer::{apply_style, CellStyle, Matrix};
+use crate::view::printer::{apply_style, black, primary, secondary, white, CellStyle, Matrix};
 
 use consts::BASE_OCTAVE;
 use consts::KEYBOARD_MARGIN_BOTTOM;
@@ -488,11 +488,11 @@ impl GridEditor {
     let scale_root_left = pui.scale_root_left;
 
     let active_col = if !self.is_canvas_focused {
-      Color::Rgb(100, 100, 100)
+      secondary()
     } else {
-      Color::Rgb(255, 255, 255)
+      white()
     };
-    let inactive_col = Color::Rgb(100, 100, 100);
+    let inactive_col = secondary();
     let (top_color, left_color) = if !self.is_canvas_focused {
       (inactive_col, inactive_col)
     } else if pui.keyboard_top_active {
@@ -541,9 +541,9 @@ impl GridEditor {
       "[  \u{2228}  ]"
     };
     let label_col = if self.is_canvas_focused {
-      Color::Rgb(200, 200, 200)
+      primary()
     } else {
-      Color::Rgb(100, 100, 100)
+      secondary()
     };
     for (i, ch) in keyboard_label.chars().enumerate() {
       if let Some(c) = buf.get_mut(x_off + i as u16, y_off + 1) {
@@ -568,7 +568,7 @@ impl GridEditor {
     if !self.dice_enabled {
       let placeholder_points: &[(u16, u16)] = &[(0, 0), (5, 0), (5, 2), (0, 2)];
       let style = CellStyle {
-        fg: Color::Rgb(100, 100, 100),
+        fg: secondary(),
         bg: Color::Reset,
         reverse: false,
       };
@@ -589,9 +589,9 @@ impl GridEditor {
 
     for (idx, &(dx, dy)) in points.iter().enumerate() {
       let col = if idx == active_dot {
-        Color::Rgb(200, 200, 200)
+        primary()
       } else {
-        Color::Rgb(100, 100, 100)
+        secondary()
       };
       let (prefix, value) = self.dice_labels.get(idx).copied().unwrap_or(('+', 0));
       let style = CellStyle {
@@ -623,14 +623,14 @@ impl GridEditor {
 
       let (fg, bg) = if x == abs_active_x {
         if note_name == "C" {
-          (Color::Rgb(0, 0, 0), Color::Rgb(255, 255, 255))
+          (black(), white())
         } else {
-          (Color::Rgb(255, 255, 255), Color::Reset)
+          (white(), Color::Reset)
         }
       } else if note_name == "C" {
-        (Color::Rgb(0, 0, 0), Color::Rgb(100, 100, 100))
+        (black(), secondary())
       } else {
-        (Color::Rgb(100, 100, 100), Color::Reset)
+        (secondary(), Color::Reset)
       };
       let style = CellStyle {
         fg,

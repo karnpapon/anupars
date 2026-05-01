@@ -1,7 +1,7 @@
 #![cfg_attr(rustfmt, rustfmt_skip)]
 use crate::terminal::buffer::ScreenBuffer;
 use crate::terminal::cell::Color;
-use crate::view::printer::{apply_style, CellStyle};
+use crate::view::printer::{apply_style, dim as col_dim, primary as col_primary, CellStyle};
 
 /// Write `s` into `buf` at `(x, y)` with uniform `style`. Returns x after the last char.
 fn draw_str(buf: &mut ScreenBuffer, x: u16, y: u16, s: &str, style: CellStyle) -> u16 {
@@ -62,8 +62,8 @@ pub fn draw_console(
   w: u16,
   _h: u16,
 ) {
-  let key_col = Color::Rgb(80, 80, 80);
-  let val_col = Color::Rgb(200, 200, 200);
+  let key_col = col_dim();
+  let val_col = col_primary();
   let dim     = CellStyle::fg_rgb(80, 80, 80);
 
   // column 0: RGXP editor + flags + ERRR/TOTL/MIDI

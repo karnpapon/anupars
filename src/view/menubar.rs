@@ -444,22 +444,30 @@ pub fn draw_menubar(
   y_off: u16,
 ) {
   use crate::terminal::cell::Color;
-  use crate::view::printer::{apply_style, CellStyle};
+  use crate::view::printer::apply_style;
+  use crate::view::printer::black;
+  use crate::view::printer::danger;
+  use crate::view::printer::dim;
+  use crate::view::printer::primary;
+  use crate::view::printer::secondary;
+  use crate::view::printer::subtle;
+  use crate::view::printer::white;
+  use crate::view::printer::CellStyle;
 
   let w = buf.width;
   let bar_bg = Color::Reset;
   let title_style = CellStyle {
-    fg: Color::Rgb(120, 120, 120),
+    fg: subtle(),
     bg: bar_bg,
     reverse: false,
   };
   let active_style = CellStyle {
-    fg: Color::Rgb(0, 0, 0),
-    bg: Color::Rgb(255, 255, 255),
+    fg: black(),
+    bg: white(),
     reverse: false,
   };
   let _quit_style = CellStyle {
-    fg: Color::Rgb(160, 60, 60),
+    fg: danger(),
     bg: bar_bg,
     reverse: false,
   };
@@ -525,9 +533,9 @@ pub fn draw_menubar(
   let drop_w = (max_label_w + 4) as u16;
 
   let item_bg = Color::Reset;
-  let item_fg = Color::Rgb(200, 200, 200);
-  let dim_fg = Color::Rgb(80, 80, 80);
-  let border_col = Color::Rgb(100, 100, 100);
+  let item_fg = primary();
+  let dim_fg = dim();
+  let border_col = secondary();
   let border_style = CellStyle {
     fg: border_col,
     bg: item_bg,
@@ -552,7 +560,7 @@ pub fn draw_menubar(
     let dy = y_off + 2 + row as u16;
     let is_active_item = row == state.menu.active_item;
     let (fg, bg) = if item.is_selectable() && is_active_item {
-      (Color::Rgb(0, 0, 0), Color::Rgb(255, 255, 255))
+      (black(), white())
     } else if item.is_selectable() {
       (item_fg, item_bg)
     } else {
@@ -673,7 +681,7 @@ pub fn draw_menubar(
     let dy = sub_top_y + 1 + row as u16;
     let is_active = row == state.menu.submenu_item;
     let (fg, bg) = if is_active {
-      (Color::Rgb(0, 0, 0), Color::Rgb(255, 255, 255))
+      (black(), white())
     } else {
       (item_fg, item_bg)
     };
