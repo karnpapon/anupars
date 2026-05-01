@@ -1,7 +1,6 @@
 #![cfg_attr(rustfmt, rustfmt_skip)]
 use crate::terminal::buffer::ScreenBuffer;
-use crate::terminal::cell::Color;
-use crate::view::printer::{apply_style, dim as col_dim, primary as col_primary, CellStyle};
+use crate::view::printer::{apply_style, CellStyle};
 
 const GAP: u16 = 2;
 const MAX_W: [u16; 4] = [32, 22, 25, 26];
@@ -33,15 +32,15 @@ fn draw_str_clip(buf: &mut ScreenBuffer, x: u16, y: u16, s: &str, style: CellSty
 
 /// Draw a labeled key-value row at `(x, y)`, clipped to `max_x`.
 fn draw_kv(buf: &mut ScreenBuffer, x: u16, y: u16, key: &str, value: &str, max_x: u16) {
-  let vx = draw_str_clip(buf, x, y, key,   CellStyle { fg: col_dim(),     bg: Color::Reset, reverse: false }, max_x);
-  draw_str_clip(buf, vx, y, value, CellStyle { fg: col_primary(), bg: Color::Reset, reverse: false }, max_x);
+  let vx = draw_str_clip(buf, x, y, key,   CellStyle::dim(),     max_x);
+  draw_str_clip(buf, vx, y, value, CellStyle::primary(), max_x);
 }
 
 /// Draw a flag toggle: "[x]" or "[ ]" followed by label at `(x, y)`.
 fn draw_flag(buf: &mut ScreenBuffer, x: u16, y: u16, label: &str, active: bool, focused: bool) {
-  let bracket_style = if focused { CellStyle::fg_rgb(255, 255, 255) } else { CellStyle::fg_rgb(100, 100, 100) };
-  let tick_style   = if active  { CellStyle::fg_rgb(255, 255, 255) } else { CellStyle::fg_rgb(60, 60, 60) };
-  let label_style  = if focused { CellStyle::fg_rgb(255, 255, 255) } else { CellStyle { fg: Color::Reset, bg: Color::Reset, reverse: false } };
+  let bracket_style = if focused { CellStyle::white() } else { CellStyle::secondary() };
+  let tick_style   = if active  { CellStyle::white() } else { CellStyle::canvas() };
+  let label_style  = if focused { CellStyle::white() } else { CellStyle::reset() };
 
   let flag_str = format!("[{}]", if active { 'x' } else { ' ' });
   let mut cx = x;
@@ -56,8 +55,8 @@ fn draw_flag(buf: &mut ScreenBuffer, x: u16, y: u16, label: &str, active: bool, 
 
 /// Render a single mod matrix cell: "[+amt]" or "[    ]" if no route.
 fn draw_mod_cell(buf: &mut ScreenBuffer, x: u16, y: u16, amount: Option<f32>, focused: bool) {
-  let bracket_style = if focused { CellStyle::fg_rgb(255, 255, 255) } else { CellStyle::fg_rgb(80, 80, 80) };
-  let cell_style    = if amount.is_some() { CellStyle::fg_rgb(200, 200, 200) } else { CellStyle::fg_rgb(60, 60, 60) };
+  let bracket_style = if focused { CellStyle::white()   } else { CellStyle::dim() };
+  let cell_style    = if amount.is_some() { CellStyle::primary() } else { CellStyle::canvas() };
 
   let text = match amount {
     None    => "    ".to_string(),
@@ -78,7 +77,7 @@ pub fn draw_console(
   w: u16,
   _h: u16,
 ) {
-  let dim = CellStyle::fg_rgb(80, 80, 80);
+  let dim = CellStyle::dim();
 
   // column 4: mod matrix, right-anchored
   use crate::core::engine::mod_matrix::{DiceDest, ModSource};
@@ -142,13 +141,13 @@ pub fn draw_console(
   let focused_col = cursor.map(|(_, c)| c);
 
   for (col, &dst) in DiceDest::ALL.iter().enumerate() {
-    let style = if focused_col == Some(col) { CellStyle::fg_rgb(200, 200, 200) } else { CellStyle::fg_rgb(60, 60, 60) };
+    let style = if focused_col == Some(col) { CellStyle::primary() } else { CellStyle::canvas() };
     draw_str(buf, cells_x + col as u16 * 6, y_off, dst.label(), style);
   }
 
   for (row, &src) in ModSource::ALL.iter().enumerate() {
     let row_focused = cursor.map(|(r, _)| r == row).unwrap_or(false);
-    let label_style = if row_focused { CellStyle::fg_rgb(200, 200, 200) } else { CellStyle::fg_rgb(80, 80, 80) };
+    let label_style = if row_focused { CellStyle::primary() } else { CellStyle::dim() };
     draw_str(buf, col4 - 1, y_off + 1 + row as u16, src.label(), label_style);
 
     for (col, &dst) in DiceDest::ALL.iter().enumerate() {
@@ -169,5 +168,5 @@ pub fn draw_console(
   use crate::core::engine::mod_matrix::BAR_COUNT_PERIOD;
   let bar_count = (pui.current_beat % BAR_COUNT_PERIOD) as f32 / BAR_COUNT_PERIOD as f32;
   let debug_str = format!("ph:{:.2} ax:{:.2} br:{:.2}", phase, anchor_x, bar_count);
-  draw_str(buf, col4 - 1, y_off + 4, &debug_str, CellStyle::fg_rgb(80, 80, 80));
+  draw_str(buf, col4 - 1, y_off + 4, &debug_str, CellStyle::dim());
 }

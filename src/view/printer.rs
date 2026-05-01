@@ -135,6 +135,56 @@ impl CellStyle {
       reverse: false,
     }
   }
+
+  pub fn dim() -> Self {
+    Self {
+      fg: dim(),
+      bg: Color::Reset,
+      reverse: false,
+    }
+  }
+  pub fn primary() -> Self {
+    Self {
+      fg: primary(),
+      bg: Color::Reset,
+      reverse: false,
+    }
+  }
+  pub fn secondary() -> Self {
+    Self {
+      fg: secondary(),
+      bg: Color::Reset,
+      reverse: false,
+    }
+  }
+  pub fn subtle() -> Self {
+    Self {
+      fg: subtle(),
+      bg: Color::Reset,
+      reverse: false,
+    }
+  }
+  pub fn canvas() -> Self {
+    Self {
+      fg: canvas(),
+      bg: Color::Reset,
+      reverse: false,
+    }
+  }
+  pub fn danger() -> Self {
+    Self {
+      fg: danger(),
+      bg: Color::Reset,
+      reverse: false,
+    }
+  }
+  pub fn white() -> Self {
+    Self {
+      fg: white(),
+      bg: Color::Reset,
+      reverse: false,
+    }
+  }
 }
 
 /// Apply a CellStyle to a Cell, setting fg, bg, and reverse.
@@ -154,7 +204,7 @@ fn normal_style(is_match: bool) -> CellStyle {
   if is_match {
     CellStyle::highlight()
   } else {
-    CellStyle::fg_rgb(100, 100, 100)
+    CellStyle::secondary()
   }
 }
 
@@ -380,8 +430,8 @@ impl<T: Printable + Copy> Matrix<T> {
     let style_dim = dim_style();
     let style_highlight = CellStyle::highlight();
     let style_none = CellStyle::reset();
-    let style_light = CellStyle::fg_rgb(255, 255, 255);
-    let style_xhair_dim = CellStyle::fg_rgb(80, 80, 80);
+    let style_light = CellStyle::white();
+    let style_xhair_dim = CellStyle::dim();
     let style_aimed_bg = CellStyle::fg_bg_rgb(255, 255, 255, 50, 50, 50);
 
     let match_map: HashMap<usize, &Match> = text_matcher

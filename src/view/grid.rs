@@ -693,7 +693,7 @@ impl GridEditor {
     }
     let total_height = self.grid.height;
     let half_height = total_height / 2;
-    let style = CellStyle::fg_rgb(100, 100, 100);
+    let style = CellStyle::secondary();
 
     // Event queue (EVQ) - top half, bottom-aligned
     let event_queue = self.playhead_ui.queue_manager.event_queue.lock().unwrap();
@@ -845,7 +845,7 @@ impl GridEditor {
     if !self.show_keyboard || self.grid.width == 0 {
       return;
     }
-    let style = CellStyle::fg_rgb(100, 100, 100);
+    let style = CellStyle::secondary();
 
     // Separator line
     for x in 0..self.grid.width {
@@ -856,7 +856,7 @@ impl GridEditor {
 
     let abs_active_x = self.playhead_ui.playhead_pos.x + self.playhead_ui.actived_pos.x;
     if abs_active_x < self.grid.width {
-      let arrow_style = CellStyle::fg_rgb(255, 255, 255);
+      let arrow_style = CellStyle::white();
       if let Some(c) = buf.get_mut(x_off + abs_active_x as u16, y_off) {
         apply_style(c, 'v', arrow_style);
       }
@@ -888,9 +888,9 @@ impl GridEditor {
       let op_style = if is_active && is_regex_match_x {
         CellStyle::fg_bg_rgb(0, 0, 0, 255, 255, 255)
       } else if is_active {
-        CellStyle::fg_rgb(255, 255, 255)
+        CellStyle::white()
       } else {
-        CellStyle::fg_rgb(100, 100, 100)
+        CellStyle::secondary()
       };
       if let Some(c) = buf.get_mut(x_off + x as u16, y_off + 1) {
         apply_style(c, display_char, op_style);
@@ -913,7 +913,7 @@ impl GridEditor {
         let ev_style = if is_active && is_regex_match_x {
           CellStyle::fg_bg_rgb(0, 0, 0, 255, 255, 255)
         } else if is_active {
-          CellStyle::fg_rgb(255, 255, 255)
+          CellStyle::white()
         } else {
           CellStyle::fg_rgb(150, 150, 150)
         };
@@ -938,7 +938,7 @@ impl GridEditor {
       self.draw_queue_operators_bottom_to_buf(buf, x_off + KEYBOARD_MARGIN_LEFT as u16, bottom_y);
 
       // Bottom corners
-      let corner_style = CellStyle::fg_rgb(100, 100, 100);
+      let corner_style = CellStyle::secondary();
       if let Some(c) = buf.get_mut(x_off + (KEYBOARD_MARGIN_LEFT - 2) as u16, bottom_y) {
         apply_style(c, '┗', corner_style);
       }
@@ -1015,7 +1015,7 @@ impl GridEditor {
         .is_some_and(|m| m.contains_key(&(y * self.grid.width + x)));
       is_crosshair || is_drone || is_match
     };
-    let sep_style = CellStyle::fg_rgb(100, 100, 100);
+    let sep_style = CellStyle::secondary();
     for &sep_x in &sep_xs {
       for y in 0..self.grid.height {
         if playhead_area.contains((sep_x, y).into()) || is_special(sep_x, y) {

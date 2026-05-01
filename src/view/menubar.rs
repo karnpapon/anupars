@@ -1,3 +1,4 @@
+use crossterm::event::KeyCode;
 use std::error::Error;
 use std::fs;
 use std::fs::File;
@@ -5,6 +6,17 @@ use std::io::Read;
 use std::path::Path;
 use std::path::PathBuf;
 use std::sync::atomic::Ordering;
+
+use crate::core::tonal::scale::{ScaleMode, ScaleRoot};
+use crate::terminal::cell::Color;
+use crate::view::printer::apply_style;
+use crate::view::printer::black;
+
+use crate::view::printer::dim;
+use crate::view::printer::primary;
+
+use crate::view::printer::white;
+use crate::view::printer::CellStyle;
 
 use crate::app_state::{MenuId, MenuState};
 use crate::core::{consts, utils};
@@ -191,7 +203,6 @@ pub enum MenuAction {
 
 /// Return the list of string labels for a submenu identified by its parent item label.
 fn submenu_items_for(label: &str, state: &MenuState) -> Vec<String> {
-  use crate::core::tonal::scale::{ScaleMode, ScaleRoot};
   if label.starts_with("MIDI Output") {
     if state.midi_output_devices.is_empty() {
       vec!["(no devices)".into()]
@@ -393,7 +404,6 @@ pub fn handle_menu_nav(menu: &mut MenuState, key: MenuNavKey) -> MenuAction {
 
 #[cfg(not(target_arch = "wasm32"))]
 pub fn handle_menu_key(menu: &mut MenuState, key: crossterm::event::KeyEvent) -> MenuAction {
-  use crossterm::event::KeyCode;
   let nav = match key.code {
     KeyCode::Left => MenuNavKey::Left,
     KeyCode::Right => MenuNavKey::Right,
@@ -443,47 +453,15 @@ pub fn draw_menubar(
   buf: &mut crate::terminal::buffer::ScreenBuffer,
   y_off: u16,
 ) {
-  use crate::terminal::cell::Color;
-  use crate::view::printer::apply_style;
-  use crate::view::printer::black;
-  use crate::view::printer::danger;
-  use crate::view::printer::dim;
-  use crate::view::printer::primary;
-  use crate::view::printer::secondary;
-  use crate::view::printer::subtle;
-  use crate::view::printer::white;
-  use crate::view::printer::CellStyle;
-
   let w = buf.width;
-  let bar_bg = Color::Reset;
-  let title_style = CellStyle {
-    fg: subtle(),
-    bg: bar_bg,
-    reverse: false,
-  };
-  let active_style = CellStyle {
-    fg: black(),
-    bg: white(),
-    reverse: false,
-  };
-  let _quit_style = CellStyle {
-    fg: danger(),
-    bg: bar_bg,
-    reverse: false,
-  };
+  let title_style = CellStyle::subtle();
+  let active_style = CellStyle::highlight();
+  let _quit_style = CellStyle::danger();
 
   // Fill bar background.
   for x in 0..w {
     if let Some(c) = buf.get_mut(x, y_off) {
-      apply_style(
-        c,
-        ' ',
-        CellStyle {
-          fg: Color::Reset,
-          bg: bar_bg,
-          reverse: false,
-        },
-      );
+      apply_style(c, ' ', CellStyle::reset());
     }
   }
 
@@ -535,12 +513,7 @@ pub fn draw_menubar(
   let item_bg = Color::Reset;
   let item_fg = primary();
   let dim_fg = dim();
-  let border_col = secondary();
-  let border_style = CellStyle {
-    fg: border_col,
-    bg: item_bg,
-    reverse: false,
-  };
+  let border_style = CellStyle::secondary();
 
   // Top border row.
   let top_y = y_off + 1;
@@ -597,11 +570,7 @@ pub fn draw_menubar(
 
     match item {
       Item::Delimiter => {
-        let sep_style = CellStyle {
-          fg: dim_fg,
-          bg: item_bg,
-          reverse: false,
-        };
+        let sep_style = CellStyle::dim();
         for x in 1..=drop_w {
           if let Some(c) = buf.get_mut(drop_x + x, dy) {
             apply_style(c, '─', sep_style);
