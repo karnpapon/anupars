@@ -96,8 +96,8 @@ fn menu_items(id: MenuId, state: &MenuState) -> Vec<Item> {
     MenuId::App => {
       let clock_on = consts::CLOCK_ENABLED.load(Ordering::Relaxed);
       vec![
-        Item::Action("Insert File".into()),
-        Item::Delimiter,
+        // Item::Action("Insert File".into()),
+        // Item::Delimiter,
         Item::Submenu(if state.midi_output_devices.is_empty() {
           "MIDI Output (none) \u{25b8}".into()
         } else {
@@ -631,7 +631,7 @@ pub fn draw_menubar(
   let sub_w = (sub_max_w + 2) as u16;
   // Position submenu to the right of the main dropdown, aligned to the parent row.
   let sub_x = drop_x + drop_w + 2;
-  let sub_top_y = y_off + 2 + sub_idx as u16; // align top with the parent item row
+  let sub_top_y = y_off + 1 + sub_idx as u16;
 
   // Top border.
   if let Some(c) = buf.get_mut(sub_x, sub_top_y) {

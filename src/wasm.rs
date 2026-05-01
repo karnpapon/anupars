@@ -21,8 +21,6 @@ use crate::terminal::cell::Color as TermColor;
 use crate::view::grid::GridEditor;
 use crate::view::menubar::set_grid_contents;
 
-// -------- ANSI rendering --------
-
 struct BackendState {
   buf: ScreenBuffer,
 }
@@ -100,8 +98,6 @@ fn ansi_bg(c: TermColor) -> String {
     TermColor::Indexed(i) => format!("\x1b[48;5;{}m", i),
   }
 }
-
-// -------- Key parsing (string → internal key actions) --------
 
 enum WasmKey {
   Char(char),
@@ -228,8 +224,6 @@ impl WasmCtx {
     self.midi.wasm_tick(self.clock_tick);
   }
 }
-
-// -------- UI context (AppState + GridEditor + backend) --------
 
 struct WasmUiCtx {
   state: AppState,

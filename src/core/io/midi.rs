@@ -832,7 +832,6 @@ impl Midi {
   }
 }
 
-// ── WASM implementation ───────────────────────────────────────────────────────
 #[cfg(target_arch = "wasm32")]
 impl Midi {
   pub fn new() -> Self {
@@ -875,8 +874,6 @@ impl Midi {
   pub fn trigger(&self, _midi_msg: &MidiMsg, _down: bool) -> Result<(), &str> {
     Ok(())
   }
-
-  // ── Internal helpers ────────────────────────────────────────────────────────
 
   fn enqueue_note_on(&mut self, msg: &MidiMsg) {
     if let Some(pb) = build_pitch_bend_bytes(msg) {
@@ -982,8 +979,6 @@ impl Midi {
       ]);
     }
   }
-
-  // ── Main tick called from WasmCtx::tick() ──────────────────────────────────
 
   /// Drain the message channel and fire any pending note-offs.
   /// `clock_tick` is the current monotonic tick counter from `WasmCtx`.
