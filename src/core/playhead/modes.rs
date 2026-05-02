@@ -284,6 +284,9 @@ impl Playhead {
 
     let _ = self
       .ui_tx
+      .send(UIUpdate::CanvasDynLengthMode(is_dyn_length));
+    let _ = self
+      .ui_tx
       .send(UIUpdate::ModeStatus(self.build_mode_status_string()));
   }
 

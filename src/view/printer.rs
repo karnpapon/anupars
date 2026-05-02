@@ -411,6 +411,7 @@ impl<T: Printable + Copy> Matrix<T> {
       grid_v_splits,
       grid_h_splits,
       focus_mode,
+      dyn_length_mode,
       ..
     } = playhead_ui;
 
@@ -447,6 +448,22 @@ impl<T: Printable + Copy> Matrix<T> {
         map
       })
       .unwrap_or_default();
+
+    // Smallest flat index of any regex match inside the playhead area,
+    // used to identify "held" note cells in DynLength mode.
+    let min_match_in_playhead_area: Option<usize> = if *dyn_length_mode {
+      match_map
+        .keys()
+        .filter(|&&idx| {
+          let x = idx % self.width;
+          let y = idx / self.width;
+          playhead_area.contains((x, y).into())
+        })
+        .copied()
+        .min()
+    } else {
+      None
+    };
 
     let crosshair_nearest_match: HashMap<usize, usize> = {
       let mut map: HashMap<usize, (usize, usize)> = HashMap::new();
@@ -554,16 +571,27 @@ impl<T: Printable + Copy> Matrix<T> {
               })
               .unwrap_or(consts::PLAYHEAD_CHAR);
             final_style = style_none;
-          } else {
+          } else if let Some(m) = matched {
+            new_regex_in_area.push(cell_index);
+            final_ch = if *dyn_length_mode && m.l <= 1 {
+              // '|'
+              consts::TRIGGER_CHAR
+            } else if m.l <= 1 {
+              consts::TRIGGER_CHAR
+            } else {
+              consts::MATCH_GROUP_CHAR
+            };
             final_style = style_highlight;
-            if let Some(m) = matched {
-              new_regex_in_area.push(cell_index);
-              final_ch = if m.l <= 1 {
-                consts::TRIGGER_CHAR
-              } else {
-                consts::MATCH_GROUP_CHAR
-              };
+          } else {
+            // In DynLength mode, cells after the first trigger in the area
+            // are "held" note chars - render as '-' to form a |----| visual.
+            let is_held = min_match_in_playhead_area
+              .map(|min_idx| cell_index > min_idx)
+              .unwrap_or(false);
+            if is_held {
+              final_ch = '-';
             }
+            final_style = style_highlight;
           }
         }
 

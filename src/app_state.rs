@@ -330,6 +330,7 @@ pub fn apply_ui_update(update: UIUpdate, state: &mut AppState) {
     UIUpdate::CanvasSweepRowMode(m) => state.playhead_ui.sweep_row_mode = m,
     UIUpdate::CanvasTiltMode(t) => state.playhead_ui.tilt_mode = t,
     UIUpdate::CanvasFreezeMode(v) => state.playhead_ui.freeze_mode = v,
+    UIUpdate::CanvasDynLengthMode(v) => state.playhead_ui.dyn_length_mode = v,
     UIUpdate::CanvasDroneMode(is_drone, drone_x) => {
       state.playhead_ui.drone_mode = is_drone;
       state.playhead_ui.drone_x = drone_x;
