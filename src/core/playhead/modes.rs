@@ -113,7 +113,23 @@ impl Playhead {
   pub(super) fn build_movement_status_string(&self) -> String {
     let movement = *self.movement.lock().unwrap();
     let sweep_movement = *self.modes.sweep_movement.lock().unwrap();
-    movement.print_movements_with_sweep(sweep_movement)
+    let base = movement.print_movements_with_sweep(sweep_movement);
+    let easing = *self.easing_mode.lock().unwrap();
+    let label = easing.label();
+    if label.is_empty() {
+      base
+    } else {
+      format!("{} : {}", base, label)
+    }
+  }
+
+  pub fn cycle_easing_mode(&self) {
+    let mut mode = self.easing_mode.lock().unwrap();
+    *mode = mode.cycle_next();
+    drop(mode);
+    let _ = self.ui_tx.send(UIUpdate::MovementStatus(
+      self.build_movement_status_string(),
+    ));
   }
 
   pub fn switch_movement(&self, new_movement: Movement) {

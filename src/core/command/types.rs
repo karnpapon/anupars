@@ -39,6 +39,7 @@ pub enum Command {
   ToggleSweepMovement,
   CycleSweepOutputMode,
   AdjustSweepCC(Adjustment),
+  CycleEasing,
 }
 
 impl fmt::Display for Command {
@@ -75,7 +76,8 @@ impl fmt::Display for Command {
       | Self::ToggleSpatialKeyboard
       | Self::ToggleSweepMovement
       | Self::CycleSweepOutputMode
-      | Self::AdjustSweepCC(_) => vec![],
+      | Self::AdjustSweepCC(_)
+      | Self::CycleEasing => vec![],
     };
     repr_tokens.append(&mut extras_args);
     write!(f, "{}", repr_tokens.join(" "))
@@ -116,6 +118,7 @@ impl Command {
       Self::ToggleSweepMovement => "togglesweepmovement",
       Self::CycleSweepOutputMode => "cyclesweepoutputmode",
       Self::AdjustSweepCC(_) => "adjustsweepcc",
+      Self::CycleEasing => "cycleeasing",
     }
   }
 }

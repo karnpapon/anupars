@@ -10,6 +10,7 @@ use std::collections::HashMap;
 
 use crate::core::engine::regex;
 
+use super::easing::EasingMode;
 use super::movement::Movement;
 use super::{Playhead, UIUpdate};
 
@@ -20,6 +21,7 @@ impl Playhead {
     self.ratchet_generation.fetch_add(1, Ordering::SeqCst);
     self.modes.is_ratcheting.store(false, Ordering::Relaxed);
     self.match_span_remaining.store(0, Ordering::Relaxed);
+    self.next_step_tick.store(0, Ordering::Relaxed);
     self.set_leap(direction, steps, canvas_size);
     self.reset_accumulation_counter();
 
@@ -126,9 +128,10 @@ impl Playhead {
   pub(super) fn handle_set_active_pos(&self, tick: usize) {
     let ratio = self.music.ratio.lock().unwrap();
     // Clock fires 16 ticks/beat (64 per 4-beat bar). Divider table:
-    //   ratio.1=1  → every 64 ticks (DIV 1)    ratio.1=16 → every  4 ticks (DIV 16)
-    //   ratio.1=32 → every  2 ticks (DIV 32)   ratio.1=64 → every  1 tick  (DIV 64)
-    let base_divider = (64 / ratio.1).max(1);
+    //   ratio.1=1  -> every 64 ticks (DIV 1)    ratio.1=16 -> every  4 ticks (DIV 16)
+    //   ratio.1=32 -> every  2 ticks (DIV 32)   ratio.1=64 -> every  1 tick  (DIV 64)
+    let ratio_denom = ratio.1;
+    let base_divider = (64 / ratio_denom).max(1);
     drop(ratio);
 
     if self.modes.freeze_mode.load(Ordering::Relaxed) {
@@ -177,18 +180,17 @@ impl Playhead {
     // Inside a match span: speed up when going forward (halve divider),
     // slow down when going reverse (double divider).
     let in_match_span = self.match_span_remaining.load(Ordering::Relaxed) > 0;
-    let divider = if in_match_span {
-      if going_forward {
-        (base_divider / 2).max(1)
-      } else {
-        base_divider * 2
-      }
-    } else {
-      base_divider
-    };
 
-    let should_advance =
-      tick.is_multiple_of(divider) && !self.modes.is_ratcheting.load(Ordering::Relaxed);
+    // Accumulator: fire when the clock reaches the scheduled tick.
+    // Detect clock restarts by watching for tick regression (the internal clock
+    // resets to 1 after a metronome Reset, not 0, so tick==0 is unreliable).
+    let prev = self.prev_tick.load(Ordering::Relaxed);
+    if tick < prev {
+      self.next_step_tick.store(0, Ordering::Relaxed);
+    }
+    self.prev_tick.store(tick, Ordering::Relaxed);
+    let should_advance = tick >= self.next_step_tick.load(Ordering::Relaxed)
+      && !self.modes.is_ratcheting.load(Ordering::Relaxed);
     if should_advance {
       if in_match_span {
         self.match_span_remaining.fetch_sub(1, Ordering::Relaxed);
@@ -196,7 +198,8 @@ impl Playhead {
 
       let mut step_idx = self.step_index.lock().unwrap();
       *step_idx += 1;
-      self.set_actived_pos(*step_idx);
+      let new_step = *step_idx;
+      self.set_actived_pos(new_step);
       drop(step_idx);
 
       let active_pos_mutex = self.actived_pos.lock().unwrap();
@@ -377,6 +380,45 @@ impl Playhead {
           self.enqueue_sym_buf_append(idx);
         }
       }
+      // Schedule the next step using the easing curve evaluated at the new step's phase.
+      // Done after all match_span_remaining updates so span timing is correct.
+      let easing = *self.easing_mode.lock().unwrap();
+      let eased_base = if easing != EasingMode::None {
+        let total = {
+          let a = self.area.lock().unwrap();
+          (a.width() * a.height()).max(1)
+        };
+        // EaseInOut uses an oscillating phase that spans the full back-and-forth
+        // cycle (2*total), so the curve is continuous across the pendulum turnaround
+        // and produces a single slow-point at each endpoint instead of two.
+        let phase = if easing == EasingMode::EaseInOut {
+          let full = 2 * total;
+          let s = new_step % full;
+          let opos = if s < total { s } else { full - s - 1 };
+          opos as f32 / total as f32
+        } else {
+          (new_step % total) as f32 / total as f32
+        };
+        easing
+          .apply(phase, ratio_denom, going_forward)
+          .unwrap_or(base_divider)
+      } else {
+        base_divider
+      };
+      let next_in_span = self.match_span_remaining.load(Ordering::Relaxed) > 0;
+      let next_divider = if next_in_span {
+        if going_forward {
+          (eased_base / 2).max(1)
+        } else {
+          eased_base * 2
+        }
+      } else {
+        eased_base
+      };
+      self
+        .next_step_tick
+        .store(tick + next_divider, Ordering::Relaxed);
+
       self.update_active_pos_ui(active_pos);
     }
   }

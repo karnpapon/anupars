@@ -4,6 +4,7 @@ use crate::core::command::types;
 use crate::core::tonal::scale;
 use crate::core::utils;
 
+use super::easing::EasingMode;
 use super::types::UIUpdate;
 use super::Playhead;
 
@@ -101,6 +102,16 @@ impl Playhead {
     let mut ratio = self.music.ratio.lock().unwrap();
     *ratio = new_ratio;
     drop(ratio);
+    // When easing is active, snap the playhead back to the initial position
+    // so the easing curve restarts cleanly from step 0.
+    if *self.easing_mode.lock().unwrap() != EasingMode::None {
+      let mut step_idx = self.step_index.lock().unwrap();
+      *step_idx = 0;
+      drop(step_idx);
+      self.set_actived_pos(0);
+      let pos = *self.actived_pos.lock().unwrap();
+      self.update_active_pos_ui(pos);
+    }
     let _ = self
       .ui_tx
       .send(UIUpdate::RatioStatus(utils::build_ratio_status_str(

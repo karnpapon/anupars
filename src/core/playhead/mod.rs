@@ -19,6 +19,7 @@ use crate::core::{consts, engine::regex::Match, utils};
 use crate::view::rect::Rect;
 
 // Existing core submodules
+pub mod easing;
 pub mod midi;
 pub mod movement;
 pub mod position;
@@ -38,6 +39,7 @@ pub mod test_helpers;
 
 pub use types::{Direction, GridState, Message, ModeFlags, MusicState, PlayheadUI, UIUpdate};
 
+use self::easing::EasingMode;
 use self::midi::MidiHandlerConfig;
 use self::midi::MidiTriggerHandler;
 use self::movement::Movement;
@@ -89,6 +91,12 @@ pub struct Playhead {
   movement: Arc<Mutex<Movement>>,
   tilt_mode: Arc<Mutex<TiltMode>>,
   sweep_row_mode: Arc<Mutex<SweepRowMode>>,
+
+  easing_mode: Arc<Mutex<EasingMode>>,
+  /// Absolute tick at which the next step should fire (accumulator-based timing).
+  next_step_tick: Arc<AtomicUsize>,
+  /// Last tick seen - used to detect clock regression (reset) and clear the accumulator.
+  prev_tick: Arc<AtomicUsize>,
 
   // Threading/sync state
   pub ui_tx: Sender<UIUpdate>,
@@ -158,6 +166,9 @@ impl Playhead {
       regex_indexes: Arc::clone(&position_calc.regex_indexes),
       text_matcher: Arc::clone(&position_calc.text_matcher),
       movement: Arc::clone(&position_calc.movement),
+      easing_mode: Arc::new(Mutex::new(EasingMode::default())),
+      next_step_tick: Arc::new(AtomicUsize::new(0)),
+      prev_tick: Arc::new(AtomicUsize::new(0)),
       tilt_mode,
       sweep_row_mode,
       queue_manager: Arc::new(QueueManager::new()),
@@ -433,6 +444,9 @@ impl Playhead {
           Message::CycleTiltMode() => {
             self.cycle_tilt_mode();
           }
+          Message::CycleEasingMode() => {
+            self.cycle_easing_mode();
+          }
           Message::CycleSweepRowMode() => {
             self.cycle_sweep_row_mode();
           }
@@ -598,6 +612,9 @@ impl Playhead {
             }
             Message::CycleTiltMode() => {
               self.cycle_tilt_mode();
+            }
+            Message::CycleEasingMode() => {
+              self.cycle_easing_mode();
             }
             Message::CycleSweepRowMode() => {
               self.cycle_sweep_row_mode();

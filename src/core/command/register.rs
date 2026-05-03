@@ -239,6 +239,11 @@ impl CommandManager {
           .playhead_tx_cloned
           .send(playhead::Message::CycleTiltMode());
       }
+      Command::CycleEasing => {
+        let _ = self
+          .playhead_tx_cloned
+          .send(playhead::Message::CycleEasingMode());
+      }
       Command::ToggleDynLength => {
         let _ = self
           .playhead_tx_cloned

@@ -305,6 +305,7 @@ pub enum Message {
   SetSweepMovement(Movement),
   CycleSweepOutputMode(),
   AdjustSweepCC(types::Adjustment),
+  CycleEasingMode(),
 }
 
 /// Grid and layout state shared across playhead subsystems.

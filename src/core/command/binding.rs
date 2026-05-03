@@ -41,6 +41,7 @@ fn default_keybindings() -> HashMap<String, Vec<Command>> {
   kb.insert("Ctrl+y".into(), vec![Command::ToggleDynLength]);
   kb.insert("Ctrl+z".into(), vec![Command::ToggleFreeze]);
   kb.insert("Ctrl+t".into(), vec![Command::CycleTilt]);
+  kb.insert("$".into(), vec![Command::CycleEasing]);
   kb.insert("Pipe".into(), vec![Command::CycleSweepMode]);
   kb.insert("@".into(), vec![Command::CycleSweepOutputMode]);
   kb.insert("[".into(), vec![Command::AdjustSweepCC(Adjustment::Decrease)]);
