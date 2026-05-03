@@ -384,18 +384,16 @@ impl Playhead {
       // Done after all match_span_remaining updates so span timing is correct.
       let easing = *self.easing_mode.lock().unwrap();
       let eased_base = if easing != EasingMode::None {
-        let total = {
-          let a = self.area.lock().unwrap();
-          (a.width() * a.height()).max(1)
-        };
-        // EaseInOut uses an oscillating phase that spans the full back-and-forth
-        // cycle (2*total), so the curve is continuous across the pendulum turnaround
-        // and produces a single slow-point at each endpoint instead of two.
+        let area = self.area.lock().unwrap();
+        let width = area.width().max(1);
+        let total = (width * area.height()).max(1);
+        let area_left = area.left();
+        drop(area);
+        // EaseInOut uses the actual column position so the phase is always
+        // in sync with where the playhead is, avoiding drift on odd widths
         let phase = if easing == EasingMode::EaseInOut {
-          let full = 2 * total;
-          let s = new_step % full;
-          let opos = if s < total { s } else { full - s - 1 };
-          opos as f32 / total as f32
+          let rel_x = abs_x.saturating_sub(area_left);
+          rel_x as f32 / width.saturating_sub(1).max(1) as f32
         } else {
           (new_step % total) as f32 / total as f32
         };
