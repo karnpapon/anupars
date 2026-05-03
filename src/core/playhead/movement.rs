@@ -130,6 +130,11 @@ pub fn calculate_pendulum_position(
     actived_pos.y = 0;
     return;
   }
+  if total_positions == 1 {
+    actived_pos.x = 0;
+    actived_pos.y = 0;
+    return;
+  }
   let cycle_length = total_positions * 2 - 2;
   let cycle_pos = adjusted_pos % cycle_length;
 
