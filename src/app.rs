@@ -487,7 +487,6 @@ pub fn run_event_loop(
           }
         }
         Event::Mouse(mouse) => {
-          // Switch to grid focus on any click so mouse always works.
           use crossterm::event::{MouseButton, MouseEventKind};
           if matches!(
             mouse.kind,
@@ -495,14 +494,23 @@ pub fn run_event_loop(
               | MouseEventKind::Down(MouseButton::Right)
               | MouseEventKind::Down(MouseButton::Middle)
           ) {
-            state.focus = Focus::Grid;
+            let console_y_off = 1 + PADDING_Y;
+            if let Some(focus) = crate::view::console::hit_test_console(
+              mouse.column,
+              mouse.row,
+              PADDING_X,
+              console_y_off,
+              state.width,
+            ) {
+              state.focus = focus;
+            } else {
+              state.focus = Focus::Grid;
+            }
           }
-          crate::view::grid::handle_mouse_event(
-            &mut grid,
-            mouse,
-            PADDING_X,
-            2 + PADDING_Y + CONSOLE_HEIGHT,
-          );
+          let grid_y_off = 2 + PADDING_Y + CONSOLE_HEIGHT;
+          if mouse.row >= grid_y_off {
+            crate::view::grid::handle_mouse_event(&mut grid, mouse, PADDING_X, grid_y_off);
+          }
         }
         Event::Resize(w, h) => {
           renderer.resize(w, h);

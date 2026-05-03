@@ -68,6 +68,60 @@ fn draw_mod_cell(buf: &mut ScreenBuffer, x: u16, y: u16, amount: Option<f32>, fo
   if let Some(c) = buf.get_mut(close_x, y) { apply_style(c, ']', bracket_style); }
 }
 
+/// Map a terminal click at `(mx, my)` to the console `Focus` it lands on, or `None`
+/// if the click is outside the console content area (rows y_off .. y_off + CONSOLE_HEIGHT).
+pub fn hit_test_console(
+  mx: u16,
+  my: u16,
+  x_off: u16,
+  y_off: u16,
+  w: u16,
+) -> Option<crate::app_state::Focus> {
+  use crate::app_state::Focus;
+  use super::consts::CONSOLE_HEIGHT;
+
+  if my < y_off || my >= y_off + CONSOLE_HEIGHT {
+    return None;
+  }
+
+  let row = my - y_off;
+  let col0: u16 = x_off + 1;
+
+  // mod matrix geometry - mirrors draw_console exactly
+  let n_dests: u16 = crate::core::engine::mod_matrix::DiceDest::ALL.len() as u16;
+  let mdm_width: u16 = 4 + n_dests * 6;
+  let col4 = x_off + w.saturating_sub(mdm_width + 6);
+  let cells_x = col4 + 4;
+
+  // mod matrix rows occupy console rows 1-3 (y_off+1 to y_off+3)
+  if (1..=3).contains(&row) {
+    let mat_row = (row - 1) as u8;
+    for c in 0..n_dests {
+      let cell_x = cells_x + c * 6;
+      if mx >= cell_x && mx < cell_x + 6 {
+        return Some(Focus::ModMatrix { row: mat_row, col: c as u8 });
+      }
+    }
+  }
+
+  match row {
+    0 => Some(Focus::RegexInput),
+    1 => {
+      // flags row: "[i] i " at flag_x, "[m]m" at flag_x+5
+      let flag_x = col0 + 5; // after "FLG: "
+      if mx >= flag_x && mx < flag_x + 5 {
+        Some(Focus::FlagCaseSensitive)
+      } else if mx >= flag_x + 5 && mx < flag_x + 9 {
+        Some(Focus::FlagMultiline)
+      } else {
+        Some(Focus::RegexInput)
+      }
+    }
+    // any other row inside the console bounds (info-only rows) focuses the RGXP input
+    _ => Some(Focus::RegexInput),
+  }
+}
+
 /// Render the entire console panel into `buf` at `(x_off, y_off)`.
 pub fn draw_console(
   state: &crate::app_state::AppState,
