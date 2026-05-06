@@ -389,13 +389,23 @@ impl Playhead {
         let total = (width * area.height()).max(1);
         let area_left = area.left();
         drop(area);
-        // EaseInOut uses the actual column position so the phase is always
-        // in sync with where the playhead is, avoiding drift on odd widths
         let phase = if easing == EasingMode::EaseInOut {
           let rel_x = abs_x.saturating_sub(area_left);
           rel_x as f32 / width.saturating_sub(1).max(1) as f32
         } else {
-          (new_step % total) as f32 / total as f32
+          let movement = *self.movement.lock().unwrap();
+          if movement == Movement::Pendulum {
+            let cycle_len = (total * 2).saturating_sub(2).max(1);
+            let cycle_pos = new_step % cycle_len;
+            if cycle_pos < total {
+              cycle_pos as f32 / total.saturating_sub(1).max(1) as f32
+            } else {
+              let sub_pos = cycle_pos - total;
+              sub_pos as f32 / total.saturating_sub(3).max(1) as f32
+            }
+          } else {
+            (new_step % total) as f32 / total as f32
+          }
         };
         easing
           .apply(phase, ratio_denom, going_forward)

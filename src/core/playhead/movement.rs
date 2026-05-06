@@ -6,9 +6,12 @@
 //! - Random: Deterministic pseudo-random positioning
 //! - Arpeggiator: Pattern-based movement through regex matches
 
-use std::fmt;
-
 use crate::core::consts;
+use crate::core::geom::Vec2;
+use std::collections::hash_map::DefaultHasher;
+use std::fmt;
+use std::hash::Hash;
+use std::hash::Hasher;
 
 #[derive(Clone, PartialEq, Copy, Debug)]
 pub enum Movement {
@@ -61,10 +64,6 @@ impl Movement {
       .join("")
   }
 }
-use crate::core::geom::Vec2;
-use std::collections::hash_map::DefaultHasher;
-use std::hash::Hash;
-use std::hash::Hasher;
 
 /// Calculate position for normal (forward) sequential mode
 pub fn calculate_normal_position(
