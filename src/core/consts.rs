@@ -106,6 +106,8 @@ pub const OP_QUEUE_CAPACITY: usize = 12;
 
 pub static CLOCK_ENABLED: AtomicBool = AtomicBool::new(false);
 pub static FOCUS_MODE: AtomicBool = AtomicBool::new(false);
+pub static SYNTH_ENABLED: AtomicBool = AtomicBool::new(false);
+pub static SYNTH_CLEAR_MSG: AtomicBool = AtomicBool::new(false);
 /// Set to true while external MIDI clock input is driving the sequencer.
 pub static EXT_CLOCK_ACTIVE: AtomicBool = AtomicBool::new(false);
 

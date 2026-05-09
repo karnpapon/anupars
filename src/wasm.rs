@@ -418,7 +418,18 @@ fn draw_wasm_frame(state: &AppState, grid: &GridEditor, buf: &mut ScreenBuffer) 
     }
   }
 
-  draw_console(state, buf, PADDING_X, 1 + PADDING_Y, w, CONSOLE_HEIGHT);
+  if state.show_waveform_console {
+    crate::view::console::draw_waveform_console(
+      state,
+      buf,
+      PADDING_X,
+      1 + PADDING_Y,
+      w,
+      CONSOLE_HEIGHT,
+    );
+  } else {
+    draw_console(state, buf, PADDING_X, 1 + PADDING_Y, w, CONSOLE_HEIGHT);
+  }
   grid.draw_to_buf(buf, PADDING_X, 2 + PADDING_Y + CONSOLE_HEIGHT);
 
   if state.show_menubar {
@@ -645,6 +656,16 @@ fn dispatch_wasm_key(key: WasmKey, ui: &mut WasmUiCtx, should_quit: &mut bool) {
           let was = consts::FOCUS_MODE.load(Ordering::Relaxed);
           consts::FOCUS_MODE.store(!was, Ordering::Relaxed);
         }
+        MenuAction::ToggleStreamingPB => {
+          use std::sync::atomic::Ordering;
+          let was = consts::SYNTH_ENABLED.load(Ordering::Relaxed);
+          consts::SYNTH_ENABLED.store(!was, Ordering::Relaxed);
+        }
+        MenuAction::ToggleClearStreamingMsg => {
+          use std::sync::atomic::Ordering;
+          let was = consts::SYNTH_CLEAR_MSG.load(Ordering::Relaxed);
+          consts::SYNTH_CLEAR_MSG.store(!was, Ordering::Relaxed);
+        }
         MenuAction::ReleaseAll => close_after = true,
         MenuAction::ClearQueue => {
           let _ = ui
@@ -723,6 +744,12 @@ fn dispatch_wasm_key(key: WasmKey, ui: &mut WasmUiCtx, should_quit: &mut bool) {
       if matches!(&key, WasmKey::Esc) {
         ui.state.focus = Focus::RegexInput;
         ui.grid.is_canvas_focused = false;
+        return;
+      }
+
+      // '0' toggles the waveform console view.
+      if matches!(&key, WasmKey::Char('0')) {
+        ui.state.show_waveform_console = !ui.state.show_waveform_console;
         return;
       }
 

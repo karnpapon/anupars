@@ -6,6 +6,8 @@ use crate::core::playhead::{PlayheadUI, UIUpdate};
 use crate::core::utils;
 use crate::view::line_editor::LineEditor;
 
+pub const SYNTH_BUF_SIZE: usize = 256;
+
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub enum Focus {
   Grid,
@@ -124,6 +126,7 @@ impl FlagState {
 pub enum MenuId {
   App,
   View,
+  Stream,
   Help,
 }
 
@@ -183,6 +186,10 @@ pub struct AppState {
   pub rpl_status: String,
   pub regex_input: String,
 
+  /// Synth oscilloscope sample buffer (static-snapshot ring, slot 0 is leftmost).
+  pub synth_pb_buf: Vec<i16>,
+  pub synth_pb_write: usize,
+
   /// Mod matrix routes for Dice modulation.
   pub mod_matrix: ModMatrix,
 
@@ -208,6 +215,9 @@ pub struct AppState {
 
   /// Whether the Docs "coming soon" dialog is visible.
   pub show_docs: bool,
+
+  /// Whether the console panel shows the waveform view instead of the default view.
+  pub show_waveform_console: bool,
 }
 
 impl Default for AppState {
@@ -234,6 +244,8 @@ impl Default for AppState {
       sym_status: String::new(),
       rpl_status: String::new(),
       regex_input: String::new(),
+      synth_pb_buf: vec![0i16; SYNTH_BUF_SIZE],
+      synth_pb_write: 0,
       mod_matrix: ModMatrix::default(),
       display_text: String::new(),
       width: 0,
@@ -244,6 +256,7 @@ impl Default for AppState {
       show_menubar: false,
       show_about: false,
       show_docs: false,
+      show_waveform_console: false,
     }
   }
 }
@@ -344,5 +357,10 @@ pub fn apply_ui_update(update: UIUpdate, state: &mut AppState) {
     UIUpdate::CanvasKeyboardTopActive(v) => state.playhead_ui.keyboard_top_active = v,
     UIUpdate::CurrentBar(b) => state.playhead_ui.current_bar = b,
     UIUpdate::CurrentBeat(b) => state.playhead_ui.current_beat = b,
+    UIUpdate::SynthPitchBend(v) => {
+      let idx = state.synth_pb_write % SYNTH_BUF_SIZE;
+      state.synth_pb_buf[idx] = v;
+      state.synth_pb_write = state.synth_pb_write.wrapping_add(1);
+    }
   }
 }

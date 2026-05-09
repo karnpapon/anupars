@@ -103,6 +103,10 @@ pub enum Message {
     cc_number: u8,
     cc_value: u8,
   },
+  PitchBend {
+    channel: u8,
+    value: i16,
+  },
   SwitchDevice(usize),
   Panic(),
   SetTempo(usize),
@@ -280,6 +284,21 @@ impl Midi {
           u8::from(MidiStatusMsg::ControlChange) + (channel & 0x0F),
           cc_number,
           cc_value,
+        ]);
+      }
+    }
+  }
+
+  fn handle_pitch_bend(&self, channel: u8, value: i16) {
+    if let Ok(mut conn_out) = self.out_device.lock() {
+      if let Some(connection_out) = conn_out.as_mut() {
+        let raw = (value as i32 + 8192).clamp(0, 16383) as u16;
+        let lsb = (raw & 0x7F) as u8;
+        let msb = ((raw >> 7) & 0x7F) as u8;
+        let _ = connection_out.send(&[
+          u8::from(MidiStatusMsg::PitchBend) + (channel & 0x0F),
+          lsb,
+          msb,
         ]);
       }
     }
@@ -786,6 +805,9 @@ impl Midi {
             } => {
               self.handle_control_change(channel, cc_number, cc_value);
             }
+            Message::PitchBend { channel, value } => {
+              self.handle_pitch_bend(channel, value);
+            }
             Message::SetTempo(bpm) => {
               self.handle_set_tempo(bpm);
             }
@@ -1056,6 +1078,16 @@ impl Midi {
           u8::from(MidiStatusMsg::ControlChange) + (channel & 0x0F),
           cc_number,
           cc_value,
+        ]);
+      }
+      Message::PitchBend { channel, value } => {
+        let raw = (value as i32 + 8192).clamp(0, 16383) as u16;
+        let lsb = (raw & 0x7F) as u8;
+        let msb = ((raw >> 7) & 0x7F) as u8;
+        self.out_queue.push_back(vec![
+          u8::from(MidiStatusMsg::PitchBend) + (channel & 0x0F),
+          lsb,
+          msb,
         ]);
       }
       Message::Panic() => {

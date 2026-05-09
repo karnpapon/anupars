@@ -1,7 +1,9 @@
 use std::sync::atomic::Ordering;
 
+use crate::core::consts;
 use crate::core::geom::Vec2;
 use crate::core::geom::XY;
+use crate::core::io::midi as io_midi;
 
 use crate::core::utils;
 use crate::view::rect::Rect;
@@ -201,6 +203,56 @@ impl Playhead {
       let new_step = *step_idx;
       self.set_actived_pos(new_step);
       drop(step_idx);
+
+      if consts::SYNTH_ENABLED.load(Ordering::Relaxed) {
+        let pb_value = if consts::SYNTH_CLEAR_MSG.load(Ordering::Relaxed) {
+          0i16
+        } else {
+          use std::f32::consts::PI;
+          let movement = *self.movement.lock().unwrap();
+          let easing = *self.easing_mode.lock().unwrap();
+          let area = self.area.lock().unwrap();
+          let width = area.width().max(1);
+          let total = (width * area.height()).max(1);
+          drop(area);
+          // Pendulum + EaseInOut: trace a full sine period over the cycle
+          // for a smooth waveform instead of a linear triangle
+          if movement == Movement::Pendulum && easing == EasingMode::EaseInOut {
+            let cycle_len = (total * 2).saturating_sub(2).max(1);
+            let cycle_pos = new_step % cycle_len;
+            let full_phase = cycle_pos as f32 / cycle_len as f32;
+            let sine_val = (full_phase * 2.0 * PI).sin();
+            (sine_val * 8191.0) as i16
+          } else {
+            let phase = match movement {
+              Movement::Forward => (new_step % total) as f32 / total as f32,
+              Movement::Reverse => 1.0 - (new_step % total) as f32 / total as f32,
+              Movement::Pendulum => {
+                let cycle_len = (total * 2).saturating_sub(2).max(1);
+                let cycle_pos = new_step % cycle_len;
+                if cycle_pos < total {
+                  cycle_pos as f32 / total.saturating_sub(1).max(1) as f32
+                } else {
+                  let sub_pos = cycle_pos - total;
+                  1.0 - sub_pos as f32 / total.saturating_sub(3).max(1) as f32
+                }
+              }
+              Movement::Random => {
+                use std::hash::{Hash, Hasher};
+                let mut h = std::collections::hash_map::DefaultHasher::new();
+                new_step.hash(&mut h);
+                h.finish() as f32 / u64::MAX as f32
+              }
+            };
+            (phase * 16383.0) as i16 - 8192
+          }
+        };
+        let _ = self.midi_handler.midi_tx.send(io_midi::Message::PitchBend {
+          channel: 0,
+          value: pb_value,
+        });
+        let _ = self.ui_tx.send(UIUpdate::SynthPitchBend(pb_value));
+      }
 
       let active_pos_mutex = self.actived_pos.lock().unwrap();
       let mut active_pos = *active_pos_mutex;

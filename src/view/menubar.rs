@@ -130,6 +130,23 @@ fn menu_items(id: MenuId, state: &MenuState) -> Vec<Item> {
         focus_on,
       )]
     }
+    MenuId::Stream => {
+      let synth_on = consts::SYNTH_ENABLED.load(Ordering::Relaxed);
+      let clear_on = consts::SYNTH_CLEAR_MSG.load(Ordering::Relaxed);
+      vec![
+        Item::Toggle(
+          format!(
+            "Streaming Pitch Bend [{}]",
+            if synth_on { "X" } else { " " }
+          ),
+          synth_on,
+        ),
+        Item::Toggle(
+          format!("Clear Msg    [{}]", if clear_on { "X" } else { " " }),
+          clear_on,
+        ),
+      ]
+    }
     MenuId::Help => vec![Item::Action("Docs".into())],
   }
 }
@@ -138,6 +155,7 @@ fn menu_items(id: MenuId, state: &MenuState) -> Vec<Item> {
 const MENU_TITLES: &[(MenuId, &str)] = &[
   (MenuId::App, "anupars"),
   (MenuId::View, "view"),
+  (MenuId::Stream, "stream"),
   (MenuId::Help, "help"),
 ];
 
@@ -183,6 +201,10 @@ pub enum MenuAction {
   ToggleClock,
   /// User toggled Focus mode.
   ToggleFocus,
+  /// User toggled Synth enable.
+  ToggleStreamingPB,
+  /// User toggled Synth clear-msg mode.
+  ToggleClearStreamingMsg,
   /// Close menu and focus grid.
   Close,
   /// Quit the application.
@@ -392,7 +414,13 @@ pub fn handle_menu_nav(menu: &mut MenuState, key: MenuNavKey) -> MenuAction {
     }
     MenuNavKey::Enter => {
       let action = confirm_item(current_id, menu.active_item, menu);
-      let is_toggle = matches!(action, MenuAction::ToggleClock | MenuAction::ToggleFocus);
+      let is_toggle = matches!(
+        action,
+        MenuAction::ToggleClock
+          | MenuAction::ToggleFocus
+          | MenuAction::ToggleStreamingPB
+          | MenuAction::ToggleClearStreamingMsg
+      );
       if !matches!(action, MenuAction::None) && !is_toggle {
         menu.active_menu = None;
       }
@@ -437,6 +465,10 @@ fn confirm_item(id: MenuId, item_idx: usize, menu: &MenuState) -> MenuAction {
         MenuAction::ToggleClock
       } else if label.starts_with("Focus Mode") {
         MenuAction::ToggleFocus
+      } else if label.starts_with("Streaming Pitch Bend") {
+        MenuAction::ToggleStreamingPB
+      } else if label.starts_with("Clear Msg") {
+        MenuAction::ToggleClearStreamingMsg
       } else if label.starts_with("Docs") {
         MenuAction::ShowDocs
       } else {

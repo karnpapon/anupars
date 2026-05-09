@@ -323,6 +323,16 @@ pub fn run_event_loop(
                   let was = consts::FOCUS_MODE.load(Ordering::Relaxed);
                   consts::FOCUS_MODE.store(!was, Ordering::Relaxed);
                 }
+                MenuAction::ToggleStreamingPB => {
+                  use std::sync::atomic::Ordering;
+                  let was = consts::SYNTH_ENABLED.load(Ordering::Relaxed);
+                  consts::SYNTH_ENABLED.store(!was, Ordering::Relaxed);
+                }
+                MenuAction::ToggleClearStreamingMsg => {
+                  use std::sync::atomic::Ordering;
+                  let was = consts::SYNTH_CLEAR_MSG.load(Ordering::Relaxed);
+                  consts::SYNTH_CLEAR_MSG.store(!was, Ordering::Relaxed);
+                }
                 MenuAction::InsertFile => {
                   // TODO: file picker integration
                   close_after = true;
@@ -476,6 +486,8 @@ pub fn run_event_loop(
             Focus::Grid => {
               if key.code == KeyCode::Esc {
                 state.focus = Focus::RegexInput;
+              } else if key.code == KeyCode::Char('0') {
+                state.show_waveform_console = !state.show_waveform_console;
               } else if !cmd_mgr.dispatch_key(key, &mut state, &mut grid, &mut should_quit) {
                 crate::view::grid::handle_key_event(&mut grid, key);
               }
@@ -626,7 +638,18 @@ fn draw_frame(
     }
   }
 
-  draw_console(state, buf, PADDING_X, 1 + PADDING_Y, w, CONSOLE_HEIGHT);
+  if state.show_waveform_console {
+    crate::view::console::draw_waveform_console(
+      state,
+      buf,
+      PADDING_X,
+      1 + PADDING_Y,
+      w,
+      CONSOLE_HEIGHT,
+    );
+  } else {
+    draw_console(state, buf, PADDING_X, 1 + PADDING_Y, w, CONSOLE_HEIGHT);
+  }
   grid.draw_to_buf(buf, PADDING_X, 2 + PADDING_Y + CONSOLE_HEIGHT);
   if state.show_menubar {
     draw_menubar(state, buf, 0);

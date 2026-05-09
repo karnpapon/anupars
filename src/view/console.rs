@@ -1,4 +1,5 @@
 #![cfg_attr(rustfmt, rustfmt_skip)]
+use crate::app_state::SYNTH_BUF_SIZE;
 use crate::terminal::buffer::ScreenBuffer;
 use crate::view::printer::{apply_style, CellStyle};
 
@@ -122,6 +123,134 @@ pub fn hit_test_console(
   }
 }
 
+// Unicode Braille U+2800: each cell is 2 columns x 4 rows of dots.
+// Bit layout (dot numbers per BRF standard):
+//   left col : dot1=0x01, dot2=0x02, dot3=0x04, dot7=0x40
+//   right col: dot4=0x08, dot5=0x10, dot6=0x20, dot8=0x80
+//
+// This gives 2x horizontal sample density and 4x vertical resolution compared
+// to one character = one sample.  Total vertical levels = OSC_ROWS * 4 = 16.
+
+fn braille_l(inner: usize) -> u8 {
+  [0x01, 0x02, 0x04, 0x40][inner]
+}
+
+fn braille_r(inner: usize) -> u8 {
+  [0x08, 0x10, 0x20, 0x80][inner]
+}
+
+// Map a pitch-bend i16 value to a dot row index [0 = top/max, total-1 = bottom/min].
+fn pb_dot(v: i16, rows: usize) -> usize {
+  let total = (rows * 4) as f32 - 1.0;
+  let norm = (v as f32 + 8192.0) / 16383.0;
+  ((1.0 - norm) * total).round() as usize
+}
+
+/// Render a Braille waveform from `samples[0..w*2]` into `rows` character rows at (x, y).
+/// Each screen column encodes two consecutive samples as left and right Braille columns.
+/// Consecutive samples are connected with vertical line segments so discontinuities
+/// (eg. sawtooth resets) render as vertical bars. A faint zero-line guide appears in
+/// rows where no signal passes.
+/// `total_samp` samples are scaled to fill exactly `w` character columns (2 slots each).
+fn draw_osc_braille(
+  buf: &mut ScreenBuffer,
+  x: u16,
+  y: u16,
+  samples: &[i16],
+  w: usize,
+  rows: usize,
+  total_samp: usize,
+) {
+  let total_dots = rows * 4;
+  let zero_dot = {
+    let norm = 8192.0_f32 / 16383.0; // pitch bend 0 normalized
+    ((1.0 - norm) * (total_dots - 1) as f32).round() as usize
+  };
+
+  // map a visual slot index [0, w*2) to a sample index in [0, total_samp)
+  let total_slots = (w * 2).max(1);
+  let sample_at = |slot: usize| -> i16 {
+    let idx = (slot * total_samp / total_slots).min(total_samp.saturating_sub(1));
+    samples.get(idx).copied().unwrap_or(0)
+  };
+
+  // tracks the right-column dot of the previous char, used to connect into the next left column
+  let mut prev_r_dot: Option<usize> = None;
+
+  for cx in 0..w {
+    let l_val = sample_at(cx * 2);
+    let r_val = sample_at(cx * 2 + 1);
+    let l_dot = pb_dot(l_val, rows);
+    let r_dot = pb_dot(r_val, rows);
+
+    // left column spans from previous right dot to this left dot (cross-char connection)
+    let left_from = prev_r_dot.unwrap_or(l_dot);
+    let left_lo = left_from.min(l_dot);
+    let left_hi = left_from.max(l_dot);
+
+    // right column spans from this left dot to this right dot (intra-char connection)
+    let right_lo = l_dot.min(r_dot);
+    let right_hi = l_dot.max(r_dot);
+
+    for row in 0..rows {
+      let top = row * 4;
+      let mut bits: u8 = 0;
+
+      for inner in 0..4usize {
+        let dot = top + inner;
+        if dot >= left_lo && dot <= left_hi { bits |= braille_l(inner); }
+        if dot >= right_lo && dot <= right_hi { bits |= braille_r(inner); }
+      }
+
+      // zero-line guide only in rows where the signal line does not pass
+      let left_in_row  = left_hi  >= top && left_lo  <= top + 3;
+      let right_in_row = right_hi >= top && right_lo <= top + 3;
+      if (top..top + 4).contains(&zero_dot) && !left_in_row && !right_in_row {
+        let inner = zero_dot - top;
+        bits |= braille_l(inner) | braille_r(inner);
+      }
+
+      let has_signal = left_in_row || right_in_row;
+      let ch = if bits == 0 { ' ' } else { char::from_u32(0x2800 | bits as u32).unwrap_or(' ') };
+      let style = if has_signal { CellStyle::primary() } else { CellStyle::dim() };
+
+      if let Some(c) = buf.get_mut(x + cx as u16, y + row as u16) {
+        apply_style(c, ch, style);
+      }
+    }
+
+    prev_r_dot = Some(r_dot);
+  }
+}
+
+/// Render the waveform-only console panel (toggled with '0'). Fills the full console width
+/// with a Braille oscilloscope of the streaming pitch-bend buffer. The last row shows a
+/// status line with the current pitch-bend value and accumulation counter.
+pub fn draw_waveform_console(
+  state: &crate::app_state::AppState,
+  buf: &mut ScreenBuffer,
+  x_off: u16,
+  y_off: u16,
+  w: u16,
+  h: u16,
+) {
+  let x_start = x_off + 1;
+  let right_lim = w.saturating_sub(x_off + 1);
+  let inner_w = right_lim.saturating_sub(x_start) as usize;
+  // reserve the last row for the status line
+  let waveform_rows = (h as usize).saturating_sub(1).max(1);
+  let char_cols = inner_w;
+  draw_osc_braille(buf, x_start, y_off, &state.synth_pb_buf, char_cols, waveform_rows, SYNTH_BUF_SIZE);
+
+  // status line: current pitch-bend value + accumulation counter
+  let current_pb = {
+    let idx = state.synth_pb_write.wrapping_sub(1) % SYNTH_BUF_SIZE;
+    state.synth_pb_buf[idx]
+  };
+  let status = format!("pb:{:+}  {}", current_pb, state.input_status);
+  draw_str_clip(buf, x_start, y_off + waveform_rows as u16, &status, CellStyle::dim(), right_lim);
+}
+
 /// Render the entire console panel into `buf` at `(x_off, y_off)`.
 pub fn draw_console(
   state: &crate::app_state::AppState,
@@ -140,7 +269,6 @@ pub fn draw_console(
   let cells_x   = col4 + 4;
 
   // distribute col0-col3 proportionally across the space left of the mod matrix
-  // original design proportions: 0, 32, 54, 79 out of 105 units
   let avail = col4.saturating_sub(x_off + 1);
   let col0 = x_off + 1;
   let col1 = col0 + avail * 32 / 105;
