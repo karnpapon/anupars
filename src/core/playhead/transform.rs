@@ -204,8 +204,9 @@ impl Playhead {
       self.set_actived_pos(new_step);
       drop(step_idx);
 
-      if consts::SYNTH_ENABLED.load(Ordering::Relaxed) {
-        let pb_value = if consts::SYNTH_CLEAR_MSG.load(Ordering::Relaxed) {
+      // compute pitch-bend value now (needs new_step + area), send after abs position is known
+      let synth_pb: Option<i16> = if consts::SYNTH_ENABLED.load(Ordering::Relaxed) {
+        Some(if consts::SYNTH_CLEAR_MSG.load(Ordering::Relaxed) {
           0i16
         } else {
           use std::f32::consts::PI;
@@ -246,19 +247,38 @@ impl Playhead {
             };
             (phase * 16383.0) as i16 - 8192
           }
-        };
-        let _ = self.midi_handler.midi_tx.send(io_midi::Message::PitchBend {
-          channel: 0,
-          value: pb_value,
-        });
-        let _ = self.ui_tx.send(UIUpdate::SynthPitchBend(pb_value));
-      }
+        })
+      } else {
+        None
+      };
 
       let active_pos_mutex = self.actived_pos.lock().unwrap();
       let mut active_pos = *active_pos_mutex;
       drop(active_pos_mutex);
 
       let (abs_x, abs_y, curr_running_playhead) = self.calculate_absolute_position(active_pos);
+
+      // send pitch-bend on the channel that matches the current playhead area position
+      if let Some(pb_value) = synth_pb {
+        let grid_width = self.grid.width.load(Ordering::Relaxed);
+        let grid_height = self.grid.height.load(Ordering::Relaxed);
+        let channel = super::midi::calculate_channel(
+          abs_x,
+          abs_y,
+          grid_width,
+          grid_height,
+          self.grid.v_splits.load(Ordering::Relaxed),
+          self.grid.h_splits.load(Ordering::Relaxed),
+        );
+        let _ = self.midi_handler.midi_tx.send(io_midi::Message::PitchBend {
+          channel,
+          value: pb_value,
+        });
+        let _ = self.ui_tx.send(UIUpdate::SynthPitchBend {
+          channel,
+          value: pb_value,
+        });
+      }
 
       let (note_position, scale_mode) = self
         .midi_handler

@@ -171,7 +171,10 @@ pub enum UIUpdate {
   CanvasKeyboardTopActive(bool),
   CurrentBar(usize),
   CurrentBeat(usize),
-  SynthPitchBend(i16),
+  SynthPitchBend {
+    channel: u8,
+    value: i16,
+  },
 }
 
 #[derive(Clone)]

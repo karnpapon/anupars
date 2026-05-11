@@ -186,9 +186,10 @@ pub struct AppState {
   pub rpl_status: String,
   pub regex_input: String,
 
-  /// Synth oscilloscope sample buffer (static-snapshot ring, slot 0 is leftmost).
-  pub synth_pb_buf: Vec<i16>,
-  pub synth_pb_write: usize,
+  /// Synth oscilloscope sample buffers, one ring-buffer per channel (0-based).
+  /// Index 0 = MIDI ch 1, index 1 = MIDI ch 2.
+  pub synth_pb_bufs: Vec<Vec<i16>>,
+  pub synth_pb_writes: Vec<usize>,
 
   /// Mod matrix routes for Dice modulation.
   pub mod_matrix: ModMatrix,
@@ -244,8 +245,8 @@ impl Default for AppState {
       sym_status: String::new(),
       rpl_status: String::new(),
       regex_input: String::new(),
-      synth_pb_buf: vec![0i16; SYNTH_BUF_SIZE],
-      synth_pb_write: 0,
+      synth_pb_bufs: vec![vec![0i16; SYNTH_BUF_SIZE], vec![0i16; SYNTH_BUF_SIZE]],
+      synth_pb_writes: vec![0, 0],
       mod_matrix: ModMatrix::default(),
       display_text: String::new(),
       width: 0,
@@ -357,10 +358,11 @@ pub fn apply_ui_update(update: UIUpdate, state: &mut AppState) {
     UIUpdate::CanvasKeyboardTopActive(v) => state.playhead_ui.keyboard_top_active = v,
     UIUpdate::CurrentBar(b) => state.playhead_ui.current_bar = b,
     UIUpdate::CurrentBeat(b) => state.playhead_ui.current_beat = b,
-    UIUpdate::SynthPitchBend(v) => {
-      let idx = state.synth_pb_write % SYNTH_BUF_SIZE;
-      state.synth_pb_buf[idx] = v;
-      state.synth_pb_write = state.synth_pb_write.wrapping_add(1);
+    UIUpdate::SynthPitchBend { channel, value } => {
+      let ch = (channel as usize).min(state.synth_pb_bufs.len().saturating_sub(1));
+      let idx = state.synth_pb_writes[ch] % SYNTH_BUF_SIZE;
+      state.synth_pb_bufs[ch][idx] = value;
+      state.synth_pb_writes[ch] = state.synth_pb_writes[ch].wrapping_add(1);
     }
   }
 }

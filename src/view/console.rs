@@ -223,9 +223,9 @@ fn draw_osc_braille(
   }
 }
 
-/// Render the waveform-only console panel (toggled with '0'). Fills the full console width
-/// with a Braille oscilloscope of the streaming pitch-bend buffer. The last row shows a
-/// status line with the current pitch-bend value and accumulation counter.
+/// Render the waveform-only console panel (toggled with '0'). Splits the console width
+/// into two equal oscilloscope lanes side by side, one per MIDI channel, plus a bottom
+/// status row.
 pub fn draw_waveform_console(
   state: &crate::app_state::AppState,
   buf: &mut ScreenBuffer,
@@ -237,17 +237,34 @@ pub fn draw_waveform_console(
   let x_start = x_off + 1;
   let right_lim = w.saturating_sub(x_off + 1);
   let inner_w = right_lim.saturating_sub(x_start) as usize;
-  // reserve the last row for the status line
   let waveform_rows = (h as usize).saturating_sub(1).max(1);
-  let char_cols = inner_w;
-  draw_osc_braille(buf, x_start, y_off, &state.synth_pb_buf, char_cols, waveform_rows, SYNTH_BUF_SIZE);
 
-  // status line: current pitch-bend value + accumulation counter
-  let current_pb = {
-    let idx = state.synth_pb_write.wrapping_sub(1) % SYNTH_BUF_SIZE;
-    state.synth_pb_buf[idx]
+  // split width evenly with a 1-col separator in the middle
+  let half_cols = inner_w.saturating_sub(1) / 2;
+  let sep_x     = x_start + half_cols as u16 + 1;
+  let ch2_x     = sep_x + 2;
+  let ch2_cols  = inner_w.saturating_sub(half_cols + 3);
+
+  if let Some(samples) = state.synth_pb_bufs.first() {
+    draw_osc_braille(buf, x_start, y_off, samples, half_cols, waveform_rows, SYNTH_BUF_SIZE);
+  }
+  // vertical separator
+  for row in 0..waveform_rows as u16 {
+    if let Some(c) = buf.get_mut(sep_x, y_off + row) {
+      apply_style(c, '│', CellStyle::dim());
+    }
+  }
+  if let Some(samples) = state.synth_pb_bufs.get(1) {
+    draw_osc_braille(buf, ch2_x, y_off, samples, ch2_cols, waveform_rows, SYNTH_BUF_SIZE);
+  }
+
+  // status row: most-recent value for each channel + accumulation counter
+  let pb_val = |ch: usize| -> i16 {
+    let write = state.synth_pb_writes.get(ch).copied().unwrap_or(0);
+    let idx = write.wrapping_sub(1) % SYNTH_BUF_SIZE;
+    state.synth_pb_bufs.get(ch).map(|b| b[idx]).unwrap_or(0)
   };
-  let status = format!("pb:{:+}  {}", current_pb, state.input_status);
+  let status = format!("ch1:{:+}  ch2:{:+}  {}", pb_val(0), pb_val(1), state.input_status);
   draw_str_clip(buf, x_start, y_off + waveform_rows as u16, &status, CellStyle::dim(), right_lim);
 }
 
