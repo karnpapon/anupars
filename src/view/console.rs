@@ -152,6 +152,7 @@ fn pb_dot(v: i16, rows: usize) -> usize {
 /// (eg. sawtooth resets) render as vertical bars. A faint zero-line guide appears in
 /// rows where no signal passes.
 /// `total_samp` samples are scaled to fill exactly `w` character columns (2 slots each).
+#[allow(clippy::too_many_arguments)]
 fn draw_osc_braille(
   buf: &mut ScreenBuffer,
   x: u16,
@@ -160,6 +161,7 @@ fn draw_osc_braille(
   w: usize,
   rows: usize,
   total_samp: usize,
+  active: bool,
 ) {
   let total_dots = rows * 4;
   let zero_dot = {
@@ -212,7 +214,7 @@ fn draw_osc_braille(
 
       let has_signal = left_in_row || right_in_row;
       let ch = if bits == 0 { ' ' } else { char::from_u32(0x2800 | bits as u32).unwrap_or(' ') };
-      let style = if has_signal { CellStyle::primary() } else { CellStyle::dim() };
+      let style = if has_signal && active { CellStyle::primary() } else { CellStyle::dim() };
 
       if let Some(c) = buf.get_mut(x + cx as u16, y + row as u16) {
         apply_style(c, ch, style);
@@ -245,8 +247,27 @@ pub fn draw_waveform_console(
   let ch2_x     = sep_x + 2;
   let ch2_cols  = inner_w.saturating_sub(half_cols + 3);
 
+  // check channel boundary
+  let v       = state.playhead_ui.grid_v_splits.max(1);
+  let h       = state.playhead_ui.grid_h_splits.max(1);
+  let col_w   = (state.grid_width.max(1) / v).max(1);
+  let row_h   = (state.grid_height.max(1) / h).max(1);
+  let area    = state.playhead_ui.playhead_area;
+  let covers_ch = |ch: usize| -> bool {
+    let col_idx   = ch % v;
+    let row_idx   = ch / v;
+    let col_start = col_idx * col_w;
+    let col_end   = col_start + col_w - 1;
+    let row_start = row_idx * row_h;
+    let row_end   = row_start + row_h - 1;
+    area.top_left.x <= col_end
+      && area.bottom_right.x >= col_start
+      && area.top_left.y <= row_end
+      && area.bottom_right.y >= row_start
+  };
+
   if let Some(samples) = state.synth_pb_bufs.first() {
-    draw_osc_braille(buf, x_start, y_off, samples, half_cols, waveform_rows, SYNTH_BUF_SIZE);
+    draw_osc_braille(buf, x_start, y_off, samples, half_cols, waveform_rows, SYNTH_BUF_SIZE, covers_ch(0));
   }
   // vertical separator
   for row in 0..waveform_rows as u16 {
@@ -255,7 +276,7 @@ pub fn draw_waveform_console(
     }
   }
   if let Some(samples) = state.synth_pb_bufs.get(1) {
-    draw_osc_braille(buf, ch2_x, y_off, samples, ch2_cols, waveform_rows, SYNTH_BUF_SIZE);
+    draw_osc_braille(buf, ch2_x, y_off, samples, ch2_cols, waveform_rows, SYNTH_BUF_SIZE, covers_ch(1));
   }
 
   // status row: most-recent value for each channel + accumulation counter

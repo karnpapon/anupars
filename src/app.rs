@@ -251,6 +251,7 @@ pub fn run_event_loop(
     init_grid_h as usize,
   ));
   state.grid_width = grid.grid.width;
+  state.grid_height = grid.grid.height;
 
   // Load the manifesto text after initial resize so grid dimensions are known.
   set_grid_contents(&mut grid, consts::MANIFESTO_TEXT.to_string());
@@ -533,6 +534,7 @@ pub fn run_event_loop(
             grid_h as usize,
           ));
           state.grid_width = grid.grid.width;
+          state.grid_height = grid.grid.height;
         }
         _ => {}
       }

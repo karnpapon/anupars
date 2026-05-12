@@ -200,8 +200,9 @@ pub struct AppState {
   /// Terminal dimensions, updated on Resize events.
   pub width: u16,
   pub height: u16,
-  /// Grid character matrix width, updated whenever grid is resized.
+  /// Grid character matrix dimensions, updated whenever grid is resized.
   pub grid_width: usize,
+  pub grid_height: usize,
   /// Current effective bars_div from dice mod matrix, updated each frame.
   pub effective_bars_div: usize,
 
@@ -252,6 +253,7 @@ impl Default for AppState {
       width: 0,
       height: 0,
       grid_width: 0,
+      grid_height: 0,
       effective_bars_div: 1,
       focus: Focus::RegexInput,
       show_menubar: false,
