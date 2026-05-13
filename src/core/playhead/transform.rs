@@ -204,52 +204,48 @@ impl Playhead {
       self.set_actived_pos(new_step);
       drop(step_idx);
 
-      // compute pitch-bend value now (needs new_step + area), send after abs position is known
-      let synth_pb: Option<i16> = if consts::SYNTH_ENABLED.load(Ordering::Relaxed) {
-        Some(if consts::SYNTH_CLEAR_MSG.load(Ordering::Relaxed) {
-          0i16
-        } else {
-          use std::f32::consts::PI;
-          let movement = *self.movement.lock().unwrap();
-          let easing = *self.easing_mode.lock().unwrap();
-          let area = self.area.lock().unwrap();
-          let width = area.width().max(1);
-          let total = (width * area.height()).max(1);
-          drop(area);
-          // Pendulum + EaseInOut: trace a full sine period over the cycle
-          // for a smooth waveform instead of a linear triangle
-          if movement == Movement::Pendulum && easing == EasingMode::EaseInOut {
-            let cycle_len = (total * 2).saturating_sub(2).max(1);
-            let cycle_pos = new_step % cycle_len;
-            let full_phase = cycle_pos as f32 / cycle_len as f32;
-            let sine_val = (full_phase * 2.0 * PI).sin();
-            (sine_val * 8191.0) as i16
-          } else {
-            let phase = match movement {
-              Movement::Forward => (new_step % total) as f32 / total as f32,
-              Movement::Reverse => 1.0 - (new_step % total) as f32 / total as f32,
-              Movement::Pendulum => {
-                let cycle_len = (total * 2).saturating_sub(2).max(1);
-                let cycle_pos = new_step % cycle_len;
-                if cycle_pos < total {
-                  cycle_pos as f32 / total.saturating_sub(1).max(1) as f32
-                } else {
-                  let sub_pos = cycle_pos - total;
-                  1.0 - sub_pos as f32 / total.saturating_sub(3).max(1) as f32
-                }
-              }
-              Movement::Random => {
-                use std::hash::{Hash, Hasher};
-                let mut h = std::collections::hash_map::DefaultHasher::new();
-                new_step.hash(&mut h);
-                h.finish() as f32 / u64::MAX as f32
-              }
-            };
-            (phase * 16383.0) as i16 - 8192
-          }
-        })
+      // compute pitch-bend value for this step (needed by streaming PB and/or stream CC)
+      let step_pb: i16 = if consts::SYNTH_CLEAR_MSG.load(Ordering::Relaxed) {
+        0i16
       } else {
-        None
+        use std::f32::consts::PI;
+        let movement = *self.movement.lock().unwrap();
+        let easing = *self.easing_mode.lock().unwrap();
+        let area = self.area.lock().unwrap();
+        let width = area.width().max(1);
+        let total = (width * area.height()).max(1);
+        drop(area);
+        // Pendulum + EaseInOut: trace a full sine period over the cycle
+        // for a smooth waveform instead of a linear triangle
+        if movement == Movement::Pendulum && easing == EasingMode::EaseInOut {
+          let cycle_len = (total * 2).saturating_sub(2).max(1);
+          let cycle_pos = new_step % cycle_len;
+          let full_phase = cycle_pos as f32 / cycle_len as f32;
+          let sine_val = (full_phase * 2.0 * PI).sin();
+          (sine_val * 8191.0) as i16
+        } else {
+          let phase = match movement {
+            Movement::Forward => (new_step % total) as f32 / total as f32,
+            Movement::Reverse => 1.0 - (new_step % total) as f32 / total as f32,
+            Movement::Pendulum => {
+              let cycle_len = (total * 2).saturating_sub(2).max(1);
+              let cycle_pos = new_step % cycle_len;
+              if cycle_pos < total {
+                cycle_pos as f32 / total.saturating_sub(1).max(1) as f32
+              } else {
+                let sub_pos = cycle_pos - total;
+                1.0 - sub_pos as f32 / total.saturating_sub(3).max(1) as f32
+              }
+            }
+            Movement::Random => {
+              use std::hash::{Hash, Hasher};
+              let mut h = std::collections::hash_map::DefaultHasher::new();
+              new_step.hash(&mut h);
+              h.finish() as f32 / u64::MAX as f32
+            }
+          };
+          (phase * 16383.0) as i16 - 8192
+        }
       };
 
       let active_pos_mutex = self.actived_pos.lock().unwrap();
@@ -258,26 +254,56 @@ impl Playhead {
 
       let (abs_x, abs_y, curr_running_playhead) = self.calculate_absolute_position(active_pos);
 
-      // send pitch-bend on the channel that matches the current playhead area position
-      if let Some(pb_value) = synth_pb {
+      let synth_enabled = consts::SYNTH_ENABLED.load(Ordering::Relaxed);
+      let stream_cc = consts::STREAM_CC_MODE.load(Ordering::Relaxed);
+
+      if synth_enabled || stream_cc {
         let grid_width = self.grid.width.load(Ordering::Relaxed);
         let grid_height = self.grid.height.load(Ordering::Relaxed);
+        let v = self.grid.v_splits.load(Ordering::Relaxed).max(1);
         let channel = super::midi::calculate_channel(
           abs_x,
           abs_y,
           grid_width,
           grid_height,
-          self.grid.v_splits.load(Ordering::Relaxed),
+          v,
           self.grid.h_splits.load(Ordering::Relaxed),
         );
-        let _ = self.midi_handler.midi_tx.send(io_midi::Message::PitchBend {
-          channel,
-          value: pb_value,
-        });
-        let _ = self.ui_tx.send(UIUpdate::SynthPitchBend {
-          channel,
-          value: pb_value,
-        });
+
+        let col_w = (grid_width / v).max(1);
+        let col_start = (channel as usize % v) * col_w;
+        let pos_in_col = abs_x.saturating_sub(col_start);
+
+        if synth_enabled {
+          let _ = self.midi_handler.midi_tx.send(io_midi::Message::PitchBend {
+            channel,
+            value: step_pb,
+          });
+          let _ = self.ui_tx.send(UIUpdate::SynthPitchBend {
+            channel,
+            value: step_pb,
+          });
+        }
+
+        if stream_cc {
+          // read from the shared display buffer at the same linear index the waveform cursor uses,
+          // so CC outputs exactly the value the STREAM_CC_CHAR points at
+          let d =
+            pos_in_col.min(col_w.saturating_sub(1)) * crate::app_state::SYNTH_BUF_SIZE / col_w;
+          if let Ok(bufs) = self.synth_pb.try_lock() {
+            let ch = (channel as usize).min(bufs.len().saturating_sub(1));
+            let pb_val = bufs.get(ch).and_then(|b| b.get(d)).copied().unwrap_or(0);
+            let cc_value = ((pb_val as i32 + 8192).clamp(0, 16383) >> 7) as u8;
+            let _ = self
+              .midi_handler
+              .midi_tx
+              .send(io_midi::Message::ControlChange {
+                channel,
+                cc_number: 74,
+                cc_value,
+              });
+          }
+        }
       }
 
       let (note_position, scale_mode) = self

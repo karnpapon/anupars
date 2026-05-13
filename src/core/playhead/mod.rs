@@ -107,7 +107,10 @@ pub struct Playhead {
 
   pub sym_state: Arc<SymSpellState>,
 
-  /// WASM only: receiver for the UI update channel, drained each frame in wasm.rs.  
+  /// Shared mirror of synth_pb_bufs - written by UI thread, read here for Stream CC.
+  pub synth_pb: Arc<Mutex<Vec<Vec<i16>>>>,
+
+  /// WASM only: receiver for the UI update channel, drained each frame in wasm.rs.
   #[cfg(target_arch = "wasm32")]
   pub ui_rx: Mutex<Option<Receiver<UIUpdate>>>,
 
@@ -118,7 +121,11 @@ pub struct Playhead {
 }
 
 impl Playhead {
-  pub fn new(midi_tx: Sender<io_midi::Message>, ui_tx: Sender<UIUpdate>) -> Self {
+  pub fn new(
+    midi_tx: Sender<io_midi::Message>,
+    ui_tx: Sender<UIUpdate>,
+    synth_pb: Arc<Mutex<Vec<Vec<i16>>>>,
+  ) -> Self {
     let position_calc = Arc::new(PositionCalculator::new());
 
     let grid = GridState::new();
@@ -180,6 +187,7 @@ impl Playhead {
       ratchet_generation,
       match_span_remaining: Arc::new(AtomicUsize::new(0)),
       sym_state: Arc::new(SymSpellState::new()),
+      synth_pb,
       #[cfg(target_arch = "wasm32")]
       wasm_rx: std::sync::Mutex::new(None),
       #[cfg(target_arch = "wasm32")]

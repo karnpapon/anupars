@@ -1143,6 +1143,13 @@ pub fn handle_key_event(canvas: &mut GridEditor, key: crossterm::event::KeyEvent
       canvas.sgr_leak_state = 0;
       true
     }
+    KeyCode::Char('9') => {
+      canvas.sgr_leak_state = 0;
+      use std::sync::atomic::Ordering;
+      let was = consts::STREAM_CC_MODE.load(Ordering::Relaxed);
+      consts::STREAM_CC_MODE.store(!was, Ordering::Relaxed);
+      true
+    }
     KeyCode::Char(c) if ('1'..='7').contains(&c) => {
       canvas.sgr_leak_state = 0;
       canvas.handle_split_char(c)

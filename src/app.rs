@@ -19,6 +19,7 @@ use std::time::Instant;
 
 use consts::{DEFAULT_TEMPO, TEMPO_CHECK_INTERVAL_MS, TEMPO_RESET_DELAY_MS};
 
+use crate::app_state::{make_synth_bufs_shared, SynthBufsShared};
 use crate::view::layout::Program;
 
 #[derive(Clone, PartialEq, Eq)]
@@ -95,6 +96,7 @@ pub struct Application {
   pub ui_tx: Sender<UIUpdate>,
   pub ui_rx: std::sync::mpsc::Receiver<UIUpdate>,
   pub cmd_mgr: CommandManager,
+  pub synth_pb_shared: SynthBufsShared,
   #[cfg(not(target_arch = "wasm32"))]
   pub sym_state: std::sync::Arc<crate::core::engine::symspell::SymSpellState>,
   #[cfg(target_arch = "wasm32")]
@@ -112,7 +114,12 @@ pub fn initialize_components() -> Application {
 
   let (ui_tx, ui_rx) = std::sync::mpsc::channel::<UIUpdate>();
 
-  let playhead_area = std::sync::Arc::new(Playhead::new(midi.tx.clone(), ui_tx.clone()));
+  let synth_pb_shared = make_synth_bufs_shared();
+  let playhead_area = std::sync::Arc::new(Playhead::new(
+    midi.tx.clone(),
+    ui_tx.clone(),
+    Arc::clone(&synth_pb_shared),
+  ));
 
   #[cfg(not(target_arch = "wasm32"))]
   let sym_state = std::sync::Arc::clone(&playhead_area.sym_state);
@@ -157,6 +164,7 @@ pub fn initialize_components() -> Application {
     ui_tx,
     ui_rx,
     cmd_mgr,
+    synth_pb_shared,
     #[cfg(not(target_arch = "wasm32"))]
     sym_state,
     #[cfg(target_arch = "wasm32")]
@@ -225,6 +233,7 @@ pub fn run_event_loop(
   midi_output_devices: Vec<String>,
   midi_input_devices: Vec<String>,
   initial_midi_device: String,
+  synth_pb_shared: SynthBufsShared,
 ) -> std::io::Result<()> {
   use crate::app_state::{apply_ui_update, AppState, Focus};
   use crate::view::consts::{CONSOLE_HEIGHT, PADDING_X, PADDING_Y};
@@ -235,6 +244,7 @@ pub fn run_event_loop(
   use std::time::Duration;
 
   let mut state = AppState::default();
+  state.synth_pb_shared = synth_pb_shared;
   state.menu.midi_output_devices = midi_output_devices;
   state.menu.midi_input_devices = midi_input_devices;
   state.midi_status = initial_midi_device;
@@ -333,6 +343,11 @@ pub fn run_event_loop(
                   use std::sync::atomic::Ordering;
                   let was = consts::SYNTH_CLEAR_MSG.load(Ordering::Relaxed);
                   consts::SYNTH_CLEAR_MSG.store(!was, Ordering::Relaxed);
+                }
+                MenuAction::ToggleStreamCC => {
+                  use std::sync::atomic::Ordering;
+                  let was = consts::STREAM_CC_MODE.load(Ordering::Relaxed);
+                  consts::STREAM_CC_MODE.store(!was, Ordering::Relaxed);
                 }
                 MenuAction::InsertFile => {
                   // TODO: file picker integration

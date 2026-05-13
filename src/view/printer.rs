@@ -14,7 +14,7 @@ pub fn primary() -> Color {
   Color::Rgb(200, 200, 200)
 }
 pub fn secondary() -> Color {
-  Color::Rgb(100, 100, 100)
+  Color::Rgb(90, 90, 90)
 }
 pub fn dim() -> Color {
   Color::Rgb(80, 80, 80)

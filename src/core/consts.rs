@@ -108,7 +108,7 @@ pub static CLOCK_ENABLED: AtomicBool = AtomicBool::new(false);
 pub static FOCUS_MODE: AtomicBool = AtomicBool::new(false);
 pub static SYNTH_ENABLED: AtomicBool = AtomicBool::new(false);
 pub static SYNTH_CLEAR_MSG: AtomicBool = AtomicBool::new(false);
-/// Set to true while external MIDI clock input is driving the sequencer.
+pub static STREAM_CC_MODE: AtomicBool = AtomicBool::new(false);
 pub static EXT_CLOCK_ACTIVE: AtomicBool = AtomicBool::new(false);
 
 pub const QUEUE_PLACEHOLDER_SYMBOL: &str = ":";
@@ -120,6 +120,7 @@ pub const SWEEP_MOVEMENT_OPEN: char = '<';
 pub const SWEEP_MOVEMENT_CLOSE: char = '>';
 pub const MOVEMENT_OPEN: char = '[';
 pub const MOVEMENT_CLOSE: char = ']';
+pub const STREAM_CC_CHAR: char = '+';
 
 pub const TMP_BUF_SIZE: usize = 6;
 

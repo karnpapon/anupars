@@ -133,6 +133,7 @@ fn menu_items(id: MenuId, state: &MenuState) -> Vec<Item> {
     MenuId::Stream => {
       let synth_on = consts::SYNTH_ENABLED.load(Ordering::Relaxed);
       let clear_on = consts::SYNTH_CLEAR_MSG.load(Ordering::Relaxed);
+      let stream_cc_on = consts::STREAM_CC_MODE.load(Ordering::Relaxed);
       vec![
         Item::Toggle(
           format!(
@@ -144,6 +145,10 @@ fn menu_items(id: MenuId, state: &MenuState) -> Vec<Item> {
         Item::Toggle(
           format!("Clear Msg    [{}]", if clear_on { "X" } else { " " }),
           clear_on,
+        ),
+        Item::Toggle(
+          format!("Stream CC    [{}]", if stream_cc_on { "X" } else { " " }),
+          stream_cc_on,
         ),
       ]
     }
@@ -205,6 +210,8 @@ pub enum MenuAction {
   ToggleStreamingPB,
   /// User toggled Synth clear-msg mode.
   ToggleClearStreamingMsg,
+  /// User toggled StreamCC mode.
+  ToggleStreamCC,
   /// Close menu and focus grid.
   Close,
   /// Quit the application.
@@ -420,6 +427,7 @@ pub fn handle_menu_nav(menu: &mut MenuState, key: MenuNavKey) -> MenuAction {
           | MenuAction::ToggleFocus
           | MenuAction::ToggleStreamingPB
           | MenuAction::ToggleClearStreamingMsg
+          | MenuAction::ToggleStreamCC
       );
       if !matches!(action, MenuAction::None) && !is_toggle {
         menu.active_menu = None;
@@ -469,6 +477,8 @@ fn confirm_item(id: MenuId, item_idx: usize, menu: &MenuState) -> MenuAction {
         MenuAction::ToggleStreamingPB
       } else if label.starts_with("Clear Msg") {
         MenuAction::ToggleClearStreamingMsg
+      } else if label.starts_with("Stream CC") {
+        MenuAction::ToggleStreamCC
       } else if label.starts_with("Docs") {
         MenuAction::ShowDocs
       } else {

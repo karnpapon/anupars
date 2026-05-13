@@ -1,5 +1,6 @@
 #![cfg_attr(rustfmt, rustfmt_skip)]
 use crate::app_state::SYNTH_BUF_SIZE;
+use crate::core::consts;
 use crate::terminal::buffer::ScreenBuffer;
 use crate::view::printer::{apply_style, CellStyle};
 
@@ -162,6 +163,8 @@ fn draw_osc_braille(
   rows: usize,
   total_samp: usize,
   active: bool,
+  scrub: Option<(usize, usize)>,
+  cursor: Option<usize>,
 ) {
   let total_dots = rows * 4;
   let zero_dot = {
@@ -194,6 +197,10 @@ fn draw_osc_braille(
     let right_lo = l_dot.min(r_dot);
     let right_hi = l_dot.max(r_dot);
 
+    let in_scrub = scrub.is_none_or(|(lo, hi)| cx >= lo && cx < hi);
+    let is_cursor = cursor == Some(cx);
+    let signal_row = l_dot / 4;
+
     for row in 0..rows {
       let top = row * 4;
       let mut bits: u8 = 0;
@@ -213,11 +220,23 @@ fn draw_osc_braille(
       }
 
       let has_signal = left_in_row || right_in_row;
-      let ch = if bits == 0 { ' ' } else { char::from_u32(0x2800 | bits as u32).unwrap_or(' ') };
-      let style = if has_signal && active { CellStyle::primary() } else { CellStyle::dim() };
 
-      if let Some(c) = buf.get_mut(x + cx as u16, y + row as u16) {
-        apply_style(c, ch, style);
+      if is_cursor && row == signal_row {
+        if let Some(c) = buf.get_mut(x + cx as u16, y + row as u16) {
+          apply_style(c, consts::STREAM_CC_CHAR, CellStyle::white());
+        }
+      } else {
+        let ch = if bits == 0 { ' ' } else { char::from_u32(0x2800 | bits as u32).unwrap_or(' ') };
+        let style = if !in_scrub {
+          CellStyle::secondary()
+        } else if has_signal && active {
+          CellStyle::primary()
+        } else {
+          CellStyle::dim()
+        };
+        if let Some(c) = buf.get_mut(x + cx as u16, y + row as u16) {
+          apply_style(c, ch, style);
+        }
       }
     }
 
@@ -266,8 +285,45 @@ pub fn draw_waveform_console(
       && area.bottom_right.y >= row_start
   };
 
+  // scrub zone
+  let stream_cc = consts::STREAM_CC_MODE.load(std::sync::atomic::Ordering::Relaxed);
+  let scrub_for = |ch_idx: usize, lane_cols: usize| -> Option<(usize, usize)> {
+    if !stream_cc || lane_cols == 0 { return None; }
+    let col_idx  = ch_idx % v;
+    let row_idx  = ch_idx / v;
+    let col_start = col_idx * col_w;
+    let row_start = row_idx * row_h;
+    // same boundary test as covers_ch - return None if playhead is not in this channel
+    if !(area.top_left.x < col_start + col_w
+      && area.bottom_right.x >= col_start
+      && area.top_left.y < row_start + row_h
+      && area.bottom_right.y >= row_start) {
+      return None;
+    }
+    let lo = state.playhead_ui.playhead_pos.x.saturating_sub(col_start) * lane_cols / col_w;
+    let hi = ((state.playhead_ui.playhead_area.bottom_right.x + 1).saturating_sub(col_start) * lane_cols / col_w).min(lane_cols);
+    Some((lo, hi))
+  };
+  
+  let cursor_for = |ch_idx: usize, lane_cols: usize| -> Option<usize> {
+    if !stream_cc || lane_cols == 0 { return None; }
+    let col_idx  = ch_idx % v;
+    let row_idx  = ch_idx / v;
+    let col_start = col_idx * col_w;
+    let row_start = row_idx * row_h;
+    if !(area.top_left.x < col_start + col_w
+      && area.bottom_right.x >= col_start
+      && area.top_left.y < row_start + row_h
+      && area.bottom_right.y >= row_start) {
+      return None;
+    }
+    let abs_x = state.playhead_ui.playhead_pos.x + state.playhead_ui.actived_pos.x;
+    if abs_x < col_start || abs_x >= col_start + col_w { return None; }
+    Some((abs_x - col_start) * lane_cols / col_w)
+  };
+
   if let Some(samples) = state.synth_pb_bufs.first() {
-    draw_osc_braille(buf, x_start, y_off, samples, half_cols, waveform_rows, SYNTH_BUF_SIZE, covers_ch(0));
+    draw_osc_braille(buf, x_start, y_off, samples, half_cols, waveform_rows, SYNTH_BUF_SIZE, covers_ch(0), scrub_for(0, half_cols), cursor_for(0, half_cols));
   }
   // vertical separator
   for row in 0..waveform_rows as u16 {
@@ -276,7 +332,7 @@ pub fn draw_waveform_console(
     }
   }
   if let Some(samples) = state.synth_pb_bufs.get(1) {
-    draw_osc_braille(buf, ch2_x, y_off, samples, ch2_cols, waveform_rows, SYNTH_BUF_SIZE, covers_ch(1));
+    draw_osc_braille(buf, ch2_x, y_off, samples, ch2_cols, waveform_rows, SYNTH_BUF_SIZE, covers_ch(1), scrub_for(1, ch2_cols), cursor_for(1, ch2_cols));
   }
 
   // status row: most-recent value for each channel + accumulation counter
