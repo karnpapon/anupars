@@ -322,27 +322,29 @@ pub fn draw_waveform_console(
     Some((abs_x - col_start) * lane_cols / col_w)
   };
 
-  if let Some(samples) = state.synth_pb_bufs.first() {
-    draw_osc_braille(buf, x_start, y_off, samples, half_cols, waveform_rows, SYNTH_BUF_SIZE, covers_ch(0), scrub_for(0, half_cols), cursor_for(0, half_cols));
-  }
-  // vertical separator
-  for row in 0..waveform_rows as u16 {
-    if let Some(c) = buf.get_mut(sep_x, y_off + row) {
-      apply_style(c, '│', CellStyle::dim());
+  if let Ok(bufs) = state.synth_pb_bufs.lock() {
+    if let Some(samples) = bufs.first() {
+      draw_osc_braille(buf, x_start, y_off, samples, half_cols, waveform_rows, SYNTH_BUF_SIZE, covers_ch(0), scrub_for(0, half_cols), cursor_for(0, half_cols));
     }
-  }
-  if let Some(samples) = state.synth_pb_bufs.get(1) {
-    draw_osc_braille(buf, ch2_x, y_off, samples, ch2_cols, waveform_rows, SYNTH_BUF_SIZE, covers_ch(1), scrub_for(1, ch2_cols), cursor_for(1, ch2_cols));
-  }
+    // vertical separator
+    for row in 0..waveform_rows as u16 {
+      if let Some(c) = buf.get_mut(sep_x, y_off + row) {
+        apply_style(c, '│', CellStyle::dim());
+      }
+    }
+    if let Some(samples) = bufs.get(1) {
+      draw_osc_braille(buf, ch2_x, y_off, samples, ch2_cols, waveform_rows, SYNTH_BUF_SIZE, covers_ch(1), scrub_for(1, ch2_cols), cursor_for(1, ch2_cols));
+    }
 
-  // status row: most-recent value for each channel + accumulation counter
-  let pb_val = |ch: usize| -> i16 {
-    let write = state.synth_pb_writes.get(ch).copied().unwrap_or(0);
-    let idx = write.wrapping_sub(1) % SYNTH_BUF_SIZE;
-    state.synth_pb_bufs.get(ch).map(|b| b[idx]).unwrap_or(0)
-  };
-  let status = format!("ch1:{:+}  ch2:{:+}  {}", pb_val(0), pb_val(1), state.input_status);
-  draw_str_clip(buf, x_start, y_off + waveform_rows as u16, &status, CellStyle::dim(), right_lim);
+    // status row: most-recent value for each channel + accumulation counter
+    let pb_val = |ch: usize| -> i16 {
+      let write = state.synth_pb_writes.get(ch).copied().unwrap_or(0);
+      let idx = write.wrapping_sub(1) % SYNTH_BUF_SIZE;
+      bufs.get(ch).map(|b| b[idx]).unwrap_or(0)
+    };
+    let status = format!("ch1:{:+}  ch2:{:+}  {}", pb_val(0), pb_val(1), state.input_status);
+    draw_str_clip(buf, x_start, y_off + waveform_rows as u16, &status, CellStyle::dim(), right_lim);
+  }
 }
 
 /// Render the entire console panel into `buf` at `(x_off, y_off)`.

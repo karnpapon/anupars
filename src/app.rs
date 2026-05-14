@@ -243,8 +243,10 @@ pub fn run_event_loop(
   use crossterm::event::{poll, read, Event, KeyCode, KeyModifiers};
   use std::time::Duration;
 
-  let mut state = AppState::default();
-  state.synth_pb_shared = synth_pb_shared;
+  let mut state = AppState {
+    synth_pb_bufs: synth_pb_shared,
+    ..Default::default()
+  };
   state.menu.midi_output_devices = midi_output_devices;
   state.menu.midi_input_devices = midi_input_devices;
   state.midi_status = initial_midi_device;

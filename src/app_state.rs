@@ -9,7 +9,6 @@ use std::sync::{Arc, Mutex};
 
 pub const SYNTH_BUF_SIZE: usize = 256;
 
-/// Shared read-only view of synth_pb_bufs for the Playhead thread (Stream CC reads from it).
 pub type SynthBufsShared = Arc<Mutex<Vec<Vec<i16>>>>;
 
 pub fn make_synth_bufs_shared() -> SynthBufsShared {
@@ -199,10 +198,9 @@ pub struct AppState {
 
   /// Synth oscilloscope sample buffers, one ring-buffer per channel (0-based).
   /// Index 0 = MIDI ch 1, index 1 = MIDI ch 2.
-  pub synth_pb_bufs: Vec<Vec<i16>>,
+  /// Wrapped in Arc<Mutex<>> so the Playhead thread can read it for Stream CC.
+  pub synth_pb_bufs: SynthBufsShared,
   pub synth_pb_writes: Vec<usize>,
-  /// Mirror of synth_pb_bufs shared with the Playhead thread so Stream CC can read it.
-  pub synth_pb_shared: SynthBufsShared,
 
   /// Mod matrix routes for Dice modulation.
   pub mod_matrix: ModMatrix,
@@ -259,9 +257,8 @@ impl Default for AppState {
       sym_status: String::new(),
       rpl_status: String::new(),
       regex_input: String::new(),
-      synth_pb_bufs: vec![vec![0i16; SYNTH_BUF_SIZE], vec![0i16; SYNTH_BUF_SIZE]],
+      synth_pb_bufs: make_synth_bufs_shared(),
       synth_pb_writes: vec![0, 0],
-      synth_pb_shared: make_synth_bufs_shared(),
       mod_matrix: ModMatrix::default(),
       display_text: String::new(),
       width: 0,
@@ -375,15 +372,14 @@ pub fn apply_ui_update(update: UIUpdate, state: &mut AppState) {
     UIUpdate::CurrentBar(b) => state.playhead_ui.current_bar = b,
     UIUpdate::CurrentBeat(b) => state.playhead_ui.current_beat = b,
     UIUpdate::SynthPitchBend { channel, value } => {
-      let ch = (channel as usize).min(state.synth_pb_bufs.len().saturating_sub(1));
+      let ch = (channel as usize).min(state.synth_pb_writes.len().saturating_sub(1));
       let idx = state.synth_pb_writes[ch] % SYNTH_BUF_SIZE;
-      state.synth_pb_bufs[ch][idx] = value;
-      state.synth_pb_writes[ch] = state.synth_pb_writes[ch].wrapping_add(1);
-      if let Ok(mut shared) = state.synth_pb_shared.lock() {
-        if let Some(slot) = shared.get_mut(ch).and_then(|b| b.get_mut(idx)) {
+      if let Ok(mut bufs) = state.synth_pb_bufs.lock() {
+        if let Some(slot) = bufs.get_mut(ch).and_then(|b| b.get_mut(idx)) {
           *slot = value;
         }
       }
+      state.synth_pb_writes[ch] = state.synth_pb_writes[ch].wrapping_add(1);
     }
   }
 }
