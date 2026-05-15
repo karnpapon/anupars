@@ -1,6 +1,6 @@
 #![allow(non_upper_case_globals)]
 
-use std::sync::atomic::AtomicBool;
+use std::sync::atomic::{AtomicBool, AtomicU8};
 
 use lazy_static::lazy_static;
 
@@ -109,6 +109,7 @@ pub static FOCUS_MODE: AtomicBool = AtomicBool::new(false);
 pub static SYNTH_ENABLED: AtomicBool = AtomicBool::new(false);
 pub static SYNTH_CLEAR_MSG: AtomicBool = AtomicBool::new(false);
 pub static STREAM_CC_MODE: AtomicBool = AtomicBool::new(false);
+pub static STREAM_CC_NUMBER: AtomicU8 = AtomicU8::new(74);
 pub static EXT_CLOCK_ACTIVE: AtomicBool = AtomicBool::new(false);
 
 pub const QUEUE_PLACEHOLDER_SYMBOL: &str = ":";

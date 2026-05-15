@@ -297,12 +297,13 @@ impl Playhead {
             if let Some(slot) = self.synth_cc.get(ch) {
               slot.store(cc_value, std::sync::atomic::Ordering::Relaxed);
             }
+            let cc_number = consts::STREAM_CC_NUMBER.load(std::sync::atomic::Ordering::Relaxed);
             let _ = self
               .midi_handler
               .midi_tx
               .send(io_midi::Message::ControlChange {
                 channel,
-                cc_number: 74,
+                cc_number,
                 cc_value,
               });
           }

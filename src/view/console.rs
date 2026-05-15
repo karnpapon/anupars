@@ -33,9 +33,9 @@ fn draw_str_clip(buf: &mut ScreenBuffer, x: u16, y: u16, s: &str, style: CellSty
 }
 
 /// Draw a labeled key-value row at `(x, y)`, clipped to `max_x`.
-fn draw_kv(buf: &mut ScreenBuffer, x: u16, y: u16, key: &str, value: &str, max_x: u16) {
+fn draw_kv(buf: &mut ScreenBuffer, x: u16, y: u16, key: &str, value: &str, max_x: u16) -> u16 {
   let vx = draw_str_clip(buf, x, y, key,   CellStyle::dim(),     max_x);
-  draw_str_clip(buf, vx, y, value, CellStyle::primary(), max_x);
+  draw_str_clip(buf, vx, y, value, CellStyle::primary(), max_x)
 }
 
 /// Draw a flag toggle: "[x]" or "[ ]" followed by label at `(x, y)`.
@@ -341,9 +341,14 @@ pub fn draw_waveform_console(
         .map(|a| a.load(std::sync::atomic::Ordering::Relaxed))
         .unwrap_or(0)
     };
-    let status_y = y_off + waveform_rows as u16;
-    draw_kv(buf, x_start, status_y, "ch1:", &format!("{}", cc_val(0)), sep_x.saturating_sub(1));
-    draw_kv(buf, ch2_x,   status_y, "ch2:", &format!("{}", cc_val(1)), right_lim);
+    let cc_number = consts::STREAM_CC_NUMBER.load(std::sync::atomic::Ordering::Relaxed);
+    let status_y  = y_off + waveform_rows as u16;
+
+    let ch1_val_x = draw_kv(buf, x_start, status_y, "ch1:", &format!("{}", cc_val(0)), sep_x.saturating_sub(1));
+    draw_kv(buf, ch1_val_x + 1, status_y, "cc:", &format!("{}", cc_number), sep_x.saturating_sub(1));
+
+    let ch2_val_x = draw_kv(buf, ch2_x, status_y, "ch2:", &format!("{}", cc_val(1)), right_lim);
+    draw_kv(buf, ch2_val_x + 1, status_y, "cc:", &format!("{}", cc_number), right_lim);
   }
 }
 

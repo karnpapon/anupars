@@ -9,6 +9,7 @@ use crate::core::playhead::{Message as PlayheadMessage, Playhead, UIUpdate};
 use crate::core::timing::metronome::{Message, Metronome};
 use num_rational::Ratio;
 use num_traits::FromPrimitive;
+use std::sync::atomic::Ordering;
 use std::sync::mpsc::Sender;
 use std::sync::{Arc, Mutex};
 #[cfg(not(target_arch = "wasm32"))]
@@ -516,6 +517,16 @@ pub fn run_event_loop(
                 state.focus = Focus::RegexInput;
               } else if key.code == KeyCode::Char('0') {
                 state.show_waveform_console = !state.show_waveform_console;
+              } else if state.show_waveform_console
+                && matches!(key.code, KeyCode::Char('>') | KeyCode::Char('<'))
+              {
+                let cur = consts::STREAM_CC_NUMBER.load(Ordering::Relaxed);
+                let next = if key.code == KeyCode::Char('>') {
+                  cur.saturating_add(1).min(127)
+                } else {
+                  cur.saturating_sub(1)
+                };
+                consts::STREAM_CC_NUMBER.store(next, Ordering::Relaxed);
               } else if !cmd_mgr.dispatch_key(key, &mut state, &mut grid, &mut should_quit) {
                 crate::view::grid::handle_key_event(&mut grid, key);
               }
