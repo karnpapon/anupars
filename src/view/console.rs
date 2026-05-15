@@ -336,14 +336,14 @@ pub fn draw_waveform_console(
       draw_osc_braille(buf, ch2_x, y_off, samples, ch2_cols, waveform_rows, SYNTH_BUF_SIZE, covers_ch(1), scrub_for(1, ch2_cols), cursor_for(1, ch2_cols));
     }
 
-    // status row: most-recent value for each channel + accumulation counter
-    let pb_val = |ch: usize| -> i16 {
-      let write = state.synth_pb_writes.get(ch).copied().unwrap_or(0);
-      let idx = write.wrapping_sub(1) % SYNTH_BUF_SIZE;
-      bufs.get(ch).map(|b| b[idx]).unwrap_or(0)
+    let cc_val = |ch: usize| -> u8 {
+      state.synth_cc_vals.get(ch)
+        .map(|a| a.load(std::sync::atomic::Ordering::Relaxed))
+        .unwrap_or(0)
     };
-    let status = format!("ch1:{:+}  ch2:{:+}  {}", pb_val(0), pb_val(1), state.input_status);
-    draw_str_clip(buf, x_start, y_off + waveform_rows as u16, &status, CellStyle::dim(), right_lim);
+    let status_y = y_off + waveform_rows as u16;
+    draw_kv(buf, x_start, status_y, "ch1:", &format!("{}", cc_val(0)), sep_x.saturating_sub(1));
+    draw_kv(buf, ch2_x,   status_y, "ch2:", &format!("{}", cc_val(1)), right_lim);
   }
 }
 

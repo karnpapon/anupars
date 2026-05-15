@@ -55,6 +55,7 @@ fn main() {
     midi_input_devices,
     initial_midi_device,
     components.synth_pb_shared,
+    components.synth_cc_shared,
   )
   .expect("event loop error");
 }

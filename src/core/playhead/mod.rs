@@ -109,6 +109,7 @@ pub struct Playhead {
 
   /// Shared mirror of synth_pb_bufs - written by UI thread, read here for Stream CC.
   pub synth_pb: Arc<Mutex<Vec<Vec<i16>>>>,
+  pub synth_cc: crate::app_state::SynthCcShared,
 
   /// WASM only: receiver for the UI update channel, drained each frame in wasm.rs.
   #[cfg(target_arch = "wasm32")]
@@ -125,6 +126,7 @@ impl Playhead {
     midi_tx: Sender<io_midi::Message>,
     ui_tx: Sender<UIUpdate>,
     synth_pb: Arc<Mutex<Vec<Vec<i16>>>>,
+    synth_cc: crate::app_state::SynthCcShared,
   ) -> Self {
     let position_calc = Arc::new(PositionCalculator::new());
 
@@ -188,6 +190,7 @@ impl Playhead {
       match_span_remaining: Arc::new(AtomicUsize::new(0)),
       sym_state: Arc::new(SymSpellState::new()),
       synth_pb,
+      synth_cc,
       #[cfg(target_arch = "wasm32")]
       wasm_rx: std::sync::Mutex::new(None),
       #[cfg(target_arch = "wasm32")]

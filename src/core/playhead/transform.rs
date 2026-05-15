@@ -294,6 +294,9 @@ impl Playhead {
             let ch = (channel as usize).min(bufs.len().saturating_sub(1));
             let pb_val = bufs.get(ch).and_then(|b| b.get(d)).copied().unwrap_or(0);
             let cc_value = ((pb_val as i32 + 8192).clamp(0, 16383) >> 7) as u8;
+            if let Some(slot) = self.synth_cc.get(ch) {
+              slot.store(cc_value, std::sync::atomic::Ordering::Relaxed);
+            }
             let _ = self
               .midi_handler
               .midi_tx

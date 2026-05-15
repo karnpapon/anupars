@@ -19,7 +19,11 @@ use std::time::Instant;
 
 use consts::{DEFAULT_TEMPO, TEMPO_CHECK_INTERVAL_MS, TEMPO_RESET_DELAY_MS};
 
-use crate::app_state::{make_synth_bufs_shared, SynthBufsShared};
+use crate::app_state::make_synth_bufs_shared;
+use crate::app_state::make_synth_cc_shared;
+use crate::app_state::SynthBufsShared;
+use crate::app_state::SynthCcShared;
+
 use crate::view::layout::Program;
 
 #[derive(Clone, PartialEq, Eq)]
@@ -97,6 +101,7 @@ pub struct Application {
   pub ui_rx: std::sync::mpsc::Receiver<UIUpdate>,
   pub cmd_mgr: CommandManager,
   pub synth_pb_shared: SynthBufsShared,
+  pub synth_cc_shared: SynthCcShared,
   #[cfg(not(target_arch = "wasm32"))]
   pub sym_state: std::sync::Arc<crate::core::engine::symspell::SymSpellState>,
   #[cfg(target_arch = "wasm32")]
@@ -115,10 +120,12 @@ pub fn initialize_components() -> Application {
   let (ui_tx, ui_rx) = std::sync::mpsc::channel::<UIUpdate>();
 
   let synth_pb_shared = make_synth_bufs_shared();
+  let synth_cc_shared = make_synth_cc_shared();
   let playhead_area = std::sync::Arc::new(Playhead::new(
     midi.tx.clone(),
     ui_tx.clone(),
     Arc::clone(&synth_pb_shared),
+    Arc::clone(&synth_cc_shared),
   ));
 
   #[cfg(not(target_arch = "wasm32"))]
@@ -165,6 +172,7 @@ pub fn initialize_components() -> Application {
     ui_rx,
     cmd_mgr,
     synth_pb_shared,
+    synth_cc_shared,
     #[cfg(not(target_arch = "wasm32"))]
     sym_state,
     #[cfg(target_arch = "wasm32")]
@@ -234,6 +242,7 @@ pub fn run_event_loop(
   midi_input_devices: Vec<String>,
   initial_midi_device: String,
   synth_pb_shared: SynthBufsShared,
+  synth_cc_shared: SynthCcShared,
 ) -> std::io::Result<()> {
   use crate::app_state::{apply_ui_update, AppState, Focus};
   use crate::view::consts::{CONSOLE_HEIGHT, PADDING_X, PADDING_Y};
@@ -245,6 +254,7 @@ pub fn run_event_loop(
 
   let mut state = AppState {
     synth_pb_bufs: synth_pb_shared,
+    synth_cc_vals: synth_cc_shared,
     ..Default::default()
   };
   state.menu.midi_output_devices = midi_output_devices;

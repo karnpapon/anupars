@@ -5,17 +5,23 @@ use crate::core::playhead::tilt::TiltMode;
 use crate::core::playhead::{PlayheadUI, UIUpdate};
 use crate::core::utils;
 use crate::view::line_editor::LineEditor;
+use std::sync::atomic::AtomicU8;
 use std::sync::{Arc, Mutex};
 
 pub const SYNTH_BUF_SIZE: usize = 256;
 
 pub type SynthBufsShared = Arc<Mutex<Vec<Vec<i16>>>>;
+pub type SynthCcShared = Arc<[AtomicU8; 2]>;
 
 pub fn make_synth_bufs_shared() -> SynthBufsShared {
   Arc::new(Mutex::new(vec![
     vec![0i16; SYNTH_BUF_SIZE],
     vec![0i16; SYNTH_BUF_SIZE],
   ]))
+}
+
+pub fn make_synth_cc_shared() -> SynthCcShared {
+  Arc::new([AtomicU8::new(0), AtomicU8::new(0)])
 }
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
@@ -201,6 +207,7 @@ pub struct AppState {
   /// Wrapped in Arc<Mutex<>> so the Playhead thread can read it for Stream CC.
   pub synth_pb_bufs: SynthBufsShared,
   pub synth_pb_writes: Vec<usize>,
+  pub synth_cc_vals: SynthCcShared,
 
   /// Mod matrix routes for Dice modulation.
   pub mod_matrix: ModMatrix,
@@ -259,6 +266,7 @@ impl Default for AppState {
       regex_input: String::new(),
       synth_pb_bufs: make_synth_bufs_shared(),
       synth_pb_writes: vec![0, 0],
+      synth_cc_vals: make_synth_cc_shared(),
       mod_matrix: ModMatrix::default(),
       display_text: String::new(),
       width: 0,
