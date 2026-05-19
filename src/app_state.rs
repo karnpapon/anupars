@@ -110,6 +110,23 @@ impl Focus {
   }
 }
 
+/// Which console panel variant is currently displayed.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub enum ConsoleView {
+  #[default]
+  Normal,
+  Waveform,
+}
+
+impl ConsoleView {
+  pub fn cycle(self) -> Self {
+    match self {
+      Self::Normal => Self::Waveform,
+      Self::Waveform => Self::Normal,
+    }
+  }
+}
+
 /// Regex flag toggles shown in the console panel.
 #[derive(Debug, Clone, Copy)]
 pub struct FlagState {
@@ -236,8 +253,8 @@ pub struct AppState {
   /// Whether the Docs "coming soon" dialog is visible.
   pub show_docs: bool,
 
-  /// Whether the console panel shows the waveform view instead of the default view.
-  pub show_waveform_console: bool,
+  /// Which console panel variant is currently displayed.
+  pub console_view: ConsoleView,
 }
 
 impl Default for AppState {
@@ -278,7 +295,7 @@ impl Default for AppState {
       show_menubar: false,
       show_about: false,
       show_docs: false,
-      show_waveform_console: false,
+      console_view: ConsoleView::default(),
     }
   }
 }

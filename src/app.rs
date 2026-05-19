@@ -7,6 +7,10 @@ use crate::core::engine::regex::RegExpHandler;
 use crate::core::io::midi;
 use crate::core::playhead::{Message as PlayheadMessage, Playhead, UIUpdate};
 use crate::core::timing::metronome::{Message, Metronome};
+
+use crate::app_state::ConsoleView;
+use crate::view::grid::handle_key_event;
+use crossterm::event::KeyCode;
 use num_rational::Ratio;
 use num_traits::FromPrimitive;
 use std::sync::atomic::Ordering;
@@ -227,6 +231,28 @@ pub fn spawn_background_threads(
     .name(consts::THREAD_NAME_METRONOME.to_string())
     .spawn(move || metronome.run())
     .expect("Failed to spawn metronome thread");
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn handle_waveform_key(key_code: crossterm::event::KeyCode) -> bool {
+  match key_code {
+    KeyCode::Char('^') => {
+      let was = consts::SYNTH_ENABLED.load(Ordering::Relaxed);
+      consts::SYNTH_ENABLED.store(!was, Ordering::Relaxed);
+      true
+    }
+    KeyCode::Char('>') => {
+      let cur = consts::STREAM_CC_NUMBER.load(Ordering::Relaxed);
+      consts::STREAM_CC_NUMBER.store(cur.saturating_add(1).min(127), Ordering::Relaxed);
+      true
+    }
+    KeyCode::Char('<') => {
+      let cur = consts::STREAM_CC_NUMBER.load(Ordering::Relaxed);
+      consts::STREAM_CC_NUMBER.store(cur.saturating_sub(1), Ordering::Relaxed);
+      true
+    }
+    _ => false,
+  }
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -516,19 +542,14 @@ pub fn run_event_loop(
               if key.code == KeyCode::Esc {
                 state.focus = Focus::RegexInput;
               } else if key.code == KeyCode::Char('0') {
-                state.show_waveform_console = !state.show_waveform_console;
-              } else if state.show_waveform_console
-                && matches!(key.code, KeyCode::Char('>') | KeyCode::Char('<'))
-              {
-                let cur = consts::STREAM_CC_NUMBER.load(Ordering::Relaxed);
-                let next = if key.code == KeyCode::Char('>') {
-                  cur.saturating_add(1).min(127)
-                } else {
-                  cur.saturating_sub(1)
-                };
-                consts::STREAM_CC_NUMBER.store(next, Ordering::Relaxed);
-              } else if !cmd_mgr.dispatch_key(key, &mut state, &mut grid, &mut should_quit) {
-                crate::view::grid::handle_key_event(&mut grid, key);
+                state.console_view = state.console_view.cycle();
+              } else {
+                let consumed =
+                  state.console_view == ConsoleView::Waveform && handle_waveform_key(key.code);
+                if !consumed && !cmd_mgr.dispatch_key(key, &mut state, &mut grid, &mut should_quit)
+                {
+                  handle_key_event(&mut grid, key);
+                }
               }
             }
           }
@@ -678,7 +699,7 @@ fn draw_frame(
     }
   }
 
-  if state.show_waveform_console {
+  if state.console_view == crate::app_state::ConsoleView::Waveform {
     crate::view::console::draw_waveform_console(
       state,
       buf,

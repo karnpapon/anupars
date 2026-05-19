@@ -343,11 +343,15 @@ pub fn draw_waveform_console(
     };
     let cc_number = consts::STREAM_CC_NUMBER.load(std::sync::atomic::Ordering::Relaxed);
     let status_y  = y_off + waveform_rows as u16;
+    let synth_enabled = consts::SYNTH_ENABLED.load(std::sync::atomic::Ordering::Relaxed);
+    let live_dot = |ch: usize| if synth_enabled && covers_ch(ch) { "●" } else { "○" };
 
-    let ch1_val_x = draw_kv(buf, x_start, status_y, "ch1:", &format!("{}", cc_val(0)), sep_x.saturating_sub(1));
+    let live1_x = draw_kv(buf, x_start, status_y, "LIVE:", live_dot(0), sep_x.saturating_sub(1));
+    let ch1_val_x = draw_kv(buf, live1_x + 1, status_y, "ch1:", &format!("{}", cc_val(0)), sep_x.saturating_sub(1));
     draw_kv(buf, ch1_val_x + 1, status_y, "cc:", &format!("{}", cc_number), sep_x.saturating_sub(1));
 
-    let ch2_val_x = draw_kv(buf, ch2_x, status_y, "ch2:", &format!("{}", cc_val(1)), right_lim);
+    let live2_x = draw_kv(buf, ch2_x, status_y, "LIVE:", live_dot(1), right_lim);
+    let ch2_val_x = draw_kv(buf, live2_x + 1, status_y, "ch2:", &format!("{}", cc_val(1)), right_lim);
     draw_kv(buf, ch2_val_x + 1, status_y, "cc:", &format!("{}", cc_number), right_lim);
   }
 }

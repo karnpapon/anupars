@@ -418,7 +418,7 @@ fn draw_wasm_frame(state: &AppState, grid: &GridEditor, buf: &mut ScreenBuffer) 
     }
   }
 
-  if state.show_waveform_console {
+  if state.console_view == crate::app_state::ConsoleView::Waveform {
     crate::view::console::draw_waveform_console(
       state,
       buf,
@@ -749,7 +749,16 @@ fn dispatch_wasm_key(key: WasmKey, ui: &mut WasmUiCtx, should_quit: &mut bool) {
 
       // '0' toggles the waveform console view.
       if matches!(&key, WasmKey::Char('0')) {
-        ui.state.show_waveform_console = !ui.state.show_waveform_console;
+        ui.state.console_view = ui.state.console_view.cycle();
+        return;
+      }
+
+      // '^' toggles Streaming Pitch Bend when in Waveform view.
+      if matches!(&key, WasmKey::Char('^'))
+        && ui.state.console_view == crate::app_state::ConsoleView::Waveform
+      {
+        let was = crate::core::consts::SYNTH_ENABLED.load(std::sync::atomic::Ordering::Relaxed);
+        crate::core::consts::SYNTH_ENABLED.store(!was, std::sync::atomic::Ordering::Relaxed);
         return;
       }
 
