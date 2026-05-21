@@ -1,3 +1,5 @@
+use std::f32::consts::PI;
+use std::hash::{Hash, Hasher};
 use std::sync::atomic::Ordering;
 
 use crate::core::consts;
@@ -208,7 +210,6 @@ impl Playhead {
       let step_pb: i16 = if consts::SYNTH_CLEAR_MSG.load(Ordering::Relaxed) {
         0i16
       } else {
-        use std::f32::consts::PI;
         let movement = *self.movement.lock().unwrap();
         let easing = *self.easing_mode.lock().unwrap();
         let area = self.area.lock().unwrap();
@@ -238,7 +239,6 @@ impl Playhead {
               }
             }
             Movement::Random => {
-              use std::hash::{Hash, Hasher};
               let mut h = std::collections::hash_map::DefaultHasher::new();
               new_step.hash(&mut h);
               h.finish() as f32 / u64::MAX as f32
@@ -786,7 +786,6 @@ mod tests {
 
   #[test]
   fn set_grid_area_stores_drag_start_at_area_top_left() {
-    use std::sync::atomic::Ordering;
     let ph = make_playhead();
     *ph.pos.lock().unwrap() = Vec2::new(2, 3);
     ph.set_grid_area((6, 7).into());
@@ -796,7 +795,6 @@ mod tests {
 
   #[test]
   fn check_contains_returns_true_when_match_is_inside_area() {
-    use std::sync::atomic::Ordering;
     let ph = make_playhead();
     ph.grid.width.store(10, Ordering::Relaxed);
     let area = Rect::from_size(Vec2::new(2, 1), (2, 1));
@@ -807,7 +805,6 @@ mod tests {
 
   #[test]
   fn check_contains_returns_false_when_match_is_outside_area() {
-    use std::sync::atomic::Ordering;
     let ph = make_playhead();
     ph.grid.width.store(10, Ordering::Relaxed);
     let area = Rect::from_size(Vec2::new(2, 1), (2, 1));

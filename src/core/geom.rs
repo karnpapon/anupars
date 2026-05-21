@@ -1,3 +1,4 @@
+use std::cmp::Ordering::*;
 use std::ops::{Add, Sub};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
@@ -76,7 +77,6 @@ impl Vec2 {
 impl PartialOrd for Vec2 {
   /// Component-wise: a < b iff a.x < b.x && a.y < b.y.
   fn partial_cmp(&self, other: &Vec2) -> Option<std::cmp::Ordering> {
-    use std::cmp::Ordering::*;
     if self == other {
       Some(Equal)
     } else if self.x < other.x && self.y < other.y {

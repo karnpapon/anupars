@@ -31,8 +31,6 @@ pub enum Command {
   ToggleFreeze,
   ChangeRootNote(Adjustment),
   ChangeScaleMode(Adjustment),
-  ChangeRootNoteLeft(Adjustment),
-  ChangeScaleModeLeft(Adjustment),
   CycleTilt,
   CycleSweepMode,
   ToggleSpatialKeyboard,
@@ -67,8 +65,6 @@ impl fmt::Display for Command {
       | Self::ToggleDynLength
       | Self::ChangeRootNote(_)
       | Self::ChangeScaleMode(_)
-      | Self::ChangeRootNoteLeft(_)
-      | Self::ChangeScaleModeLeft(_)
       | Self::CycleTilt
       | Self::CycleSweepMode
       | Self::ToggleFreeze
@@ -109,8 +105,6 @@ impl Command {
       Self::ToggleDynLength => "toggledynlength",
       Self::ChangeRootNote(_) => "changerootnote",
       Self::ChangeScaleMode(_) => "changescale",
-      Self::ChangeRootNoteLeft(_) => "changerootnoteleft",
-      Self::ChangeScaleModeLeft(_) => "changescaleleft",
       Self::CycleTilt => "cycletilt",
       Self::CycleSweepMode => "cyclesweepmode",
       Self::ToggleFreeze => "togglefreeze",

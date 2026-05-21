@@ -1,5 +1,7 @@
 use crate::terminal::buffer::ScreenBuffer;
 use crate::view::printer::{apply_style, CellStyle};
+use crate::view::printer::{black, white};
+use crossterm::event::{KeyCode, KeyModifiers};
 
 pub enum LineEditorAction {
   None,
@@ -114,8 +116,6 @@ impl LineEditor {
   /// Handle a crossterm KeyEvent and return what happened.
   #[cfg(not(target_arch = "wasm32"))]
   pub fn handle_key(&mut self, key: crossterm::event::KeyEvent) -> LineEditorAction {
-    use crossterm::event::{KeyCode, KeyModifiers};
-
     match (key.modifiers, key.code) {
       (KeyModifiers::NONE | KeyModifiers::SHIFT, KeyCode::Char(c)) => self.insert_char(c),
       (_, KeyCode::Backspace) => self.backspace(),
@@ -147,8 +147,6 @@ impl LineEditor {
   /// The visible window scrolls to keep the cursor in view.
   /// When `focused` is true the cursor position is highlighted.
   pub fn draw(&self, buf: &mut ScreenBuffer, x: u16, y: u16, width: u16, focused: bool) {
-    use crate::view::printer::{black, white};
-
     let chars: Vec<char> = self.buf.chars().collect();
     let cursor_char = self.buf[..self.cursor].chars().count();
 

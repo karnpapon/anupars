@@ -16,6 +16,8 @@ use crate::core::command::binding;
 use crate::core::command::types::Adjustment;
 use crate::core::timing::metronome;
 use crate::core::{consts, utils};
+use crossterm::event::KeyEventKind;
+use crossterm::event::{KeyCode, KeyModifiers};
 
 use log::error;
 use std::cell::RefCell;
@@ -259,16 +261,6 @@ impl CommandManager {
           .playhead_tx_cloned
           .send(playhead::Message::CycleScaleMode(*dir));
       }
-      Command::ChangeScaleModeLeft(dir) => {
-        let _ = self
-          .playhead_tx_cloned
-          .send(playhead::Message::CycleScaleModeLeft(*dir));
-      }
-      Command::ChangeRootNoteLeft(dir) => {
-        let _ = self
-          .playhead_tx_cloned
-          .send(playhead::Message::CycleScaleRootLeft(*dir));
-      }
       Command::CycleSweepMode => {
         let _ = self
           .playhead_tx_cloned
@@ -335,12 +327,9 @@ impl CommandManager {
     grid: &mut GridEditor,
     should_quit: &mut bool,
   ) -> bool {
-    use crossterm::event::KeyEventKind;
     if key.kind == KeyEventKind::Release {
       return false;
     }
-
-    use crossterm::event::{KeyCode, KeyModifiers};
 
     // For printable chars the SHIFT modifier is already encoded in the character
     // itself ('+' vs '=', '>' vs '.', etc.), so strip it before comparing to

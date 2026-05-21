@@ -3,6 +3,10 @@ use crate::app_state::SYNTH_BUF_SIZE;
 use crate::core::consts;
 use crate::terminal::buffer::ScreenBuffer;
 use crate::view::printer::{apply_style, CellStyle};
+use crate::core::engine::mod_matrix::{DiceDest, ModSource};
+use crate::app_state::Focus;
+use super::consts::CONSOLE_HEIGHT;
+use crate::core::engine::mod_matrix::BAR_COUNT_PERIOD;
 
 const GAP: u16 = 2;
 const MAX_W: [u16; 4] = [32, 22, 25, 26];
@@ -79,9 +83,6 @@ pub fn hit_test_console(
   y_off: u16,
   w: u16,
 ) -> Option<crate::app_state::Focus> {
-  use crate::app_state::Focus;
-  use super::consts::CONSOLE_HEIGHT;
-
   if my < y_off || my >= y_off + CONSOLE_HEIGHT {
     return None;
   }
@@ -368,7 +369,6 @@ pub fn draw_console(
   let dim = CellStyle::dim();
 
   // column 4: mod matrix, right-anchored
-  use crate::core::engine::mod_matrix::{DiceDest, ModSource};
   let mdm_width = 4 + DiceDest::ALL.len() as u16 * 6;
   let col4      = x_off + w.saturating_sub(mdm_width + 6);
   let cells_x   = col4 + 4;
@@ -452,7 +452,6 @@ pub fn draw_console(
   let linear = pui.actived_pos.y * area_w + pui.actived_pos.x;
   let phase    = (linear as f32 / (total - 1).max(1) as f32).clamp(0.0, 1.0);
   let anchor_x = (pui.playhead_pos.x as f32 / (state.grid_width.max(1) - 1).max(1) as f32).clamp(0.0, 1.0);
-  use crate::core::engine::mod_matrix::BAR_COUNT_PERIOD;
   let bar_count = (pui.current_beat % BAR_COUNT_PERIOD) as f32 / BAR_COUNT_PERIOD as f32;
   let debug_str = format!("ph:{:.2} ax:{:.2} br:{:.2}", phase, anchor_x, bar_count);
   draw_str(buf, col4 - 1, y_off + 4, &debug_str, CellStyle::dim());

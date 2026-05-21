@@ -24,6 +24,10 @@ use crate::core::engine::mod_matrix::{ModMatrix, SourceValues, BAR_COUNT_PERIOD}
 use crate::core::engine::regex;
 use crate::core::playhead::{Direction, Message as PlayheadMessage};
 
+use crossterm::event::{KeyCode, KeyEventKind, KeyModifiers};
+use crossterm::event::{MouseButton, MouseEventKind};
+use std::sync::atomic::Ordering;
+
 pub struct GridEditor {
   size: Vec2,
   pub playhead_tx: Sender<PlayheadMessage>,
@@ -1060,8 +1064,6 @@ pub fn dice_face_points_len(face: u8) -> usize {
 /// Returns true if the event was consumed.
 #[cfg(not(target_arch = "wasm32"))]
 pub fn handle_key_event(canvas: &mut GridEditor, key: crossterm::event::KeyEvent) -> bool {
-  use crossterm::event::{KeyCode, KeyEventKind, KeyModifiers};
-
   if key.kind == KeyEventKind::Release {
     return false;
   }
@@ -1145,7 +1147,6 @@ pub fn handle_key_event(canvas: &mut GridEditor, key: crossterm::event::KeyEvent
     }
     KeyCode::Char('9') => {
       canvas.sgr_leak_state = 0;
-      use std::sync::atomic::Ordering;
       let was = consts::STREAM_CC_MODE.load(Ordering::Relaxed);
       consts::STREAM_CC_MODE.store(!was, Ordering::Relaxed);
       true
@@ -1169,8 +1170,6 @@ pub fn handle_mouse_event(
   panel_x: u16,
   panel_y: u16,
 ) -> bool {
-  use crossterm::event::{MouseButton, MouseEventKind};
-
   let col = (event.column as usize).saturating_sub(panel_x as usize - 1);
   let row = (event.row as usize).saturating_sub(panel_y as usize);
   let position = Vec2::new(col, row);

@@ -1,3 +1,4 @@
+use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::sync::mpsc::{channel, Sender};
 use std::sync::{Arc, Mutex};
@@ -136,8 +137,6 @@ impl Stack {
   }
 
   pub fn hold(&self, midi_msg: MidiMsg) {
-    use std::collections::hash_map::Entry;
-
     let note_key = (
       midi_msg.note.round() as u8,
       midi_msg.octave,

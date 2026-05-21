@@ -29,7 +29,18 @@ use crate::app_state::make_synth_cc_shared;
 use crate::app_state::SynthBufsShared;
 use crate::app_state::SynthCcShared;
 
+use crate::app_state::{apply_ui_update, AppState, Focus};
+use crate::terminal::cell::Color;
+use crate::view::console::draw_console;
+use crate::view::consts::{CONSOLE_HEIGHT, PADDING_X, PADDING_Y};
+use crate::view::grid::GridEditor;
 use crate::view::layout::Program;
+use crate::view::menubar::draw_menubar;
+use crate::view::menubar::{handle_menu_key, set_grid_contents, MenuAction};
+use crate::view::printer::draw_dialog;
+use crate::view::printer::{apply_style, canvas, white, CellStyle};
+use crate::view::ui_processor::apply_sym_anim_tick;
+use crossterm::event::{poll, read, Event, KeyModifiers};
 
 #[derive(Clone, PartialEq, Eq)]
 pub enum AppMode {
@@ -271,14 +282,6 @@ pub fn run_event_loop(
   synth_pb_shared: SynthBufsShared,
   synth_cc_shared: SynthCcShared,
 ) -> std::io::Result<()> {
-  use crate::app_state::{apply_ui_update, AppState, Focus};
-  use crate::view::consts::{CONSOLE_HEIGHT, PADDING_X, PADDING_Y};
-  use crate::view::grid::GridEditor;
-  use crate::view::menubar::{handle_menu_key, set_grid_contents, MenuAction};
-  use crate::view::ui_processor::apply_sym_anim_tick;
-  use crossterm::event::{poll, read, Event, KeyCode, KeyModifiers};
-  use std::time::Duration;
-
   let mut state = AppState {
     synth_pb_bufs: synth_pb_shared,
     synth_cc_vals: synth_cc_shared,
@@ -647,12 +650,6 @@ fn draw_frame(
   grid: &crate::view::grid::GridEditor,
   buf: &mut crate::terminal::buffer::ScreenBuffer,
 ) {
-  use crate::terminal::cell::Color;
-  use crate::view::console::draw_console;
-  use crate::view::consts::{CONSOLE_HEIGHT, PADDING_X, PADDING_Y};
-  use crate::view::menubar::draw_menubar;
-  use crate::view::printer::{apply_style, canvas, white, CellStyle};
-
   buf.clear();
   let w = buf.width;
 
@@ -728,8 +725,6 @@ fn draw_about_dialog(
   state: &crate::app_state::AppState,
   buf: &mut crate::terminal::buffer::ScreenBuffer,
 ) {
-  use crate::view::printer::draw_dialog;
-
   let mut lines: Vec<String> = vec![
     format!("{}  v{}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION")),
     String::new(),
@@ -750,8 +745,6 @@ fn draw_docs_dialog(
   state: &crate::app_state::AppState,
   buf: &mut crate::terminal::buffer::ScreenBuffer,
 ) {
-  use crate::view::printer::draw_dialog;
-
   draw_dialog(
     buf,
     state.width,
