@@ -607,18 +607,16 @@ fn calculate_note_length(bpm: usize, distance_to_next: usize, div: usize) -> u8 
   };
 
   if distance_to_next == DYNLENGTH_DEFAULT_DISTANCE {
-    let calculated_length = if bpm > 0 {
-      ((BASE_LENGTH_FIXED * base_bpm) / bpm).max(1)
-    } else {
-      BASE_LENGTH_FIXED
-    };
+    let calculated_length = (BASE_LENGTH_FIXED * base_bpm)
+      .checked_div(bpm)
+      .map(|v| v.max(1))
+      .unwrap_or(BASE_LENGTH_FIXED);
     (calculated_length as u8).min(step_max_frames)
   } else {
-    let calculated_length = if bpm > 0 {
-      ((BASE_LENGTH_DYNAMIC * base_bpm) / bpm).max(1)
-    } else {
-      BASE_LENGTH_DYNAMIC
-    };
+    let calculated_length = (BASE_LENGTH_DYNAMIC * base_bpm)
+      .checked_div(bpm)
+      .map(|v| v.max(1))
+      .unwrap_or(BASE_LENGTH_DYNAMIC);
     let distance_factor = (distance_to_next.min(16) as f32 / 4.0).clamp(0.25, 4.0);
     let length_with_distance = (calculated_length as f32 * distance_factor).round() as usize;
     let min_len = MIN_AUDIBLE_LENGTH.min(step_max_frames);

@@ -8,7 +8,7 @@ use crate::core::io::midi;
 use crate::core::playhead::{Message as PlayheadMessage, Playhead, UIUpdate};
 use crate::core::timing::metronome::{Message, Metronome};
 
-use crate::app_state::ConsoleView;
+use crate::state::ConsoleView;
 use crate::view::grid::handle_key_event;
 use crossterm::event::KeyCode;
 use num_rational::Ratio;
@@ -24,12 +24,12 @@ use std::time::Instant;
 
 use consts::{DEFAULT_TEMPO, TEMPO_CHECK_INTERVAL_MS, TEMPO_RESET_DELAY_MS};
 
-use crate::app_state::make_synth_bufs_shared;
-use crate::app_state::make_synth_cc_shared;
-use crate::app_state::SynthBufsShared;
-use crate::app_state::SynthCcShared;
+use crate::state::make_synth_bufs_shared;
+use crate::state::make_synth_cc_shared;
+use crate::state::SynthBufsShared;
+use crate::state::SynthCcShared;
 
-use crate::app_state::{apply_ui_update, AppState, Focus};
+use crate::state::{apply_ui_update, AppState, Focus};
 use crate::terminal::cell::Color;
 use crate::view::console::draw_console;
 use crate::view::consts::{CONSOLE_HEIGHT, PADDING_X, PADDING_Y};
@@ -646,7 +646,7 @@ pub fn run_event_loop(
 
 #[cfg(not(target_arch = "wasm32"))]
 fn draw_frame(
-  state: &crate::app_state::AppState,
+  state: &crate::state::AppState,
   grid: &crate::view::grid::GridEditor,
   buf: &mut crate::terminal::buffer::ScreenBuffer,
 ) {
@@ -657,7 +657,7 @@ fn draw_frame(
   let bx1 = w.saturating_sub(PADDING_X);
   let by0 = PADDING_Y;
   let by1 = 1 + PADDING_Y + CONSOLE_HEIGHT;
-  let focused = matches!(state.focus, crate::app_state::Focus::RegexInput);
+  let focused = matches!(state.focus, crate::state::Focus::RegexInput);
   let border_col = if focused { white() } else { canvas() };
   let bstyle = CellStyle {
     fg: border_col,
@@ -696,7 +696,7 @@ fn draw_frame(
     }
   }
 
-  if state.console_view == crate::app_state::ConsoleView::Waveform {
+  if state.console_view == crate::state::ConsoleView::Waveform {
     crate::view::console::draw_waveform_console(
       state,
       buf,
@@ -722,7 +722,7 @@ fn draw_frame(
 
 #[cfg(not(target_arch = "wasm32"))]
 fn draw_about_dialog(
-  state: &crate::app_state::AppState,
+  state: &crate::state::AppState,
   buf: &mut crate::terminal::buffer::ScreenBuffer,
 ) {
   let mut lines: Vec<String> = vec![
@@ -742,7 +742,7 @@ fn draw_about_dialog(
 
 #[cfg(not(target_arch = "wasm32"))]
 fn draw_docs_dialog(
-  state: &crate::app_state::AppState,
+  state: &crate::state::AppState,
   buf: &mut crate::terminal::buffer::ScreenBuffer,
 ) {
   draw_dialog(

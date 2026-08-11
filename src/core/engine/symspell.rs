@@ -111,7 +111,7 @@ impl SymSpellState {
   pub fn render_anim_tick(
     &self,
     grid: &mut GridEditor,
-    app_state: &mut crate::app_state::AppState,
+    app_state: &mut crate::state::AppState,
     tick: AnimTick,
     regex_tx: &Sender<regex::Message>,
   ) {
@@ -137,7 +137,7 @@ impl SymSpellState {
   }
 
   /// Append a space to the buffer and refresh the status field.
-  pub fn handle_buf_append_space(&self, app_state: &mut crate::app_state::AppState) {
+  pub fn handle_buf_append_space(&self, app_state: &mut crate::state::AppState) {
     let display = {
       let mut buf = self.buf_buf.lock().unwrap();
       let last = buf.back().copied();
@@ -159,7 +159,7 @@ impl SymSpellState {
   pub fn handle_buf_append(
     &self,
     grid: &GridEditor,
-    app_state: &mut crate::app_state::AppState,
+    app_state: &mut crate::state::AppState,
     idx: usize,
   ) {
     let ch = grid.grid.data.get(idx).copied().unwrap_or('\0');
@@ -194,7 +194,7 @@ impl SymSpellState {
   pub fn handle_rpl_cycle(
     &self,
     grid: &mut GridEditor,
-    app_state: &mut crate::app_state::AppState,
+    app_state: &mut crate::state::AppState,
     old_area: Rect,
   ) {
     let sym = app_state.sym_status.clone();

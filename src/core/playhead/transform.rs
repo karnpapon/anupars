@@ -288,8 +288,7 @@ impl Playhead {
         if stream_cc {
           // read from the shared display buffer at the same linear index the waveform cursor uses,
           // so CC outputs exactly the value the STREAM_CC_CHAR points at
-          let d =
-            pos_in_col.min(col_w.saturating_sub(1)) * crate::app_state::SYNTH_BUF_SIZE / col_w;
+          let d = pos_in_col.min(col_w.saturating_sub(1)) * crate::state::SYNTH_BUF_SIZE / col_w;
           if let Ok(bufs) = self.synth_pb.try_lock() {
             let ch = (channel as usize).min(bufs.len().saturating_sub(1));
             let pb_val = bufs.get(ch).and_then(|b| b.get(d)).copied().unwrap_or(0);

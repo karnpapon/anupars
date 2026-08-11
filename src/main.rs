@@ -1,9 +1,8 @@
 #![cfg(not(target_arch = "wasm32"))]
 
 mod app;
-mod app_event;
-mod app_state;
 mod core;
+mod state;
 mod terminal;
 mod view;
 use app::{initialize_components, spawn_background_threads};

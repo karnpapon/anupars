@@ -192,31 +192,29 @@ impl Metronome {
                 .ui_tx
                 .send(UIUpdate::BpmDisplay(utils::build_bpm_status_str(bpm)));
             }
-            0xF8 => {
-              // Timing clock: convert 24 PPQN to 16 internal ticks-per-beat
-              // Fire an internal tick whenever (pulse * 16) / 24 increments.
-              if self.ext_active.load(Ordering::Relaxed) {
-                let pulse = self.ext_pulse_count.fetch_add(1, Ordering::SeqCst);
-                // Measure BPM at each beat boundary (every 24 pulses = 1 beat)
-                if pulse.is_multiple_of(24) {
-                  let now = Instant::now();
-                  if let Some(prev) = ext_beat_instant.replace(now) {
-                    let elapsed_ms = now.duration_since(prev).as_millis() as usize;
-                    if elapsed_ms > 0 {
-                      let bpm = (60_000 / elapsed_ms).clamp(20, 999);
-                      self.current_bpm.store(bpm, Ordering::Relaxed);
-                      let _ = self.ui_tx.send(UIUpdate::BpmDisplay(format!("~{bpm}")));
-                    }
+            // Timing clock: convert 24 PPQN to 16 internal ticks-per-beat
+            // Fire an internal tick whenever (pulse * 16) / 24 increments.
+            0xF8 if self.ext_active.load(Ordering::Relaxed) => {
+              let pulse = self.ext_pulse_count.fetch_add(1, Ordering::SeqCst);
+              // Measure BPM at each beat boundary (every 24 pulses = 1 beat)
+              if pulse.is_multiple_of(24) {
+                let now = Instant::now();
+                if let Some(prev) = ext_beat_instant.replace(now) {
+                  let elapsed_ms = now.duration_since(prev).as_millis() as usize;
+                  if let Some(bpm) = 60_000usize.checked_div(elapsed_ms) {
+                    let bpm = bpm.clamp(20, 999);
+                    self.current_bpm.store(bpm, Ordering::Relaxed);
+                    let _ = self.ui_tx.send(UIUpdate::BpmDisplay(format!("~{bpm}")));
                   }
                 }
-                let prev_tick = (pulse * 16) / 24;
-                let curr_tick = ((pulse + 1) * 16) / 24;
-                if curr_tick > prev_tick {
-                  self.current_position.store(curr_tick, Ordering::Relaxed);
-                  let _ = self
-                    .playhead_tx
-                    .send(playhead::Message::SetActivePos(curr_tick));
-                }
+              }
+              let prev_tick = (pulse * 16) / 24;
+              let curr_tick = ((pulse + 1) * 16) / 24;
+              if curr_tick > prev_tick {
+                self.current_position.store(curr_tick, Ordering::Relaxed);
+                let _ = self
+                  .playhead_tx
+                  .send(playhead::Message::SetActivePos(curr_tick));
               }
             }
             _ => {}

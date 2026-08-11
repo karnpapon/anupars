@@ -83,11 +83,7 @@ pub fn calculate_normal_position(
   } else {
     0
   };
-  actived_pos.y = if playhead_w > 0 {
-    linear_pos / playhead_w
-  } else {
-    0
-  };
+  actived_pos.y = linear_pos.checked_div(playhead_w).unwrap_or(0);
 }
 
 /// Calculate position for reverse sequential mode
@@ -110,11 +106,7 @@ pub fn calculate_reverse_position(
   } else {
     0
   };
-  actived_pos.y = if playhead_w > 0 {
-    reverse_linear / playhead_w
-  } else {
-    0
-  };
+  actived_pos.y = reverse_linear.checked_div(playhead_w).unwrap_or(0);
 }
 
 pub fn calculate_pendulum_position(
@@ -189,12 +181,10 @@ pub fn get_arpeggiator_matches(
   matches.sort_by_key(|&(x, y)| (y, x));
   match movement {
     Movement::Reverse => matches.reverse(),
-    Movement::Pendulum => {
-      if matches.len() > 1 {
-        let mut pendulum_matches = matches.clone();
-        pendulum_matches.extend(matches.iter().rev().skip(1).take(matches.len() - 1));
-        return pendulum_matches;
-      }
+    Movement::Pendulum if matches.len() > 1 => {
+      let mut pendulum_matches = matches.clone();
+      pendulum_matches.extend(matches.iter().rev().skip(1).take(matches.len() - 1));
+      return pendulum_matches;
     }
     _ => {} // Forward and Random use normal order
   }

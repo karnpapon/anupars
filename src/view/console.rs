@@ -1,10 +1,10 @@
 #![cfg_attr(rustfmt, rustfmt_skip)]
-use crate::app_state::SYNTH_BUF_SIZE;
+use crate::state::SYNTH_BUF_SIZE;
 use crate::core::consts;
 use crate::terminal::buffer::ScreenBuffer;
 use crate::view::printer::{apply_style, CellStyle};
 use crate::core::engine::mod_matrix::{DiceDest, ModSource};
-use crate::app_state::Focus;
+use crate::state::Focus;
 use super::consts::CONSOLE_HEIGHT;
 use crate::core::engine::mod_matrix::BAR_COUNT_PERIOD;
 
@@ -82,7 +82,7 @@ pub fn hit_test_console(
   x_off: u16,
   y_off: u16,
   w: u16,
-) -> Option<crate::app_state::Focus> {
+) -> Option<crate::state::Focus> {
   if my < y_off || my >= y_off + CONSOLE_HEIGHT {
     return None;
   }
@@ -249,7 +249,7 @@ fn draw_osc_braille(
 /// into two equal oscilloscope lanes side by side, one per MIDI channel, plus a bottom
 /// status row.
 pub fn draw_waveform_console(
-  state: &crate::app_state::AppState,
+  state: &crate::state::AppState,
   buf: &mut ScreenBuffer,
   x_off: u16,
   y_off: u16,
@@ -359,7 +359,7 @@ pub fn draw_waveform_console(
 
 /// Render the entire console panel into `buf` at `(x_off, y_off)`.
 pub fn draw_console(
-  state: &crate::app_state::AppState,
+  state: &crate::state::AppState,
   buf: &mut ScreenBuffer,
   x_off: u16,
   y_off: u16,
@@ -388,12 +388,12 @@ pub fn draw_console(
   // column 0: RGXP editor + flags + ERRR/TOTL/MIDI
   let editor_x = draw_str_clip(buf, col0, y_off, "RGXP: ", dim, lim0);
   let editor_w = lim0.saturating_sub(editor_x);
-  let focused = matches!(state.focus, crate::app_state::Focus::RegexInput);
+  let focused = matches!(state.focus, crate::state::Focus::RegexInput);
   state.line_editor.draw(buf, editor_x, y_off, editor_w, focused);
 
   let flag_x = draw_str_clip(buf, col0, y_off + 1, "FLG: ", dim, lim0);
-  let focus_cs = matches!(state.focus, crate::app_state::Focus::FlagCaseSensitive);
-  let focus_ml = matches!(state.focus, crate::app_state::Focus::FlagMultiline);
+  let focus_cs = matches!(state.focus, crate::state::Focus::FlagCaseSensitive);
+  let focus_ml = matches!(state.focus, crate::state::Focus::FlagMultiline);
   draw_flag(buf, flag_x,     y_off + 1, "i ", state.flags.case_sensitive, focus_cs);
   draw_flag(buf, flag_x + 5, y_off + 1, "m",  state.flags.multiline,     focus_ml);
 
@@ -420,7 +420,7 @@ pub fn draw_console(
   draw_kv(buf, col3, y_off + 2, "RPL: ", &state.rpl_status, lim3);
 
   // column 4: mod matrix routing display (3 sources x 3 destinations)
-  let cursor = if let crate::app_state::Focus::ModMatrix { row, col } = state.focus {
+  let cursor = if let crate::state::Focus::ModMatrix { row, col } = state.focus {
     Some((row as usize, col as usize))
   } else {
     None

@@ -18,8 +18,8 @@ use crate::view::printer::primary;
 use crate::view::printer::white;
 use crate::view::printer::CellStyle;
 
-use crate::app_state::{MenuId, MenuState};
 use crate::core::{consts, utils};
+use crate::state::{MenuId, MenuState};
 use crate::view::grid::GridEditor;
 
 /// Load a file's contents into the grid editor.
@@ -491,7 +491,7 @@ fn confirm_item(id: MenuId, item_idx: usize, menu: &MenuState) -> MenuAction {
 /// Draw the menu bar row and any open dropdown into `buf`.
 /// `y_off` is the row of the menu bar (row 0 in a full-screen layout).
 pub fn draw_menubar(
-  state: &crate::app_state::AppState,
+  state: &crate::state::AppState,
   buf: &mut crate::terminal::buffer::ScreenBuffer,
   y_off: u16,
 ) {
@@ -511,7 +511,7 @@ pub fn draw_menubar(
   for (i, (id, title)) in MENU_TITLES.iter().enumerate() {
     let x = menu_title_x(i);
     let is_active = state.menu.active_menu == Some(*id)
-      || (state.focus == crate::app_state::Focus::Menu
+      || (state.focus == crate::state::Focus::Menu
         && state.menu.active_menu.is_none()
         && i == state.menu.focused_tab);
     let style = if is_active { active_style } else { title_style };

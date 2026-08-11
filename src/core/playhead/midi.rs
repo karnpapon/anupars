@@ -571,11 +571,10 @@ impl MidiTriggerHandler {
     let current_tempo = self.music.tempo.load(Ordering::Relaxed);
     let base_bpm = consts::DEFAULT_TEMPO;
 
-    let calculated_length = if current_tempo > 0 {
-      ((distance_to_next * base_bpm) / current_tempo).max(1)
-    } else {
-      distance_to_next
-    };
+    let calculated_length = (distance_to_next * base_bpm)
+      .checked_div(current_tempo)
+      .map(|v| v.max(1))
+      .unwrap_or(distance_to_next);
     let note_length = (calculated_length as u8).min(127);
 
     // Chord notes: root, third, fifth

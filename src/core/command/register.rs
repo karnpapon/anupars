@@ -4,9 +4,9 @@ use std::sync::mpsc::Sender;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
-use crate::app_state::{AppState, Focus};
 use crate::core::playhead;
 use crate::core::playhead::UIUpdate;
+use crate::state::{AppState, Focus};
 
 use crate::view::grid::GridEditor;
 use crate::view::layout::Program;

@@ -30,7 +30,7 @@ impl Playhead {
 pub fn apply_sym_anim_tick(
   sym_state: &Arc<SymSpellState>,
   grid: &mut crate::view::grid::GridEditor,
-  app_state: &mut crate::app_state::AppState,
+  app_state: &mut crate::state::AppState,
   regex_tx: &Sender<regex::Message>,
 ) {
   if let Some(tick) = sym_state.advance_anim_frame() {
