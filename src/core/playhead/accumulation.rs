@@ -28,26 +28,34 @@ impl Playhead {
     let _ = self.ui_tx.send(UIUpdate::AccumulationCounter(count, total));
   }
 
+  /// number of silent steps before an accumulation jump triggers, based on the playhead area
+  fn accumulation_counter_limit(&self) -> usize {
+    let area = self.area.lock().unwrap();
+    let playhead_area_size = area.width() * area.height();
+    drop(area);
+
+    let clock_enabled = consts::CLOCK_ENABLED.load(Ordering::Relaxed);
+    #[allow(clippy::if_same_then_else)]
+    if clock_enabled {
+      playhead_area_size
+    } else {
+      playhead_area_size
+    }
+  }
+
   pub(super) fn handle_silent_step(&self, matcher: &HashMap<usize, regex::Match>) {
     if !self.modes.accumulation_mode.load(Ordering::Relaxed) {
       return;
     }
     let area = self.area.lock().unwrap();
     let has_some_pos = self.check_contains(&area, matcher);
-    let playhead_area_size = area.width() * area.height();
     drop(area);
 
     if has_some_pos {
       return;
     };
 
-    let clock_enabled = consts::CLOCK_ENABLED.load(Ordering::Relaxed);
-    #[allow(clippy::if_same_then_else)]
-    let counter_limit = if clock_enabled {
-      playhead_area_size
-    } else {
-      playhead_area_size
-    };
+    let counter_limit = self.accumulation_counter_limit();
 
     let mut counter = self.accumulation_counter.lock().unwrap();
     *counter += 1;
@@ -105,17 +113,7 @@ impl Playhead {
       }
     }
 
-    let area = self.area.lock().unwrap();
-    let playhead_area_size = area.width() * area.height();
-    drop(area);
-
-    let clock_enabled = consts::CLOCK_ENABLED.load(Ordering::Relaxed);
-    #[allow(clippy::if_same_then_else)]
-    let counter_limit = if clock_enabled {
-      playhead_area_size
-    } else {
-      playhead_area_size
-    };
+    let counter_limit = self.accumulation_counter_limit();
 
     let mut counter = self.accumulation_counter.lock().unwrap();
     *counter += 1;

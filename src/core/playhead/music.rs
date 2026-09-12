@@ -27,12 +27,7 @@ impl Playhead {
       drop(root);
       let _ = self.ui_tx.send(UIUpdate::CanvasScaleRootTop(new_root));
     } else {
-      let mut root = self.music.scale_root_left.lock().unwrap();
-      *root = root.cycle(dir);
-      let new_root = *root;
-      drop(root);
-      let _ = self.ui_tx.send(UIUpdate::CanvasScaleRootLeft(new_root));
-      self.retrigger_drone_if_active();
+      self.cycle_scale_root_left(dir);
     }
   }
 
@@ -45,12 +40,7 @@ impl Playhead {
       drop(mode);
       let _ = self.ui_tx.send(UIUpdate::CanvasScaleModeTop(new_mode));
     } else {
-      let mut mode = self.music.scale_mode_left.lock().unwrap();
-      *mode = mode.cycle(dir);
-      let new_mode = *mode;
-      drop(mode);
-      let _ = self.ui_tx.send(UIUpdate::CanvasScaleModeLeft(new_mode));
-      self.retrigger_drone_if_active();
+      self.cycle_scale_mode_left(dir);
     }
   }
 

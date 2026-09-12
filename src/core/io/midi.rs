@@ -421,28 +421,10 @@ impl Midi {
 
   /// Trigger MIDI note with position and scale information
   fn trigger_w_position(&self, params: TriggerParams) {
-    if params.grid_height == 0 {
+    let bpm = params.bpm;
+    let Some((midi_msg, note_key)) = build_triggered_midi_msg(&params, bpm) else {
       return;
-    }
-
-    let (note_index, octave) = params.scale_mode.pos_to_scale_note(
-      params.y_position,
-      params.grid_height,
-      consts::BASE_OCTAVE,
-      params.scale_root_offset,
-    );
-
-    let velocity = calculate_velocity(&params);
-    let note_length = calculate_note_length(params.bpm, params.distance_to_next, params.div);
-    let channel = channel_from_position(&params);
-
-    let midi_msg = MidiMsg::from(note_index, octave, note_length, velocity, channel);
-
-    let note_key = (
-      midi_msg.note.round() as u8,
-      midi_msg.octave,
-      midi_msg.channel,
-    );
+    };
     let mut last_held = self.last_held_note.lock().unwrap();
 
     if params.hold {
@@ -675,6 +657,34 @@ fn channel_from_position(params: &TriggerParams) -> u8 {
   (row_idx * v + col_idx) as u8
 }
 
+/// build the MIDI message and its (note, octave, channel) key for a triggered position
+/// Returns `None` when the grid has no height (nothing to trigger)
+fn build_triggered_midi_msg(params: &TriggerParams, bpm: usize) -> Option<(MidiMsg, (u8, u8, u8))> {
+  if params.grid_height == 0 {
+    return None;
+  }
+
+  let (note_index, octave) = params.scale_mode.pos_to_scale_note(
+    params.y_position,
+    params.grid_height,
+    consts::BASE_OCTAVE,
+    params.scale_root_offset,
+  );
+
+  let velocity = calculate_velocity(params);
+  let note_length = calculate_note_length(bpm, params.distance_to_next, params.div);
+  let channel = channel_from_position(params);
+
+  let midi_msg = MidiMsg::from(note_index, octave, note_length, velocity, channel);
+  let note_key = (
+    midi_msg.note.round() as u8,
+    midi_msg.octave,
+    midi_msg.channel,
+  );
+
+  Some((midi_msg, note_key))
+}
+
 /// Convert octave and note (with fractional semitones) to MIDI note number and pitch bend in cents
 /// Returns (midi_note, pitch_bend_cents)
 pub fn convert_to_midi_note_num(octave: u8, note: f32) -> (u8, f32) {
@@ -730,24 +740,10 @@ impl Midi {
   pub fn new() -> Self {
     let (tx, rx) = channel();
     let tempo = Arc::new(Mutex::new(consts::DEFAULT_TEMPO));
-    let Ok(midi_out) = MidiOutput::new("client-midi-output") else {
-      return Self {
-        midi: None.into(),
-        out_device: None.into(),
-        out_device_name: None.into(),
-        tx,
-        rx,
-        msg_config_list: Arc::new(Mutex::new(Vec::new())),
-        tempo,
-        clock_enabled: Arc::new(Mutex::new(false)),
-        last_held_note: Arc::new(Mutex::new(None)),
-        in_connection: Mutex::new(None),
-        clock_input_enabled: Arc::new(AtomicBool::new(false)),
-        ext_clock_callback: Mutex::new(None),
-      };
-    };
+    // `midi` stays None (no MIDI output device) if the platform has none available.
+    let midi_out = MidiOutput::new("client-midi-output").ok();
     Midi {
-      midi: Some(midi_out).into(),
+      midi: midi_out.into(),
       out_device: None.into(),
       out_device_name: None.into(),
       tx,
@@ -932,24 +928,10 @@ impl Midi {
   }
 
   fn trigger_w_position_wasm(&mut self, params: TriggerParams, clock_tick: usize) {
-    if params.grid_height == 0 {
+    let bpm = self.bpm;
+    let Some((midi_msg, note_key)) = build_triggered_midi_msg(&params, bpm) else {
       return;
-    }
-    let (note_index, octave) = params.scale_mode.pos_to_scale_note(
-      params.y_position,
-      params.grid_height,
-      consts::BASE_OCTAVE,
-      params.scale_root_offset,
-    );
-    let velocity = calculate_velocity(&params);
-    let note_length = calculate_note_length(self.bpm, params.distance_to_next, params.div);
-    let channel = channel_from_position(&params);
-    let midi_msg = MidiMsg::from(note_index, octave, note_length, velocity, channel);
-    let note_key = (
-      midi_msg.note.round() as u8,
-      midi_msg.octave,
-      midi_msg.channel,
-    );
+    };
 
     if params.hold {
       let prev_key = self

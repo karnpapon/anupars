@@ -125,6 +125,28 @@ impl Playhead {
     false
   }
 
+  /// look up the match at (or ending at) `curr_running_playhead`, direction-aware
+  /// Forward: a match starting. Reverse/pendulum-reverse: a match ending
+  fn match_at_playhead(
+    &self,
+    curr_running_playhead: usize,
+    going_forward: bool,
+  ) -> Option<regex::Match> {
+    let matcher_guard = self.text_matcher.lock().unwrap();
+    if going_forward {
+      matcher_guard
+        .as_ref()
+        .and_then(|m| m.get(&curr_running_playhead))
+        .cloned()
+    } else {
+      matcher_guard.as_ref().and_then(|m| {
+        m.values()
+          .find(|mv| curr_running_playhead == mv.i + mv.l.max(1) - 1)
+          .cloned()
+      })
+    }
+  }
+
   pub(super) fn update_active_pos_ui(&self, active_pos: Vec2) {
     let _ = self.ui_tx.send(UIUpdate::ActivePos(active_pos));
   }
@@ -147,20 +169,7 @@ impl Playhead {
           .midi_handler
           .determine_note_position_and_scale(active_pos, abs_x, abs_y);
 
-        let matcher_guard = self.text_matcher.lock().unwrap();
-        let match_at_pos = if going_forward {
-          matcher_guard
-            .as_ref()
-            .and_then(|m| m.get(&curr_running_playhead))
-            .cloned()
-        } else {
-          matcher_guard.as_ref().and_then(|m| {
-            m.values()
-              .find(|mv| curr_running_playhead == mv.i + mv.l.max(1) - 1)
-              .cloned()
-          })
-        };
-        drop(matcher_guard);
+        let match_at_pos = self.match_at_playhead(curr_running_playhead, going_forward);
         let has_match = match_at_pos.is_some();
         let match_len = match_at_pos.as_ref().map(|m| m.l).unwrap_or(1).max(1);
 
@@ -318,20 +327,7 @@ impl Playhead {
       // Capture the full Match for the current cell.
       // Forward: trigger at the first cell (m.i == curr).
       // Reverse/Pendulum-reverse: trigger at the last cell (m.i + m.l - 1 == curr).
-      let matcher_guard = self.text_matcher.lock().unwrap();
-      let match_at_pos = if going_forward {
-        matcher_guard
-          .as_ref()
-          .and_then(|m| m.get(&curr_running_playhead))
-          .cloned()
-      } else {
-        matcher_guard.as_ref().and_then(|m| {
-          m.values()
-            .find(|mv| curr_running_playhead == mv.i + mv.l.max(1) - 1)
-            .cloned()
-        })
-      };
-      drop(matcher_guard);
+      let match_at_pos = self.match_at_playhead(curr_running_playhead, going_forward);
 
       let has_match = match_at_pos.is_some();
       let match_len = match_at_pos.as_ref().map(|m| m.l).unwrap_or(1).max(1);

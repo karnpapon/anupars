@@ -20,11 +20,13 @@ use consts::KEYBOARD_MARGIN_TOP;
 use consts::NOTE_NAMES;
 use consts::QUEUE_MARGIN_RIGHT;
 
-use crate::core::engine::mod_matrix::{ModMatrix, SourceValues, BAR_COUNT_PERIOD};
+use crate::core::engine::mod_matrix::{ModMatrix, SourceValues};
 use crate::core::engine::regex;
 use crate::core::playhead::{Direction, Message as PlayheadMessage};
 
+#[cfg(not(target_arch = "wasm32"))]
 use crossterm::event::{KeyCode, KeyEventKind, KeyModifiers};
+#[cfg(not(target_arch = "wasm32"))]
 use crossterm::event::{MouseButton, MouseEventKind};
 use std::sync::atomic::Ordering;
 
@@ -82,20 +84,21 @@ impl GridEditor {
     }
   }
 
-  /// Map Y position to MIDI note information (for left keyboard)
-  /// Y increases downward, so higher Y = lower note (inverted keyboard)
-  pub fn y_to_note_left(&self, y: usize) -> (f32, u8, &'static str) {
+  /// Map Y position to MIDI note information for the given scale.
+  /// Y increases downward, so higher Y = lower note (inverted keyboard).
+  fn y_to_note(
+    &self,
+    y: usize,
+    scale_mode: crate::core::tonal::scale::ScaleMode,
+    scale_root: crate::core::tonal::scale::ScaleRoot,
+  ) -> (f32, u8, &'static str) {
     let total_rows = self.grid.height;
     if total_rows == 0 {
       return (0.0, BASE_OCTAVE, "C");
     }
 
-    let (note_index, octave) = self.playhead_ui.scale_mode_left.pos_to_scale_note(
-      y,
-      total_rows,
-      BASE_OCTAVE,
-      self.playhead_ui.scale_root_left.to_root_offset(),
-    );
+    let (note_index, octave) =
+      scale_mode.pos_to_scale_note(y, total_rows, BASE_OCTAVE, scale_root.to_root_offset());
 
     (
       note_index,
@@ -104,25 +107,21 @@ impl GridEditor {
     )
   }
 
-  /// Map Y position to MIDI note information (for top keyboard)
-  /// Y increases downward, so higher Y = lower note (inverted keyboard)
-  pub fn y_to_note_top(&self, y: usize) -> (f32, u8, &'static str) {
-    let total_rows = self.grid.height;
-    if total_rows == 0 {
-      return (0.0, BASE_OCTAVE, "C");
-    }
-
-    let (note_index, octave) = self.playhead_ui.scale_mode_top.pos_to_scale_note(
+  /// Map Y position to MIDI note information (for left keyboard)
+  pub fn y_to_note_left(&self, y: usize) -> (f32, u8, &'static str) {
+    self.y_to_note(
       y,
-      total_rows,
-      BASE_OCTAVE,
-      self.playhead_ui.scale_root_top.to_root_offset(),
-    );
+      self.playhead_ui.scale_mode_left,
+      self.playhead_ui.scale_root_left,
+    )
+  }
 
-    (
-      note_index,
-      octave,
-      NOTE_NAMES[note_index.round() as usize % 12],
+  /// Map Y position to MIDI note information (for top keyboard)
+  pub fn y_to_note_top(&self, y: usize) -> (f32, u8, &'static str) {
+    self.y_to_note(
+      y,
+      self.playhead_ui.scale_mode_top,
+      self.playhead_ui.scale_root_top,
     )
   }
 
@@ -377,21 +376,14 @@ impl GridEditor {
     true
   }
 
+  fn current_source_values(&self) -> SourceValues {
+    SourceValues::from_playhead_ui(&self.playhead_ui, self.grid.width)
+  }
+
   /// Recompute dice_effective_face from the mod matrix using current sources.
   /// Call this whenever mod matrix routes are modified.
   pub fn refresh_dice_effective_face(&mut self, mod_matrix: &ModMatrix) {
-    let pui = &self.playhead_ui;
-    let area = pui.playhead_area;
-    let area_w = (area.bottom_right.x.saturating_sub(area.top_left.x) + 1).max(1);
-    let area_h = (area.bottom_right.y.saturating_sub(area.top_left.y) + 1).max(1);
-    let total = (area_w * area_h).max(1);
-    let linear = pui.actived_pos.y * area_w + pui.actived_pos.x;
-    let grid_w = self.grid.width.max(1);
-    let sources = SourceValues {
-      movement_phase: (linear as f32 / (total - 1).max(1) as f32).clamp(0.0, 1.0),
-      playhead_anchor_x: (pui.playhead_pos.x as f32 / grid_w as f32).clamp(0.0, 1.0),
-      bar_count: (pui.current_beat % BAR_COUNT_PERIOD) as f32 / BAR_COUNT_PERIOD as f32,
-    };
+    let sources = self.current_source_values();
     let output = mod_matrix.evaluate(&sources);
     let face = output.face.unwrap_or(self.dice_face);
     if face != self.dice_effective_face {
@@ -404,21 +396,7 @@ impl GridEditor {
       return;
     }
 
-    // collect normalized source values from playhead state
-    let pui = &self.playhead_ui;
-    let area = pui.playhead_area;
-    let area_w = (area.bottom_right.x.saturating_sub(area.top_left.x) + 1).max(1);
-    let area_h = (area.bottom_right.y.saturating_sub(area.top_left.y) + 1).max(1);
-    let total = (area_w * area_h).max(1);
-    let linear = pui.actived_pos.y * area_w + pui.actived_pos.x;
-    let grid_w = self.grid.width.max(1);
-
-    let sources = SourceValues {
-      movement_phase: (linear as f32 / (total - 1).max(1) as f32).clamp(0.0, 1.0),
-      playhead_anchor_x: (pui.playhead_pos.x as f32 / grid_w as f32).clamp(0.0, 1.0),
-      bar_count: (pui.current_beat % BAR_COUNT_PERIOD) as f32 / BAR_COUNT_PERIOD as f32,
-    };
-
+    let sources = self.current_source_values();
     let output = mod_matrix.evaluate(&sources);
 
     let effective_bars_div = output.bars_div.unwrap_or(self.dice_bars_div).max(1);
@@ -426,7 +404,7 @@ impl GridEditor {
     let effective_step = output.step_dir.unwrap_or(self.dice_step);
 
     // fire on each new bar/div tick
-    let bar_div_tick = pui.current_bar / effective_bars_div;
+    let bar_div_tick = self.playhead_ui.current_bar / effective_bars_div;
     if self.prev_bar_div_tick == Some(bar_div_tick) {
       return;
     }
@@ -713,33 +691,23 @@ impl GridEditor {
       half_height.saturating_sub(evq_items.len() + 2)
     };
 
-    for y in 0..=(evq_start_y.min(half_height.saturating_sub(1))) {
-      let c = if y % 2 == 0 { 50u8 } else { 70u8 };
-      let ph_style = CellStyle::fg_rgb(c, c, c);
-      for x in 1..QUEUE_MARGIN_RIGHT {
-        if let Some(cell) = buf.get_mut(x_off + x as u16, y_off + y as u16) {
-          apply_style(
-            cell,
-            consts::QUEUE_PLACEHOLDER_SYMBOL
-              .chars()
-              .next()
-              .unwrap_or('·'),
-            ph_style,
-          );
-        }
-      }
-    }
-    for (idx, item) in evq_items.iter().enumerate() {
-      if idx + 2 >= half_height {
-        break;
-      }
-      let row = half_height - 2 - idx;
-      for (i, ch) in item.chars().enumerate() {
-        if let Some(c) = buf.get_mut(x_off + 3 + i as u16, y_off + row as u16) {
-          apply_style(c, ch, style);
-        }
-      }
-    }
+    draw_queue_placeholder_rows(
+      buf,
+      x_off,
+      y_off,
+      0..=(evq_start_y.min(half_height.saturating_sub(1))),
+      50,
+      70,
+    );
+    draw_queue_items(
+      buf,
+      x_off,
+      y_off,
+      &evq_items,
+      half_height.saturating_sub(2),
+      1,
+      style,
+    );
     for (i, ch) in "EVNTQ".chars().enumerate() {
       if let Some(c) = buf.get_mut(x_off + 3 + i as u16, y_off + (half_height - 1) as u16) {
         apply_style(c, ch, style);
@@ -775,36 +743,23 @@ impl GridEditor {
       total_height.saturating_sub(opq_items.len() + 1)
     };
 
-    for y in (opq_start_y + 1)..opq_display_start_y {
-      let c = if y % 2 == 0 { 70u8 } else { 50u8 };
-      let ph_style = CellStyle::fg_rgb(c, c, c);
-      for x in 1..QUEUE_MARGIN_RIGHT {
-        if let Some(cell) = buf.get_mut(x_off + x as u16, y_off + y as u16) {
-          apply_style(
-            cell,
-            consts::QUEUE_PLACEHOLDER_SYMBOL
-              .chars()
-              .next()
-              .unwrap_or('·'),
-            ph_style,
-          );
-        }
-      }
-    }
-    for (idx, item) in opq_items.iter().enumerate() {
-      if idx + 2 >= total_height {
-        break;
-      }
-      let row = total_height - 2 - idx;
-      if row < opq_start_y + 1 {
-        break;
-      }
-      for (i, ch) in item.chars().enumerate() {
-        if let Some(c) = buf.get_mut(x_off + 3 + i as u16, y_off + row as u16) {
-          apply_style(c, ch, style);
-        }
-      }
-    }
+    draw_queue_placeholder_rows(
+      buf,
+      x_off,
+      y_off,
+      (opq_start_y + 1)..opq_display_start_y,
+      70,
+      50,
+    );
+    draw_queue_items(
+      buf,
+      x_off,
+      y_off,
+      &opq_items,
+      total_height.saturating_sub(2),
+      opq_start_y + 1,
+      style,
+    );
     for (i, ch) in "OPRTQ".chars().enumerate() {
       if let Some(c) = buf.get_mut(x_off + 3 + i as u16, y_off + (total_height - 1) as u16) {
         apply_style(c, ch, style);
@@ -1040,6 +995,58 @@ impl GridEditor {
         if let Some(c) = buf.get_mut(gx + x as u16, gy + sep_y as u16) {
           apply_style(c, ch, sep_style);
         }
+      }
+    }
+  }
+}
+
+/// Draw placeholder dots across `y_range`, alternating shade by row parity.
+/// Shared by the EVQ and OPQ empty-row rendering in `draw_queue_right_to_buf`.
+fn draw_queue_placeholder_rows(
+  buf: &mut ScreenBuffer,
+  x_off: u16,
+  y_off: u16,
+  y_range: impl Iterator<Item = usize>,
+  even_shade: u8,
+  odd_shade: u8,
+) {
+  for y in y_range {
+    let c = if y % 2 == 0 { even_shade } else { odd_shade };
+    let ph_style = CellStyle::fg_rgb(c, c, c);
+    for x in 1..QUEUE_MARGIN_RIGHT {
+      if let Some(cell) = buf.get_mut(x_off + x as u16, y_off + y as u16) {
+        apply_style(
+          cell,
+          consts::QUEUE_PLACEHOLDER_SYMBOL
+            .chars()
+            .next()
+            .unwrap_or('·'),
+          ph_style,
+        );
+      }
+    }
+  }
+}
+
+fn draw_queue_items(
+  buf: &mut ScreenBuffer,
+  x_off: u16,
+  y_off: u16,
+  items: &[String],
+  bottom_row: usize,
+  floor: usize,
+  style: CellStyle,
+) {
+  for (idx, item) in items.iter().enumerate() {
+    let Some(row) = bottom_row.checked_sub(idx) else {
+      break;
+    };
+    if row < floor {
+      break;
+    }
+    for (i, ch) in item.chars().enumerate() {
+      if let Some(c) = buf.get_mut(x_off + 3 + i as u16, y_off + row as u16) {
+        apply_style(c, ch, style);
       }
     }
   }

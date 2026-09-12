@@ -1,7 +1,10 @@
 pub mod buffer;
 pub mod cell;
+#[cfg(not(target_arch = "wasm32"))]
 use crossterm::terminal::{disable_raw_mode, enable_raw_mode};
+#[cfg(not(target_arch = "wasm32"))]
 use crossterm::terminal::{EnterAlternateScreen, LeaveAlternateScreen};
+#[cfg(not(target_arch = "wasm32"))]
 use crossterm::{cursor::Hide, cursor::Show, execute};
 #[cfg(not(target_arch = "wasm32"))]
 pub mod renderer;

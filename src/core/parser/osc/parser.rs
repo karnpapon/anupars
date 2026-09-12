@@ -72,39 +72,40 @@ fn parse_expr_stmt(input: Tokens) -> IResult<Tokens, Stmt> {
   map(parse_expr, Stmt::ExprStmt)(input)
 }
 
-fn parse_literal(input: Tokens) -> IResult<Tokens, Literal> {
+fn take_one_token(input: Tokens) -> IResult<Tokens, Token> {
   let (i1, t1) = take(1usize)(input)?;
   if t1.tok.is_empty() {
     Err(Err::Error(Error::new(input, ErrorKind::Tag)))
   } else {
-    match t1.tok[0].clone() {
-      Token::Long(val) => Ok((i1, Literal::Long(val))),
-      Token::IntLiteral(name) => Ok((i1, Literal::Int(name))),
-      Token::StringLiteral(s) => Ok((i1, Literal::String(s))),
-      Token::FloatLiteral(s) => Ok((i1, Literal::Float(s))),
-      Token::Double(s) => Ok((i1, Literal::Double(s))),
-      Token::BoolLiteral(b) => Ok((i1, Literal::Bool(b))),
-      Token::Blob(b) => Ok((i1, Literal::Blob(b))),
-      Token::OSCPath(b) => Ok((i1, Literal::OscPath(b))),
-      Token::Color(c) => Ok((i1, Literal::Color(c))),
-      Token::Char(c) => Ok((i1, Literal::Char(c))),
-      Token::MidiMessage(c) => Ok((i1, Literal::MidiMsg(c))),
-      Token::TimeMsg(c) => Ok((i1, Literal::TimeMsg(c))),
-      _ => Err(Err::Error(Error::new(input, ErrorKind::Tag))),
-    }
+    Ok((i1, t1.tok[0].clone()))
+  }
+}
+
+fn parse_literal(input: Tokens) -> IResult<Tokens, Literal> {
+  let (i1, tok) = take_one_token(input)?;
+  match tok {
+    Token::Long(val) => Ok((i1, Literal::Long(val))),
+    Token::IntLiteral(name) => Ok((i1, Literal::Int(name))),
+    Token::StringLiteral(s) => Ok((i1, Literal::String(s))),
+    Token::FloatLiteral(s) => Ok((i1, Literal::Float(s))),
+    Token::Double(s) => Ok((i1, Literal::Double(s))),
+    Token::BoolLiteral(b) => Ok((i1, Literal::Bool(b))),
+    Token::Blob(b) => Ok((i1, Literal::Blob(b))),
+    Token::OSCPath(b) => Ok((i1, Literal::OscPath(b))),
+    Token::Color(c) => Ok((i1, Literal::Color(c))),
+    Token::Char(c) => Ok((i1, Literal::Char(c))),
+    Token::MidiMessage(c) => Ok((i1, Literal::MidiMsg(c))),
+    Token::TimeMsg(c) => Ok((i1, Literal::TimeMsg(c))),
+    _ => Err(Err::Error(Error::new(input, ErrorKind::Tag))),
   }
 }
 fn parse_ident(input: Tokens) -> IResult<Tokens, Ident> {
-  let (i1, t1) = take(1usize)(input)?;
-  if t1.tok.is_empty() {
-    Err(Err::Error(Error::new(input, ErrorKind::Tag)))
-  } else {
-    match t1.tok[0].clone() {
-      Token::Ident(name) => Ok((i1, Ident(name))),
-      Token::Nil => Ok((i1, Ident("Nil".to_string()))),
-      Token::Inf => Ok((i1, Ident("Inf".to_string()))),
-      _ => Err(Err::Error(Error::new(input, ErrorKind::Tag))),
-    }
+  let (i1, tok) = take_one_token(input)?;
+  match tok {
+    Token::Ident(name) => Ok((i1, Ident(name))),
+    Token::Nil => Ok((i1, Ident("Nil".to_string()))),
+    Token::Inf => Ok((i1, Ident("Inf".to_string()))),
+    _ => Err(Err::Error(Error::new(input, ErrorKind::Tag))),
   }
 }
 

@@ -16,7 +16,9 @@ use crate::core::command::binding;
 use crate::core::command::types::Adjustment;
 use crate::core::timing::metronome;
 use crate::core::{consts, utils};
+#[cfg(not(target_arch = "wasm32"))]
 use crossterm::event::KeyEventKind;
+#[cfg(not(target_arch = "wasm32"))]
 use crossterm::event::{KeyCode, KeyModifiers};
 
 use log::error;

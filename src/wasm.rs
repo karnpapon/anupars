@@ -11,11 +11,11 @@ use std::sync::Arc;
 use wasm_bindgen::prelude::*;
 
 use crate::app::initialize_components;
-use crate::app_state::{apply_ui_update, AppState, Focus};
 use crate::core::engine::regex::RegexCache;
 use crate::core::engine::symspell::SymSpellState;
 use crate::core::playhead::{Message as PlayheadMessage, Playhead, UIUpdate};
 use crate::core::timing::metronome::{Message as MetronomeMessage, Metronome};
+use crate::state::{apply_ui_update, AppState, Focus};
 use crate::terminal::buffer::ScreenBuffer;
 use crate::terminal::cell::Color as TermColor;
 use crate::view::grid::GridEditor;
@@ -355,109 +355,13 @@ pub fn wasm_step(elapsed_ms: f64) {
         }
 
         // Draw frame into backend buffer.
-        draw_wasm_frame(&ui.state, &ui.grid, &mut ui.backend.buf);
+        crate::app::draw_frame(&ui.state, &ui.grid, &mut ui.backend.buf);
 
         // Render ANSI.
         let ansi = ui.backend.render_ansi();
         ANSI_OUTPUT.with(|a| *a.borrow_mut() = ansi);
       }
     });
-  }
-}
-
-fn draw_wasm_frame(state: &AppState, grid: &GridEditor, buf: &mut ScreenBuffer) {
-  use crate::terminal::cell::Color;
-  use crate::view::console::draw_console;
-  use crate::view::consts::{CONSOLE_HEIGHT, PADDING_X, PADDING_Y};
-  use crate::view::menubar::draw_menubar;
-  use crate::view::printer::{apply_style, canvas, draw_dialog, white, CellStyle};
-
-  buf.clear();
-  let w = buf.width;
-
-  let bx0 = PADDING_X.saturating_sub(1);
-  let bx1 = w.saturating_sub(PADDING_X);
-  let by0 = PADDING_Y;
-  let by1 = 1 + PADDING_Y + CONSOLE_HEIGHT;
-  let focused = matches!(state.focus, crate::app_state::Focus::RegexInput);
-  let border_col = if focused { white() } else { canvas() };
-  let bstyle = CellStyle {
-    fg: border_col,
-    bg: Color::Reset,
-    reverse: false,
-  };
-
-  for x in bx0..=bx1 {
-    let top_ch = if x == bx0 {
-      '┌'
-    } else if x == bx1 {
-      '┐'
-    } else {
-      '─'
-    };
-    let bot_ch = if x == bx0 {
-      '└'
-    } else if x == bx1 {
-      '┘'
-    } else {
-      '─'
-    };
-    if let Some(c) = buf.get_mut(x, by0) {
-      apply_style(c, top_ch, bstyle);
-    }
-    if let Some(c) = buf.get_mut(x, by1) {
-      apply_style(c, bot_ch, bstyle);
-    }
-  }
-  for y in by0 + 1..by1 {
-    if let Some(c) = buf.get_mut(bx0, y) {
-      apply_style(c, '│', bstyle);
-    }
-    if let Some(c) = buf.get_mut(bx1, y) {
-      apply_style(c, '│', bstyle);
-    }
-  }
-
-  if state.console_view == crate::app_state::ConsoleView::Waveform {
-    crate::view::console::draw_waveform_console(
-      state,
-      buf,
-      PADDING_X,
-      1 + PADDING_Y,
-      w,
-      CONSOLE_HEIGHT,
-    );
-  } else {
-    draw_console(state, buf, PADDING_X, 1 + PADDING_Y, w, CONSOLE_HEIGHT);
-  }
-  grid.draw_to_buf(buf, PADDING_X, 2 + PADDING_Y + CONSOLE_HEIGHT);
-
-  if state.show_menubar {
-    draw_menubar(state, buf, 0);
-  }
-
-  if state.show_about {
-    let mut lines: Vec<String> = vec![
-      format!("{}  v{}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION")),
-      String::new(),
-    ];
-    let words: Vec<&str> = env!("CARGO_PKG_DESCRIPTION").split_whitespace().collect();
-    for chunk in words.chunks(6) {
-      lines.push(chunk.join(" "));
-    }
-    lines.push(String::new());
-    lines.push("press any key to close".to_string());
-    let refs: Vec<&str> = lines.iter().map(|s| s.as_str()).collect();
-    draw_dialog(buf, state.width, state.height, &refs);
-  }
-
-  if state.show_docs {
-    draw_dialog(
-      buf,
-      state.width,
-      state.height,
-      &["docs", "", "coming soon...", "", "press any key to close"],
-    );
   }
 }
 
@@ -528,6 +432,19 @@ pub fn wasm_send_key(key: String) {
       }
     }
   });
+}
+
+fn send_regex_solve(ui: &WasmUiCtx, pattern: String) {
+  if let Some(ref tx) = ui.grid.regex_tx {
+    let _ = tx.send(crate::core::engine::regex::Message::Solve(
+      crate::core::engine::regex::EventData {
+        text: ui.grid.text_contents(),
+        pattern,
+        flags: ui.state.flags.to_flag_str().to_string(),
+        grid_width: ui.grid.grid.width,
+      },
+    ));
+  }
 }
 
 fn dispatch_wasm_key(key: WasmKey, ui: &mut WasmUiCtx, should_quit: &mut bool) {
@@ -609,22 +526,17 @@ fn dispatch_wasm_key(key: WasmKey, ui: &mut WasmUiCtx, should_quit: &mut bool) {
 
       if changed {
         let pattern = ui.state.line_editor.content().to_string();
-        if let Some(ref tx) = ui.grid.regex_tx {
-          if pattern.is_empty() {
+        if pattern.is_empty() {
+          if let Some(ref tx) = ui.grid.regex_tx {
             let _ = tx.send(crate::core::engine::regex::Message::Clear);
-          } else {
-            let _ = tx.send(crate::core::engine::regex::Message::Solve(
-              crate::core::engine::regex::EventData {
-                text: ui.grid.text_contents(),
-                pattern,
-                flags: ui.state.flags.to_flag_str().to_string(),
-                grid_width: ui.grid.grid.width,
-              },
-            ));
           }
+        } else {
+          send_regex_solve(ui, pattern);
         }
       }
     }
+
+    Focus::FlagCaseSensitive | Focus::FlagMultiline | Focus::ModMatrix { .. } => {}
 
     Focus::Menu => {
       // Ctrl+b while menu is open closes the menubar.
@@ -665,6 +577,11 @@ fn dispatch_wasm_key(key: WasmKey, ui: &mut WasmUiCtx, should_quit: &mut bool) {
           use std::sync::atomic::Ordering;
           let was = consts::SYNTH_CLEAR_MSG.load(Ordering::Relaxed);
           consts::SYNTH_CLEAR_MSG.store(!was, Ordering::Relaxed);
+        }
+        MenuAction::ToggleStreamCC => {
+          use std::sync::atomic::Ordering;
+          let was = consts::STREAM_CC_MODE.load(Ordering::Relaxed);
+          consts::STREAM_CC_MODE.store(!was, Ordering::Relaxed);
         }
         MenuAction::ReleaseAll => close_after = true,
         MenuAction::ClearQueue => {
@@ -755,7 +672,7 @@ fn dispatch_wasm_key(key: WasmKey, ui: &mut WasmUiCtx, should_quit: &mut bool) {
 
       // '^' toggles Streaming Pitch Bend when in Waveform view.
       if matches!(&key, WasmKey::Char('^'))
-        && ui.state.console_view == crate::app_state::ConsoleView::Waveform
+        && ui.state.console_view == crate::state::ConsoleView::Waveform
       {
         let was = crate::core::consts::SYNTH_ENABLED.load(std::sync::atomic::Ordering::Relaxed);
         crate::core::consts::SYNTH_ENABLED.store(!was, std::sync::atomic::Ordering::Relaxed);
@@ -899,16 +816,7 @@ pub fn wasm_set_input(pattern: String) {
     if let Some(ui) = u.borrow_mut().as_mut() {
       ui.state.line_editor.set_content(&pattern);
       if !pattern.is_empty() {
-        if let Some(ref tx) = ui.grid.regex_tx {
-          let _ = tx.send(crate::core::engine::regex::Message::Solve(
-            crate::core::engine::regex::EventData {
-              text: ui.grid.text_contents(),
-              pattern,
-              flags: ui.state.flags.to_flag_str().to_string(),
-              grid_width: ui.grid.grid.width,
-            },
-          ));
-        }
+        send_regex_solve(ui, pattern);
       }
     }
   });

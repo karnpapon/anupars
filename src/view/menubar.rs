@@ -1,3 +1,4 @@
+#[cfg(not(target_arch = "wasm32"))]
 use crossterm::event::KeyCode;
 use std::error::Error;
 use std::fs;

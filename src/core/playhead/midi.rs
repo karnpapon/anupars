@@ -71,6 +71,55 @@ pub struct MidiTriggerHandler {
   pub drone_release_generation: Arc<AtomicUsize>,
 }
 
+/// Tilt/sweep geometry shared by `sweep_matched_indexes` and `trigger_midi_if_matched_sweep`.
+/// The geometry itself is identical between the two; only what they do with the
+/// matched rows/columns afterward differs.
+struct SweepGeometry {
+  grid_width: usize,
+  grid_height: usize,
+  tilt_mode: TiltMode,
+  v: usize,
+  h: usize,
+  col_w: usize,
+  row_h: usize,
+  playhead_col: usize,
+  playhead_row: usize,
+  x_offset_in_band: usize,
+  span_cols: usize,
+}
+
+impl MidiTriggerHandler {
+  fn sweep_geometry(&self, abs_x: usize, area_right: usize) -> SweepGeometry {
+    let grid_width = self.grid.width.load(Ordering::Relaxed);
+    let grid_height = self.grid.height.load(Ordering::Relaxed);
+    let tilt_mode = *self.tilt_mode.lock().unwrap();
+    let playhead_pos = *self.playhead_pos.lock().unwrap();
+    let v = self.grid.v_splits.load(Ordering::Relaxed).max(1);
+    let h = self.grid.h_splits.load(Ordering::Relaxed).max(1);
+    let col_w = (grid_width / v).max(1);
+    let row_h = (grid_height / h).max(1);
+    let playhead_col = (playhead_pos.x / col_w).min(v.saturating_sub(1));
+    let playhead_row = (playhead_pos.y / row_h).min(h.saturating_sub(1));
+    let x_offset_in_band = abs_x % col_w.max(1);
+    let area_tail_col = (area_right / col_w).min(v.saturating_sub(1));
+    let span_cols = area_tail_col.saturating_sub(playhead_col);
+
+    SweepGeometry {
+      grid_width,
+      grid_height,
+      tilt_mode,
+      v,
+      h,
+      col_w,
+      row_h,
+      playhead_col,
+      playhead_row,
+      x_offset_in_band,
+      span_cols,
+    }
+  }
+}
+
 impl MidiTriggerHandler {
   pub fn new(
     config: MidiHandlerConfig,
@@ -165,20 +214,19 @@ impl MidiTriggerHandler {
     if !self.modes.sweep_mode.load(Ordering::Relaxed) {
       return Vec::new();
     }
-    let grid_width = self.grid.width.load(Ordering::Relaxed);
-    let grid_height = self.grid.height.load(Ordering::Relaxed);
-    let tilt_mode = *self.tilt_mode.lock().unwrap();
-    let playhead_pos = *self.playhead_pos.lock().unwrap();
-    let v = self.grid.v_splits.load(Ordering::Relaxed).max(1);
-    let h = self.grid.h_splits.load(Ordering::Relaxed).max(1);
-    let col_w = (grid_width / v).max(1);
-    let row_h = (grid_height / h).max(1);
-    let playhead_col = (playhead_pos.x / col_w).min(v.saturating_sub(1));
-    let playhead_row = (playhead_pos.y / row_h).min(h.saturating_sub(1));
-    let x_offset_in_band = abs_x % col_w.max(1);
-
-    let area_tail_col = (area_right / col_w).min(v.saturating_sub(1));
-    let span_cols = area_tail_col.saturating_sub(playhead_col);
+    let SweepGeometry {
+      grid_width,
+      grid_height,
+      tilt_mode,
+      v,
+      h,
+      col_w,
+      row_h,
+      playhead_col,
+      playhead_row,
+      x_offset_in_band,
+      span_cols,
+    } = self.sweep_geometry(abs_x, area_right);
 
     let matcher = self.text_matcher.lock().unwrap();
     let sweep_row = *self.sweep_row_mode.lock().unwrap();
@@ -236,25 +284,22 @@ impl MidiTriggerHandler {
       return;
     }
 
-    let grid_width = self.grid.width.load(Ordering::Relaxed);
-    let grid_height = self.grid.height.load(Ordering::Relaxed);
     let current_tempo = self.music.tempo.load(Ordering::Relaxed);
     let x_scale_mode = *self.music.scale_mode_top.lock().unwrap();
 
-    // Precompute tilt sweep geometry (mirrors printer.rs logic)
-    let tilt_mode = *self.tilt_mode.lock().unwrap();
-    let playhead_pos = *self.playhead_pos.lock().unwrap();
-    let v = self.grid.v_splits.load(Ordering::Relaxed).max(1);
-    let h = self.grid.h_splits.load(Ordering::Relaxed).max(1);
-    let col_w = (grid_width / v).max(1);
-    let row_h = (grid_height / h).max(1);
-    let playhead_col = (playhead_pos.x / col_w).min(v.saturating_sub(1));
-    let playhead_row = (playhead_pos.y / row_h).min(h.saturating_sub(1));
-    let x_offset_in_band = abs_x % col_w.max(1);
-
-    // Number of extra columns spanned by the playhead area beyond the head column.
-    let area_tail_col = (area_right / col_w).min(v.saturating_sub(1));
-    let span_cols = area_tail_col.saturating_sub(playhead_col);
+    let SweepGeometry {
+      grid_width,
+      grid_height,
+      tilt_mode,
+      v,
+      h,
+      col_w,
+      row_h,
+      playhead_col,
+      playhead_row,
+      x_offset_in_band,
+      span_cols,
+    } = self.sweep_geometry(abs_x, area_right);
 
     // Collect matched (y, tilt_x) pairs. For each row, check every spanned column so
     // that matches in all channels covered by the playhead area are triggered.

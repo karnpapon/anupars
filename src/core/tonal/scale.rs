@@ -1,5 +1,15 @@
 use crate::core::command::types;
 
+/// Cycle through a fixed slice of values, wrapping. Shared by `ScaleRoot::cycle`
+/// and `ScaleMode::cycle`.
+fn cycle_value<T: Copy + PartialEq>(all: &[T], current: T, adjustment: types::Adjustment) -> T {
+  let idx = all.iter().position(|&v| v == current).unwrap_or(0);
+  match adjustment {
+    types::Adjustment::Increase => all[(idx + 1) % all.len()],
+    types::Adjustment::Decrease => all[(idx + all.len() - 1) % all.len()],
+  }
+}
+
 /// Musical scale modes and their interval patterns
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub enum ScaleMode {
@@ -111,12 +121,7 @@ impl ScaleRoot {
 
   /// Cycle to the next or previous root note based on adjustment
   pub fn cycle(&self, adjustment: types::Adjustment) -> ScaleRoot {
-    let all = Self::all();
-    let idx = all.iter().position(|&r| r == *self).unwrap_or(0);
-    match adjustment {
-      types::Adjustment::Increase => all[(idx + 1) % all.len()],
-      types::Adjustment::Decrease => all[(idx + all.len() - 1) % all.len()],
-    }
+    cycle_value(Self::all(), *self, adjustment)
   }
 }
 
@@ -228,12 +233,7 @@ impl ScaleMode {
   }
 
   pub fn cycle(&self, adjustment: types::Adjustment) -> ScaleMode {
-    let all = Self::all();
-    let idx = all.iter().position(|&m| m == *self).unwrap_or(0);
-    match adjustment {
-      types::Adjustment::Increase => all[(idx + 1) % all.len()],
-      types::Adjustment::Decrease => all[(idx + all.len() - 1) % all.len()],
-    }
+    cycle_value(Self::all(), *self, adjustment)
   }
 
   /// Map a Y position to the nearest note in the scale

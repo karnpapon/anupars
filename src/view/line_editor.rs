@@ -1,6 +1,7 @@
 use crate::terminal::buffer::ScreenBuffer;
 use crate::view::printer::{apply_style, CellStyle};
 use crate::view::printer::{black, white};
+#[cfg(not(target_arch = "wasm32"))]
 use crossterm::event::{KeyCode, KeyModifiers};
 
 pub enum LineEditorAction {

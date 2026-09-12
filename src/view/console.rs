@@ -5,8 +5,8 @@ use crate::terminal::buffer::ScreenBuffer;
 use crate::view::printer::{apply_style, CellStyle};
 use crate::core::engine::mod_matrix::{DiceDest, ModSource};
 use crate::state::Focus;
+use crate::core::engine::mod_matrix::{SourceValues};
 use super::consts::CONSOLE_HEIGHT;
-use crate::core::engine::mod_matrix::BAR_COUNT_PERIOD;
 
 const GAP: u16 = 2;
 const MAX_W: [u16; 4] = [32, 22, 25, 26];
@@ -288,36 +288,33 @@ pub fn draw_waveform_console(
 
   // scrub zone
   let stream_cc = consts::STREAM_CC_MODE.load(std::sync::atomic::Ordering::Relaxed);
-  let scrub_for = |ch_idx: usize, lane_cols: usize| -> Option<(usize, usize)> {
-    if !stream_cc || lane_cols == 0 { return None; }
-    let col_idx  = ch_idx % v;
-    let row_idx  = ch_idx / v;
+  // Column start for `ch_idx`, or None if the playhead isn't in this channel
+  // (same boundary test as covers_ch)
+  let channel_col_start = |ch_idx: usize| -> Option<usize> {
+    let col_idx = ch_idx % v;
+    let row_idx = ch_idx / v;
     let col_start = col_idx * col_w;
     let row_start = row_idx * row_h;
-    // same boundary test as covers_ch - return None if playhead is not in this channel
     if !(area.top_left.x < col_start + col_w
       && area.bottom_right.x >= col_start
       && area.top_left.y < row_start + row_h
       && area.bottom_right.y >= row_start) {
       return None;
     }
+    Some(col_start)
+  };
+
+  let scrub_for = |ch_idx: usize, lane_cols: usize| -> Option<(usize, usize)> {
+    if !stream_cc || lane_cols == 0 { return None; }
+    let col_start = channel_col_start(ch_idx)?;
     let lo = state.playhead_ui.playhead_pos.x.saturating_sub(col_start) * lane_cols / col_w;
     let hi = ((state.playhead_ui.playhead_area.bottom_right.x + 1).saturating_sub(col_start) * lane_cols / col_w).min(lane_cols);
     Some((lo, hi))
   };
-  
+
   let cursor_for = |ch_idx: usize, lane_cols: usize| -> Option<usize> {
     if !stream_cc || lane_cols == 0 { return None; }
-    let col_idx  = ch_idx % v;
-    let row_idx  = ch_idx / v;
-    let col_start = col_idx * col_w;
-    let row_start = row_idx * row_h;
-    if !(area.top_left.x < col_start + col_w
-      && area.bottom_right.x >= col_start
-      && area.top_left.y < row_start + row_h
-      && area.bottom_right.y >= row_start) {
-      return None;
-    }
+    let col_start = channel_col_start(ch_idx)?;
     let abs_x = state.playhead_ui.playhead_pos.x + state.playhead_ui.actived_pos.x;
     if abs_x < col_start || abs_x >= col_start + col_w { return None; }
     Some((abs_x - col_start) * lane_cols / col_w)
@@ -444,15 +441,13 @@ pub fn draw_console(
   }
 
   // debug: mod source values below the matrix
-  let pui = &state.playhead_ui;
-  let area   = pui.playhead_area;
-  let area_w = (area.bottom_right.x.saturating_sub(area.top_left.x) + 1).max(1);
-  let area_h = (area.bottom_right.y.saturating_sub(area.top_left.y) + 1).max(1);
-  let total  = (area_w * area_h).max(1);
-  let linear = pui.actived_pos.y * area_w + pui.actived_pos.x;
-  let phase    = (linear as f32 / (total - 1).max(1) as f32).clamp(0.0, 1.0);
-  let anchor_x = (pui.playhead_pos.x as f32 / (state.grid_width.max(1) - 1).max(1) as f32).clamp(0.0, 1.0);
-  let bar_count = (pui.current_beat % BAR_COUNT_PERIOD) as f32 / BAR_COUNT_PERIOD as f32;
-  let debug_str = format!("ph:{:.2} ax:{:.2} br:{:.2}", phase, anchor_x, bar_count);
+  let sources = SourceValues::from_playhead_ui(
+    &state.playhead_ui,
+    state.grid_width,
+  );
+  let debug_str = format!(
+    "ph:{:.2} ax:{:.2} br:{:.2}",
+    sources.movement_phase, sources.playhead_anchor_x, sources.bar_count
+  );
   draw_str(buf, col4 - 1, y_off + 4, &debug_str, CellStyle::dim());
 }

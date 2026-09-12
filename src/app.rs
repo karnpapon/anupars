@@ -9,7 +9,9 @@ use crate::core::playhead::{Message as PlayheadMessage, Playhead, UIUpdate};
 use crate::core::timing::metronome::{Message, Metronome};
 
 use crate::state::ConsoleView;
+#[cfg(not(target_arch = "wasm32"))]
 use crate::view::grid::handle_key_event;
+#[cfg(not(target_arch = "wasm32"))]
 use crossterm::event::KeyCode;
 use num_rational::Ratio;
 use num_traits::FromPrimitive;
@@ -36,10 +38,14 @@ use crate::view::consts::{CONSOLE_HEIGHT, PADDING_X, PADDING_Y};
 use crate::view::grid::GridEditor;
 use crate::view::layout::Program;
 use crate::view::menubar::draw_menubar;
-use crate::view::menubar::{handle_menu_key, set_grid_contents, MenuAction};
+#[cfg(not(target_arch = "wasm32"))]
+use crate::view::menubar::handle_menu_key;
+use crate::view::menubar::{set_grid_contents, MenuAction};
 use crate::view::printer::draw_dialog;
 use crate::view::printer::{apply_style, canvas, white, CellStyle};
+#[cfg(not(target_arch = "wasm32"))]
 use crate::view::ui_processor::apply_sym_anim_tick;
+#[cfg(not(target_arch = "wasm32"))]
 use crossterm::event::{poll, read, Event, KeyModifiers};
 
 #[derive(Clone, PartialEq, Eq)]
@@ -266,6 +272,24 @@ fn handle_waveform_key(key_code: crossterm::event::KeyCode) -> bool {
   }
 }
 
+/// Build and send a regex Solve message for the current pattern, grid text, and flags.
+#[cfg(not(target_arch = "wasm32"))]
+fn send_regex_solve(
+  regex_tx: &std::sync::mpsc::Sender<crate::core::engine::regex::Message>,
+  state: &AppState,
+  grid: &GridEditor,
+  pattern: String,
+) {
+  let _ = regex_tx.send(crate::core::engine::regex::Message::Solve(
+    crate::core::engine::regex::EventData {
+      text: grid.text_contents(),
+      pattern,
+      flags: state.flags.to_flag_str().to_string(),
+      grid_width: grid.grid.width,
+    },
+  ));
+}
+
 #[cfg(not(target_arch = "wasm32"))]
 #[allow(clippy::too_many_arguments)]
 pub fn run_event_loop(
@@ -458,14 +482,7 @@ pub fn run_event_loop(
                 if pattern.is_empty() {
                   let _ = regex_tx.send(crate::core::engine::regex::Message::Clear);
                 } else {
-                  let _ = regex_tx.send(crate::core::engine::regex::Message::Solve(
-                    crate::core::engine::regex::EventData {
-                      text: grid.text_contents(),
-                      pattern,
-                      flags: state.flags.to_flag_str().to_string(),
-                      grid_width: grid.grid.width,
-                    },
-                  ));
+                  send_regex_solve(&regex_tx, &state, &grid, pattern);
                 }
               }
             }
@@ -483,14 +500,7 @@ pub fn run_event_loop(
                   // re-solve with updated flags
                   let pattern = state.line_editor.content().to_string();
                   if !pattern.is_empty() {
-                    let _ = regex_tx.send(crate::core::engine::regex::Message::Solve(
-                      crate::core::engine::regex::EventData {
-                        text: grid.text_contents(),
-                        pattern,
-                        flags: state.flags.to_flag_str().to_string(),
-                        grid_width: grid.grid.width,
-                      },
-                    ));
+                    send_regex_solve(&regex_tx, &state, &grid, pattern);
                   }
                 }
                 _ => {}
@@ -518,21 +528,16 @@ pub fn run_event_loop(
                     grid.refresh_dice_effective_face(&state.mod_matrix);
                   }
                 }
-                KeyCode::Char('+') | KeyCode::Char('=') => {
+                KeyCode::Char('+') | KeyCode::Char('=') | KeyCode::Char('-') => {
+                  let step = if key.code == KeyCode::Char('-') {
+                    -0.1
+                  } else {
+                    0.1
+                  };
                   let src = ModSource::ALL[row as usize];
                   let dst = DiceDest::ALL[col as usize];
                   let current = state.mod_matrix.get_amount(src, dst).unwrap_or(0.0);
-                  let next = ((current + 0.1) * 10.0).round() / 10.0;
-                  state.mod_matrix.set_route(src, dst, next.clamp(-1.0, 1.0));
-                  if dst == DiceDest::Face {
-                    grid.refresh_dice_effective_face(&state.mod_matrix);
-                  }
-                }
-                KeyCode::Char('-') => {
-                  let src = ModSource::ALL[row as usize];
-                  let dst = DiceDest::ALL[col as usize];
-                  let current = state.mod_matrix.get_amount(src, dst).unwrap_or(0.0);
-                  let next = ((current - 0.1) * 10.0).round() / 10.0;
+                  let next = ((current + step) * 10.0).round() / 10.0;
                   state.mod_matrix.set_route(src, dst, next.clamp(-1.0, 1.0));
                   if dst == DiceDest::Face {
                     grid.refresh_dice_effective_face(&state.mod_matrix);
@@ -644,8 +649,7 @@ pub fn run_event_loop(
   Ok(())
 }
 
-#[cfg(not(target_arch = "wasm32"))]
-fn draw_frame(
+pub(crate) fn draw_frame(
   state: &crate::state::AppState,
   grid: &crate::view::grid::GridEditor,
   buf: &mut crate::terminal::buffer::ScreenBuffer,
@@ -720,7 +724,6 @@ fn draw_frame(
   }
 }
 
-#[cfg(not(target_arch = "wasm32"))]
 fn draw_about_dialog(
   state: &crate::state::AppState,
   buf: &mut crate::terminal::buffer::ScreenBuffer,
@@ -740,7 +743,6 @@ fn draw_about_dialog(
   draw_dialog(buf, state.width, state.height, &refs);
 }
 
-#[cfg(not(target_arch = "wasm32"))]
 fn draw_docs_dialog(
   state: &crate::state::AppState,
   buf: &mut crate::terminal::buffer::ScreenBuffer,

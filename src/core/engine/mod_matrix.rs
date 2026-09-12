@@ -87,6 +87,24 @@ impl SourceValues {
       ModSource::BarCount => self.bar_count,
     }
   }
+
+  /// collect normalized source values from the current playhead UI state and grid width
+  pub fn from_playhead_ui(
+    pui: &crate::core::playhead::types::PlayheadUI,
+    grid_width: usize,
+  ) -> Self {
+    let area = pui.playhead_area;
+    let area_w = (area.bottom_right.x.saturating_sub(area.top_left.x) + 1).max(1);
+    let area_h = (area.bottom_right.y.saturating_sub(area.top_left.y) + 1).max(1);
+    let total = (area_w * area_h).max(1);
+    let linear = pui.actived_pos.y * area_w + pui.actived_pos.x;
+    let grid_w = grid_width.max(1);
+    SourceValues {
+      movement_phase: (linear as f32 / (total - 1).max(1) as f32).clamp(0.0, 1.0),
+      playhead_anchor_x: (pui.playhead_pos.x as f32 / (grid_w - 1).max(1) as f32).clamp(0.0, 1.0),
+      bar_count: (pui.current_beat % BAR_COUNT_PERIOD) as f32 / BAR_COUNT_PERIOD as f32,
+    }
+  }
 }
 
 /// Resolved destination overrides. None means no active route for that dest.
