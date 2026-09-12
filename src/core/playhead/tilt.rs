@@ -82,3 +82,57 @@ impl TiltMode {
     }
   }
 }
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn small_channel_count_ignores_tilt_and_row() {
+    for mode in [TiltMode::Vertical, TiltMode::DiagDown, TiltMode::DiagUp] {
+      assert_eq!(mode.sweep_col_for_row(1, 2, 999, 2, 2), Some(1));
+    }
+  }
+
+  #[test]
+  fn vertical_tilt_is_column_identity_regardless_of_row_delta() {
+    for current_row in [0, 2, 5, 100] {
+      assert_eq!(
+        TiltMode::Vertical.sweep_col_for_row(1, 2, current_row, 3, 2),
+        Some(1)
+      );
+    }
+  }
+
+  #[test]
+  fn all_tilts_agree_at_the_playhead_row() {
+    for mode in [TiltMode::Vertical, TiltMode::DiagDown, TiltMode::DiagUp] {
+      assert_eq!(mode.sweep_col_for_row(1, 2, 2, 3, 2), Some(1));
+    }
+  }
+
+  #[test]
+  fn diag_down_and_diag_up_mirror_around_the_playhead_column() {
+    let playhead_col = 1;
+    let down = TiltMode::DiagDown.sweep_col_for_row(playhead_col, 2, 3, 3, 2);
+    let up = TiltMode::DiagUp.sweep_col_for_row(playhead_col, 2, 3, 3, 2);
+    assert_eq!((down, up), (Some(2), Some(0)));
+    assert_eq!(down.unwrap() + up.unwrap(), 2 * playhead_col);
+  }
+
+  #[test]
+  fn diagonal_out_of_grid_bounds_returns_none() {
+    assert_eq!(TiltMode::DiagDown.sweep_col_for_row(1, 2, 5, 3, 2), None);
+  }
+
+  #[test]
+  fn cycle_next_returns_to_start_after_full_loop() {
+    for start in [TiltMode::Vertical, TiltMode::DiagDown, TiltMode::DiagUp] {
+      let mut mode = start;
+      for _ in 0..3 {
+        mode = mode.cycle_next();
+      }
+      assert_eq!(mode, start);
+    }
+  }
+}

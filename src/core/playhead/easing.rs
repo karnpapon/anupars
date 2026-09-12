@@ -77,3 +77,85 @@ impl EasingMode {
     Some((64 / denom).max(1))
   }
 }
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn none_mode_never_applies() {
+    for div_denom in [0, 1, 16, 64] {
+      for phase in [0.0, 0.5, 1.0] {
+        for going_forward in [true, false] {
+          assert_eq!(
+            EasingMode::None.apply(phase, div_denom, going_forward),
+            None
+          );
+        }
+      }
+    }
+  }
+
+  #[test]
+  fn zero_div_denom_never_applies() {
+    for mode in [
+      EasingMode::EaseIn,
+      EasingMode::EaseOut,
+      EasingMode::EaseInOut,
+    ] {
+      assert_eq!(mode.apply(0.5, 0, true), None);
+    }
+  }
+
+  #[test]
+  fn active_modes_stay_within_divider_bounds() {
+    for mode in [
+      EasingMode::EaseIn,
+      EasingMode::EaseOut,
+      EasingMode::EaseInOut,
+    ] {
+      for div_denom in [1usize, 2, 3, 8, 16, 32, 63, 64, 100] {
+        for i in 0..=4 {
+          let phase = i as f32 / 4.0;
+          for going_forward in [true, false] {
+            if let Some(divider) = mode.apply(phase, div_denom, going_forward) {
+              assert!(
+                (1..=64).contains(&divider),
+                "{mode:?} div_denom={div_denom} phase={phase} -> {divider}"
+              );
+            }
+          }
+        }
+      }
+    }
+  }
+
+  #[test]
+  fn ease_in_out_is_symmetric_around_midpoint() {
+    for div_denom in [1usize, 4, 16, 32, 64] {
+      for (a, b) in [(0.0, 1.0), (0.25, 0.75), (0.1, 0.9)] {
+        assert_eq!(
+          EasingMode::EaseInOut.apply(a, div_denom, true),
+          EasingMode::EaseInOut.apply(b, div_denom, true),
+          "div_denom={div_denom} phases=({a},{b})"
+        );
+      }
+    }
+  }
+
+  #[test]
+  fn cycle_next_returns_to_start_after_full_loop() {
+    for start in [
+      EasingMode::None,
+      EasingMode::EaseIn,
+      EasingMode::EaseOut,
+      EasingMode::EaseInOut,
+    ] {
+      let mut mode = start;
+      for _ in 0..4 {
+        mode = mode.cycle_next();
+      }
+      assert_eq!(mode, start);
+    }
+  }
+}

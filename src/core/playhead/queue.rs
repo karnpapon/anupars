@@ -299,3 +299,124 @@ impl QueueManager {
     }
   }
 }
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn push_dedups_the_same_position() {
+    let q = QueueManager::new();
+    q.handle_push((1, 2));
+    q.handle_push((1, 2));
+    assert_eq!(q.operator_queue.lock().unwrap().len(), 1);
+  }
+
+  #[test]
+  fn push_accepts_distinct_positions() {
+    let q = QueueManager::new();
+    q.handle_push((1, 2));
+    q.handle_push((3, 4));
+    assert_eq!(q.operator_queue.lock().unwrap().len(), 2);
+  }
+
+  #[test]
+  fn push_stops_at_capacity_instead_of_panicking() {
+    let q = QueueManager::new();
+    for x in 0..(consts::OP_QUEUE_CAPACITY + 1) {
+      q.handle_push((x, 0));
+    }
+    assert_eq!(
+      q.operator_queue.lock().unwrap().len(),
+      consts::OP_QUEUE_CAPACITY
+    );
+  }
+
+  #[test]
+  fn swap_exchanges_the_two_most_recent_items() {
+    let q = QueueManager::new();
+    q.handle_push((1, 0));
+    q.handle_push((2, 0));
+    q.check_and_execute_operators(2, false);
+    let queue = q.operator_queue.lock().unwrap();
+    assert_eq!(queue[0], QueueItem::Position(2, 0));
+    assert_eq!(queue[1], QueueItem::Position(1, 0));
+  }
+
+  #[test]
+  fn pop_removes_front_and_frees_the_position_for_repush() {
+    let q = QueueManager::new();
+    q.handle_push((1, 0));
+    q.check_and_execute_operators(4, false);
+    assert!(q.operator_queue.lock().unwrap().is_empty());
+
+    // popped position is no longer tracked as pushed, so it can be pushed again
+    q.handle_push((1, 0));
+    assert_eq!(q.operator_queue.lock().unwrap().len(), 1);
+  }
+
+  #[test]
+  fn duplicate_copies_the_last_item() {
+    let q = QueueManager::new();
+    q.handle_push((1, 0));
+    q.check_and_execute_operators(6, false);
+    let queue = q.operator_queue.lock().unwrap();
+    assert_eq!(queue.len(), 2);
+    assert_eq!(queue[0], queue[1]);
+  }
+
+  #[test]
+  fn drain_mode_blocks_swap_and_duplicate_but_not_pop() {
+    let q = QueueManager::new();
+    q.handle_push((1, 0));
+    q.handle_push((2, 0));
+    q.set_drain_queue_mode(true);
+
+    q.check_and_execute_operators(2, false);
+    assert_eq!(
+      q.operator_queue.lock().unwrap().first().cloned(),
+      Some(QueueItem::Position(1, 0)),
+      "swap should not have run"
+    );
+
+    q.check_and_execute_operators(6, false);
+    assert_eq!(
+      q.operator_queue.lock().unwrap().len(),
+      2,
+      "duplicate should not have run"
+    );
+
+    q.check_and_execute_operators(4, false);
+    assert_eq!(q.operator_queue.lock().unwrap().len(), 1);
+  }
+
+  #[test]
+  fn event_operator_is_consumed_before_a_position_push() {
+    let q = QueueManager::new();
+    q.check_and_execute_operators(0, true);
+    q.handle_push((1, 0));
+
+    let queue = q.operator_queue.lock().unwrap();
+    assert_eq!(queue.len(), 1);
+    assert_eq!(queue[0], QueueItem::Event(EventOperator::R));
+    drop(queue);
+    // the position itself was never recorded as pushed
+    assert!(!q.pushed_positions.lock().unwrap().contains_key(&(1, 0)));
+  }
+
+  #[test]
+  fn promote_only_advances_a_waiting_jump() {
+    let q = QueueManager::new();
+
+    q.set_pending_jump(PendingJumpPosition::Empty);
+    q.promote_waiting_to_armed();
+    assert!(matches!(q.peek_pending_jump(), PendingJumpPosition::Empty));
+
+    q.set_pending_jump(PendingJumpPosition::Waiting(3, 4));
+    q.promote_waiting_to_armed();
+    assert!(matches!(
+      q.peek_pending_jump(),
+      PendingJumpPosition::Armed(3, 4)
+    ));
+  }
+}

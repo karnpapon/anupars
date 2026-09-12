@@ -433,3 +433,119 @@ fn round_to_nearest<T: Clone + Copy + Integer>(value: Ratio<T>, quantum: T) -> R
   let quantum_rat = Ratio::from_integer(quantum);
   (value * quantum_rat).round() / quantum_rat
 }
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn default_signature_derives_bar_and_loop_lengths() {
+    let sig = Signature::default();
+    assert_eq!(sig.ticks_per_beat(), Ratio::from_integer(16));
+    assert_eq!(sig.ticks_per_bar(), Ratio::from_integer(128));
+    assert_eq!(sig.ticks_per_loop(), Ratio::from_integer(1024));
+  }
+
+  #[test]
+  fn ticks_to_bars_is_consistent_with_ticks_to_beats() {
+    let sig = Signature::default();
+    for ticks in [0, 5, 16, 100, 1024, 4001] {
+      let ticks = Ratio::from_integer(ticks);
+      assert_eq!(
+        sig.ticks_to_bars(ticks),
+        sig.ticks_to_beats(ticks) / sig.beats_per_bar
+      );
+    }
+  }
+
+  #[test]
+  fn nanos_per_beat_matches_real_world_bpm() {
+    let sig = Signature::default();
+    assert_eq!(
+      sig.nanos_per_beat(Ratio::from_integer(120)),
+      Ratio::from_integer(500_000_000)
+    );
+    assert_eq!(
+      sig.nanos_per_beat(Ratio::from_integer(60)),
+      Ratio::from_integer(1_000_000_000)
+    );
+  }
+
+  #[test]
+  fn time_next_advances_one_tick() {
+    let sig = Signature::default();
+    let t = Time::new(sig).next();
+    assert_eq!(t.ticks(), Ratio::from_integer(1));
+  }
+
+  fn advance(sig: Signature, steps: i64) -> Time {
+    let mut t = Time::new(sig);
+    for _ in 0..steps {
+      t = t.next();
+    }
+    t
+  }
+
+  #[test]
+  fn first_tick_first_beat_first_bar_boundaries() {
+    let sig = Signature::default();
+
+    let just_before_beat = advance(sig, 15);
+    assert!(!just_before_beat.is_first_tick());
+
+    let at_beat = advance(sig, 16);
+    assert!(at_beat.is_first_tick());
+    assert!(!at_beat.is_first_beat());
+
+    let at_bar = advance(sig, 128);
+    assert!(at_bar.is_first_beat());
+    assert!(!at_bar.is_first_bar());
+
+    let at_loop = advance(sig, 1024);
+    assert!(at_loop.is_first_bar());
+  }
+
+  #[test]
+  fn quantize_beat_nudges_to_nearest_beat_boundary() {
+    let sig = Signature::default();
+
+    assert_eq!(
+      advance(sig, 3).quantize_beat().ticks(),
+      Ratio::from_integer(0)
+    );
+    assert_eq!(
+      advance(sig, 10).quantize_beat().ticks(),
+      Ratio::from_integer(16)
+    );
+    assert_eq!(
+      advance(sig, 19).quantize_beat().ticks(),
+      Ratio::from_integer(16)
+    );
+    assert_eq!(
+      advance(sig, 26).quantize_beat().ticks(),
+      Ratio::from_integer(32)
+    );
+  }
+
+  #[test]
+  fn round_to_nearest_quantizes_to_the_given_precision() {
+    assert_eq!(
+      round_to_nearest(Ratio::new(12344, 100), 10),
+      Ratio::new(1234, 10)
+    );
+    // whole-number quantum
+    assert_eq!(
+      round_to_nearest(Ratio::new(1234, 10), 1),
+      Ratio::from_integer(123)
+    );
+  }
+
+  #[test]
+  fn duration_to_nanos_converts_secs_and_subsec() {
+    assert_eq!(
+      duration_to_nanos(Duration::new(2, 500_000_000)),
+      2_500_000_000
+    );
+    assert_eq!(duration_to_nanos(Duration::new(0, 1)), 1);
+  }
+}
