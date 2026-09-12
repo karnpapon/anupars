@@ -38,7 +38,7 @@ symspell_rs = { version = "6.8.3" }
 # https://github.com/Boddlnagg/midir/issues/94
 midir = { version = "0.10.3", features = ["coremidi_send_timestamped"] }
 crossbeam = "0.8.4"
-crossterm = { version = "0.28", features = ["event-stream"] }
+crossterm = "0.28"
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 wasm-bindgen = "0.2"
