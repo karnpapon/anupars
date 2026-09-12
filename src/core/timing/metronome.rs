@@ -201,16 +201,14 @@ impl Metronome {
                 let now = Instant::now();
                 if let Some(prev) = ext_beat_instant.replace(now) {
                   let elapsed_ms = now.duration_since(prev).as_millis() as usize;
-                  if let Some(bpm) = 60_000usize.checked_div(elapsed_ms) {
-                    let bpm = bpm.clamp(20, 999);
+                  if let Some(bpm) = bpm_from_beat_interval(elapsed_ms) {
                     self.current_bpm.store(bpm, Ordering::Relaxed);
                     let _ = self.ui_tx.send(UIUpdate::BpmDisplay(format!("~{bpm}")));
                   }
                 }
               }
-              let prev_tick = (pulse * 16) / 24;
-              let curr_tick = ((pulse + 1) * 16) / 24;
-              if curr_tick > prev_tick {
+              let (curr_tick, advanced) = ext_clock_tick_for_pulse(pulse);
+              if advanced {
                 self.current_position.store(curr_tick, Ordering::Relaxed);
                 let _ = self
                   .playhead_tx
@@ -291,5 +289,75 @@ impl Metronome {
         }
       }
     }
+  }
+}
+
+/// Convert an external MIDI clock pulse count (24 PPQN) into the internal
+/// tick position (16 ticks per beat), and whether this pulse advances the
+/// internal tick counter (most pulses land inside the same internal tick).
+fn ext_clock_tick_for_pulse(pulse: usize) -> (usize, bool) {
+  let prev_tick = (pulse * 16) / 24;
+  let curr_tick = ((pulse + 1) * 16) / 24;
+  (curr_tick, curr_tick > prev_tick)
+}
+
+/// BPM implied by the elapsed time between two beat-boundary pulses (every
+/// 24 pulses = 1 beat), clamped to a sane display range. `None` on a
+/// zero-length interval (guards the division, shouldn't happen in practice).
+fn bpm_from_beat_interval(elapsed_ms: usize) -> Option<usize> {
+  60_000usize
+    .checked_div(elapsed_ms)
+    .map(|bpm| bpm.clamp(20, 999))
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn first_pulse_of_a_beat_does_not_advance_the_tick() {
+    assert_eq!(ext_clock_tick_for_pulse(0), (0, false));
+  }
+
+  #[test]
+  fn tick_advances_16_times_over_one_24_pulse_beat() {
+    let mut advances = 0;
+    let mut last_tick = 0;
+    for pulse in 0..24 {
+      let (tick, advanced) = ext_clock_tick_for_pulse(pulse);
+      if advanced {
+        advances += 1;
+        last_tick = tick;
+      }
+    }
+    assert_eq!(advances, 16);
+    assert_eq!(last_tick, 16);
+  }
+
+  #[test]
+  fn tick_never_regresses_as_pulses_advance() {
+    let mut prev = 0;
+    for pulse in 0..48 {
+      let (tick, _) = ext_clock_tick_for_pulse(pulse);
+      assert!(tick >= prev, "tick regressed at pulse {pulse}");
+      prev = tick;
+    }
+  }
+
+  #[test]
+  fn bpm_from_beat_interval_matches_known_tempo() {
+    assert_eq!(bpm_from_beat_interval(500), Some(120));
+    assert_eq!(bpm_from_beat_interval(1000), Some(60));
+  }
+
+  #[test]
+  fn bpm_from_beat_interval_clamps_to_the_display_range() {
+    assert_eq!(bpm_from_beat_interval(10_000), Some(20)); // 6 BPM -> clamped up
+    assert_eq!(bpm_from_beat_interval(10), Some(999)); // 6000 BPM -> clamped down
+  }
+
+  #[test]
+  fn bpm_from_beat_interval_guards_a_zero_length_interval() {
+    assert_eq!(bpm_from_beat_interval(0), None);
   }
 }

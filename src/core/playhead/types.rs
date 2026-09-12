@@ -420,3 +420,63 @@ impl ModeFlags {
     }
   }
 }
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn direction_maps_to_the_expected_unit_vector() {
+    assert_eq!(Direction::Right.get_direction(), (1, 0));
+    assert_eq!(Direction::Left.get_direction(), (-1, 0));
+    assert_eq!(Direction::Up.get_direction(), (0, -1));
+    assert_eq!(Direction::Down.get_direction(), (0, 1));
+    assert_eq!(Direction::Idle.get_direction(), (0, 0));
+  }
+
+  #[test]
+  fn sweep_output_mode_cycle_returns_to_start_after_full_loop() {
+    let mut mode = SweepOutputMode::Note;
+    for _ in 0..3 {
+      mode = mode.cycle_next();
+    }
+    assert_eq!(mode, SweepOutputMode::Note);
+  }
+
+  #[test]
+  fn sweep_row_mode_cycle_returns_to_normal_after_full_loop() {
+    let mut mode = SweepRowMode::Normal;
+    for _ in 0..4 {
+      mode = mode.cycle_next();
+    }
+    assert!(matches!(mode, SweepRowMode::Normal));
+  }
+
+  #[test]
+  fn sweep_row_mode_normal_is_always_active() {
+    for y in [0, 1, 2, 100, 101] {
+      assert!(SweepRowMode::Normal.is_row_active(y));
+    }
+  }
+
+  #[test]
+  fn sweep_row_mode_odd_and_even_partition_the_rows() {
+    for y in 0..10 {
+      assert_eq!(SweepRowMode::Odd.is_row_active(y), y % 2 == 1);
+      assert_eq!(SweepRowMode::Even.is_row_active(y), y % 2 == 0);
+      assert_ne!(
+        SweepRowMode::Odd.is_row_active(y),
+        SweepRowMode::Even.is_row_active(y)
+      );
+    }
+  }
+
+  #[test]
+  fn sweep_row_mode_random_is_deterministic_for_the_same_seed_and_row() {
+    let mode = SweepRowMode::Random(42);
+    let first = mode.is_row_active(7);
+    for _ in 0..5 {
+      assert_eq!(mode.is_row_active(7), first);
+    }
+  }
+}

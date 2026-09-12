@@ -109,3 +109,143 @@ impl Playhead {
       )));
   }
 }
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+  use crate::core::command::types::Adjustment;
+  use crate::core::playhead::test_helpers::make_playhead;
+  use crate::core::tonal::scale::{ScaleMode, ScaleRoot};
+  use std::sync::atomic::Ordering;
+
+  #[test]
+  fn cycle_scale_root_left_advances_through_the_root_list() {
+    let playhead = make_playhead();
+    playhead.cycle_scale_root_left(Adjustment::Increase);
+    assert_eq!(
+      *playhead.music.scale_root_left.lock().unwrap(),
+      ScaleRoot::CSharp
+    );
+  }
+
+  #[test]
+  fn cycle_scale_mode_left_advances_through_the_mode_list() {
+    let playhead = make_playhead();
+    playhead.cycle_scale_mode_left(Adjustment::Increase);
+    assert_eq!(
+      *playhead.music.scale_mode_left.lock().unwrap(),
+      ScaleMode::Major
+    );
+  }
+
+  #[test]
+  fn cycle_scale_root_routes_to_top_or_left_by_keyboard_focus() {
+    let playhead = make_playhead();
+
+    playhead
+      .modes
+      .keyboard_top_active
+      .store(true, Ordering::Relaxed);
+    playhead.cycle_scale_root(Adjustment::Increase);
+    assert_eq!(
+      *playhead.music.scale_root_top.lock().unwrap(),
+      ScaleRoot::CSharp
+    );
+    assert_eq!(
+      *playhead.music.scale_root_left.lock().unwrap(),
+      ScaleRoot::C
+    );
+
+    playhead
+      .modes
+      .keyboard_top_active
+      .store(false, Ordering::Relaxed);
+    playhead.cycle_scale_root(Adjustment::Increase);
+    assert_eq!(
+      *playhead.music.scale_root_left.lock().unwrap(),
+      ScaleRoot::CSharp
+    );
+    // the top keyboard's root is untouched by the left-routed call
+    assert_eq!(
+      *playhead.music.scale_root_top.lock().unwrap(),
+      ScaleRoot::CSharp
+    );
+  }
+
+  #[test]
+  fn cycle_scale_mode_routes_to_top_or_left_by_keyboard_focus() {
+    let playhead = make_playhead();
+
+    playhead
+      .modes
+      .keyboard_top_active
+      .store(false, Ordering::Relaxed);
+    playhead.cycle_scale_mode(Adjustment::Increase);
+    assert_eq!(
+      *playhead.music.scale_mode_left.lock().unwrap(),
+      ScaleMode::Major
+    );
+    assert_eq!(
+      *playhead.music.scale_mode_top.lock().unwrap(),
+      ScaleMode::Chromatic
+    );
+  }
+
+  #[test]
+  fn handle_set_tempo_stores_the_bpm() {
+    let playhead = make_playhead();
+    playhead.handle_set_tempo(140);
+    assert_eq!(playhead.music.tempo.load(Ordering::Relaxed), 140);
+  }
+
+  #[test]
+  fn handle_set_ratio_leaves_step_index_alone_when_easing_is_off() {
+    let playhead = make_playhead();
+    *playhead.step_index.lock().unwrap() = 5;
+
+    playhead.handle_set_ratio((3, 4));
+
+    assert_eq!(*playhead.music.ratio.lock().unwrap(), (3, 4));
+    assert_eq!(*playhead.step_index.lock().unwrap(), 5);
+  }
+
+  #[test]
+  fn handle_set_ratio_resets_step_index_when_easing_is_active() {
+    let playhead = make_playhead();
+    *playhead.easing_mode.lock().unwrap() = EasingMode::EaseIn;
+    *playhead.step_index.lock().unwrap() = 5;
+
+    playhead.handle_set_ratio((3, 4));
+
+    assert_eq!(*playhead.music.ratio.lock().unwrap(), (3, 4));
+    assert_eq!(*playhead.step_index.lock().unwrap(), 0);
+  }
+
+  #[test]
+  fn direct_setters_overwrite_regardless_of_previous_value() {
+    let playhead = make_playhead();
+    playhead.cycle_scale_mode_left(Adjustment::Increase); // move it off the default first
+
+    playhead.handle_set_scale_mode_left(ScaleMode::Blues);
+    assert_eq!(
+      *playhead.music.scale_mode_left.lock().unwrap(),
+      ScaleMode::Blues
+    );
+
+    playhead.handle_set_scale_mode_top(ScaleMode::Dorian);
+    assert_eq!(
+      *playhead.music.scale_mode_top.lock().unwrap(),
+      ScaleMode::Dorian
+    );
+
+    playhead.handle_set_scale_root_top(ScaleRoot::G);
+    assert_eq!(*playhead.music.scale_root_top.lock().unwrap(), ScaleRoot::G);
+  }
+
+  #[test]
+  fn drone_retrigger_path_does_not_panic_when_drone_is_active() {
+    let playhead = make_playhead();
+    playhead.modes.drone_mode.store(true, Ordering::Relaxed);
+    playhead.cycle_scale_root_left(Adjustment::Increase);
+  }
+}
